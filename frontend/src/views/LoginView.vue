@@ -6,6 +6,20 @@
 
       <form class="login-form" @submit.prevent="handleLogin">
         <div class="form-group">
+          <label for="enterprise-code">企业编码</label>
+          <select
+            id="enterprise-code"
+            v-model="enterpriseCode"
+            required
+          >
+            <option value="" disabled>请选择企业编码</option>
+            <option v-for="code in enterpriseOptions" :key="code" :value="code">
+              {{ code }}
+            </option>
+          </select>
+        </div>
+
+        <div class="form-group">
           <label for="username">用户名</label>
           <input
             id="username"
@@ -47,6 +61,8 @@ import { login } from '../api/auth'
 const router = useRouter()
 const route = useRoute()
 
+const enterpriseOptions = ['江西中软', '前海中软']
+const enterpriseCode = ref('')
 const username = ref('')
 const password = ref('')
 const error = ref('')
@@ -56,7 +72,7 @@ async function handleLogin() {
   error.value = ''
   loading.value = true
   try {
-    await login(username.value, password.value)
+    await login(username.value, password.value, enterpriseCode.value)
     const redirect = route.query.redirect || '/home'
     router.push(redirect)
   } catch (err) {
@@ -118,15 +134,18 @@ async function handleLogin() {
   color: #444;
 }
 
-.form-group input {
+.form-group input,
+.form-group select {
   padding: 10px 14px;
   border: 1px solid #ddd;
   border-radius: 8px;
   font-size: 15px;
   transition: border-color 0.2s;
+  background: #fff;
 }
 
-.form-group input:focus {
+.form-group input:focus,
+.form-group select:focus {
   outline: none;
   border-color: #667eea;
   box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);

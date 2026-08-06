@@ -1,4 +1,9 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
+
+ENTERPRISE_CODES = ("江西中软", "前海中软")
+EnterpriseCode = Literal["江西中软", "前海中软"]
 
 
 class Token(BaseModel):
@@ -9,6 +14,7 @@ class Token(BaseModel):
 class LoginRequest(BaseModel):
     username: str = Field(min_length=1, max_length=50)
     password: str = Field(min_length=1)
+    enterprise_code: EnterpriseCode
 
 
 class UserResponse(BaseModel):

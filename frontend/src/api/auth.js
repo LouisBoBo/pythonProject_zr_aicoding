@@ -12,11 +12,15 @@ export function clearToken() {
   localStorage.removeItem(TOKEN_KEY)
 }
 
-export async function login(username, password) {
+export async function login(username, password, enterpriseCode) {
   const response = await fetch('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({
+      username,
+      password,
+      enterprise_code: enterpriseCode,
+    }),
   })
 
   if (!response.ok) {

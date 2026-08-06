@@ -60,7 +60,11 @@ def test_user(db_session):
 def _get_token(client, test_user):
     response = client.post(
         "/api/auth/login",
-        json={"username": "testuser", "password": "password123"},
+        json={
+            "username": "testuser",
+            "password": "password123",
+            "enterprise_code": "江西中软",
+        },
     )
     return response.json()["access_token"]
 
