@@ -12,7 +12,6 @@
             v-model="enterpriseCode"
             required
           >
-            <option value="" disabled>请选择企业编码</option>
             <option v-for="code in enterpriseOptions" :key="code" :value="code">
               {{ code }}
             </option>
@@ -62,7 +61,7 @@ const router = useRouter()
 const route = useRoute()
 
 const enterpriseOptions = ['江西中软', '前海中软']
-const enterpriseCode = ref('')
+const enterpriseCode = ref('江西中软')
 const username = ref('')
 const password = ref('')
 const error = ref('')
