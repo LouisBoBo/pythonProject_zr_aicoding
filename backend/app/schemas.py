@@ -109,6 +109,24 @@ class WorkOrderCreate(BaseModel):
     remark: str | None = Field(default=None, max_length=500)
 
 
+class WorkOrderUpdate(BaseModel):
+    order_no: str | None = Field(default=None, min_length=1, max_length=50)
+    product_name: str | None = Field(default=None, min_length=1, max_length=100)
+    product_code: str | None = Field(default=None, max_length=50)
+    production_line: str | None = Field(default=None, max_length=50)
+    plan_quantity: int | None = Field(default=None, gt=0)
+    actual_quantity: int | None = Field(default=None, ge=0)
+    priority: WorkOrderPriority | None = None
+    assignee: str | None = Field(default=None, max_length=50)
+    start_date: date | None = None
+    end_date: date | None = None
+    remark: str | None = Field(default=None, max_length=500)
+
+
+class WorkOrderStatusUpdate(BaseModel):
+    status: WorkOrderStatus
+
+
 class WorkOrderResponse(BaseModel):
     id: int
     order_no: str

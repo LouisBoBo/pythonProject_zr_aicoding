@@ -22,17 +22,47 @@
             v-show="sidebarCollapsed || !group.title || expandedGroups[group.key]"
             class="nav-list"
           >
-            <li v-for="item in group.items" :key="item.path">
-              <router-link
-                :to="item.path"
-                class="nav-item"
-                :class="{ active: isActive(item.path) }"
-                :title="sidebarCollapsed ? item.title : ''"
-              >
-                <el-icon class="nav-icon"><component :is="item.icon" /></el-icon>
-                <span v-if="!sidebarCollapsed" class="nav-label">{{ item.title }}</span>
-              </router-link>
-            </li>
+            <template v-for="item in group.items" :key="item.path || item.key">
+              <li v-if="item.children" class="nav-submenu">
+                <div
+                  class="nav-item nav-parent"
+                  :class="{ active: isSubmenuActive(item), expanded: expandedSubmenus[item.key] }"
+                  @click="toggleSubmenu(item.key)"
+                >
+                  <el-icon class="nav-icon"><component :is="item.icon" /></el-icon>
+                  <span v-if="!sidebarCollapsed" class="nav-label">{{ item.title }}</span>
+                  <el-icon v-if="!sidebarCollapsed" class="submenu-arrow">
+                    <ArrowDown />
+                  </el-icon>
+                </div>
+                <ul
+                  v-show="!sidebarCollapsed && expandedSubmenus[item.key]"
+                  class="nav-sublist"
+                >
+                  <li v-for="child in item.children" :key="child.path">
+                    <router-link
+                      :to="child.path"
+                      class="nav-item nav-child"
+                      :class="{ active: isActive(child.path) }"
+                    >
+                      <el-icon class="nav-icon"><component :is="child.icon" /></el-icon>
+                      <span class="nav-label">{{ child.title }}</span>
+                    </router-link>
+                  </li>
+                </ul>
+              </li>
+              <li v-else>
+                <router-link
+                  :to="item.path"
+                  class="nav-item"
+                  :class="{ active: isActive(item.path) }"
+                  :title="sidebarCollapsed ? item.title : ''"
+                >
+                  <el-icon class="nav-icon"><component :is="item.icon" /></el-icon>
+                  <span v-if="!sidebarCollapsed" class="nav-label">{{ item.title }}</span>
+                </router-link>
+              </li>
+            </template>
           </ul>
         </template>
       </nav>
@@ -146,6 +176,7 @@ import {
   Setting,
   Bell,
   QuestionFilled,
+  Document,
 } from '@element-plus/icons-vue'
 import { clearToken, fetchCurrentUser } from '../api/auth'
 
@@ -160,6 +191,10 @@ const expandedGroups = reactive({
   overview: true,
   business: true,
   system: true,
+})
+
+const expandedSubmenus = reactive({
+  production: true,
 })
 
 const menuGroups = [
@@ -177,7 +212,15 @@ const menuGroups = [
     title: '业务管理',
     items: [
       { path: '/quality', title: '品质分析', icon: DataAnalysis },
-      { path: '/production', title: '生产管理', icon: SetUp },
+      {
+        key: 'production',
+        title: '生产管理',
+        icon: SetUp,
+        children: [
+          { path: '/production', title: '生产概览', icon: SetUp },
+          { path: '/work-orders', title: '生产工单', icon: Document },
+        ],
+      },
       { path: '/equipment', title: '设备管理', icon: Cpu },
       { path: '/warehouse', title: '仓储管理', icon: Box },
     ],
@@ -231,6 +274,14 @@ const userInitial = computed(() => {
 
 function toggleGroup(key) {
   expandedGroups[key] = !expandedGroups[key]
+}
+
+function toggleSubmenu(key) {
+  expandedSubmenus[key] = !expandedSubmenus[key]
+}
+
+function isSubmenuActive(item) {
+  return item.children?.some((child) => isActive(child.path))
 }
 
 function isActive(path) {
@@ -378,6 +429,36 @@ onMounted(async () => {
 
 .nav-label {
   white-space: nowrap;
+}
+
+.nav-submenu {
+  list-style: none;
+}
+
+.nav-parent {
+  cursor: pointer;
+  position: relative;
+}
+
+.submenu-arrow {
+  margin-left: auto;
+  font-size: 12px;
+  transition: transform 0.2s;
+}
+
+.nav-parent.expanded .submenu-arrow {
+  transform: rotate(180deg);
+}
+
+.nav-sublist {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.nav-child {
+  padding-left: 48px !important;
+  font-size: 13px;
 }
 
 .collapse-btn {

@@ -50,7 +50,7 @@ const router = createRouter({
           path: 'work-orders/:id?',
           name: 'work-orders',
           component: WorkOrdersView,
-          meta: { title: '工单管理', ...authRequired },
+          meta: { title: '生产工单', ...authRequired },
         },
         { path: 'dashboard', redirect: '/home' },
       ],
