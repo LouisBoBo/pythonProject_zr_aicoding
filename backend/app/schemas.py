@@ -206,3 +206,38 @@ class KanbanBoardListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+class ProductionStatsRow(BaseModel):
+    time: str
+    today_completed: int
+    today_area_output: float
+    today_defect_total: int
+    daily_defect_rate: str
+    today_incoming_boards: int
+
+
+class ProductionDetailRow(BaseModel):
+    time: str
+    process_card_no: str
+    product_model: str
+    quantity: int
+    today_completed: int
+    total_completed: int
+
+
+class CompletionChartPoint(BaseModel):
+    label: str
+    lot_output: int
+    model_output: int
+
+
+class ProductionKanbanDashboard(BaseModel):
+    board_category: str
+    display_time: str
+    weekday: str
+    achievement_rate: float
+    production_area: float
+    stats_rows: list[ProductionStatsRow]
+    detail_rows: list[ProductionDetailRow]
+    completion_chart: list[CompletionChartPoint]

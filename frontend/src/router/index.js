@@ -15,6 +15,7 @@ import MessagesIndex from '../views/messages/Index.vue'
 import HelpIndex from '../views/help/Index.vue'
 import WorkOrdersView from '../views/WorkOrdersView.vue'
 import KanbanBoardsView from '../views/KanbanBoardsView.vue'
+import ProductionKanbanView from '../views/kanban/ProductionKanbanView.vue'
 
 const authRequired = { requiresAuth: true }
 
@@ -72,7 +73,7 @@ const router = createRouter({
         ...kanbanRoutes.map(({ path, title, category }) => ({
           path: `kanban/${path}`,
           name: `kanban-${path}`,
-          component: KanbanBoardsView,
+          component: path === 'production' ? ProductionKanbanView : KanbanBoardsView,
           meta: { title, category, ...authRequired },
         })),
         {
