@@ -1,150 +1,102 @@
 <template>
   <div class="dashboard-home">
-    <!-- 顶部数据行 -->
-    <el-row :gutter="16" class="top-stats-row">
-      <el-col v-for="item in topStats" :key="item.key" :xs="12" :sm="6">
-        <el-card shadow="hover" class="stat-card">
-          <div class="stat-label">{{ item.label }}</div>
-          <div class="stat-value">{{ item.value }}</div>
-        </el-card>
-      </el-col>
-    </el-row>
-
-    <!-- 主图表区 + 右侧卡片 -->
-    <el-row :gutter="16" class="main-row">
-      <el-col :xs="24" :lg="16">
-        <el-card shadow="never" class="chart-card">
-          <template #header>
-            <div class="card-header">
-              <span class="card-title">产量趋势图</span>
-              <span class="card-subtitle">{{ hourlyTrendDate }}</span>
-            </div>
-          </template>
-          <v-chart class="hourly-chart" :option="hourlyLineOption" autoresize />
-        </el-card>
-      </el-col>
-
-      <el-col :xs="24" :lg="8" class="right-column">
-        <el-card shadow="never" class="summary-card monthly-card">
-          <div class="summary-label">月产量</div>
-          <div class="summary-main">{{ formatNumber(monthlyOutput.value) }}</div>
-          <div class="summary-sub">上一月产量：{{ formatNumber(monthlyOutput.lastMonth) }}</div>
-        </el-card>
-
-        <el-card shadow="never" class="summary-card daily-card">
-          <div class="summary-label">日产量</div>
-          <div class="daily-progress-row">
-            <span class="daily-current">{{ dailyOutput.current }}</span>
-            <span class="daily-sep">/</span>
-            <span class="daily-target">{{ dailyOutput.target }}</span>
-          </div>
-          <el-progress
-            :percentage="dailyOutput.percent"
-            :stroke-width="10"
-            :color="progressColor"
-          />
-          <div class="daily-percent-text">完成 {{ dailyOutput.percent }}%</div>
-        </el-card>
-
-        <el-card shadow="never" class="summary-card efficiency-card">
-          <div class="summary-label">效率趋势</div>
-          <div class="efficiency-row">
-            <div class="efficiency-count">
-              <span class="efficiency-num">{{ efficiencyTrend.count }}</span>
-              <span class="efficiency-unit">数量</span>
-            </div>
-            <div class="efficiency-rate">
-              <span class="efficiency-num">{{ efficiencyTrend.rate }}%</span>
-              <span class="efficiency-unit">比例</span>
-            </div>
-          </div>
-        </el-card>
-
-        <el-card shadow="never" class="chart-card pie-card">
-          <template #header>
-            <div class="card-header">
-              <span class="card-title">异常分析</span>
-              <span class="card-highlight">{{ anomalyAnalysis.mainPercent }}%</span>
-            </div>
-          </template>
-          <v-chart class="pie-chart" :option="anomalyPieOption" autoresize />
-        </el-card>
-      </el-col>
-    </el-row>
-
-    <!-- 底部双柱状图 -->
-    <el-row :gutter="16" class="bar-row">
-      <el-col :xs="24" :lg="12">
-        <el-card shadow="never" class="chart-card">
-          <template #header>
-            <span class="card-title">产线产量对比</span>
-          </template>
-          <v-chart class="bar-chart" :option="lineOutputBarOption" autoresize />
-        </el-card>
-      </el-col>
-      <el-col :xs="24" :lg="12">
-        <el-card shadow="never" class="chart-card">
-          <template #header>
-            <span class="card-title">不良品类分布</span>
-          </template>
-          <v-chart class="bar-chart" :option="defectBarOption" autoresize />
-        </el-card>
-      </el-col>
-    </el-row>
-
-    <!-- 生产明细表格 -->
-    <el-card shadow="never" class="table-card">
-      <template #header>
+    <div class="dashboard-grid">
+      <!-- 左列 · 月产量 -->
+      <div class="dash-card card-white">
         <div class="card-header">
-          <span class="card-title">生产明细</span>
-          <span class="card-subtitle">详细信息</span>
+          <span class="card-title">月产量</span>
         </div>
-      </template>
-      <el-table
-        :data="pagedTableData"
-        stripe
-        style="width: 100%"
-        @sort-change="handleSortChange"
-      >
-        <el-table-column prop="line" label="产线" width="100" sortable="custom" />
-        <el-table-column prop="product" label="产品" min-width="140" sortable="custom" />
-        <el-table-column prop="batchNo" label="批次号" width="130" sortable="custom" />
-        <el-table-column prop="planQty" label="计划产量" width="110" sortable="custom" align="right" />
-        <el-table-column prop="actualQty" label="实际产量" width="110" sortable="custom" align="right" />
-        <el-table-column prop="defectQty" label="不良数" width="90" sortable="custom" align="right" />
-        <el-table-column prop="efficiency" label="效率" width="90" sortable="custom" align="right">
-          <template #default="{ row }">{{ row.efficiency }}%</template>
-        </el-table-column>
-        <el-table-column prop="status" label="状态" width="100">
-          <template #default="{ row }">
-            <el-tag :type="statusTagType(row.status)" size="small">{{ row.status }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="updateTime" label="更新时间" width="160" sortable="custom" />
-      </el-table>
-      <div class="table-pagination">
-        <el-pagination
-          v-model:current-page="currentPage"
-          v-model:page-size="pageSize"
-          :page-sizes="[5, 10, 20]"
-          :total="sortedTableData.length"
-          layout="total, sizes, prev, pager, next, jumper"
-          background
-        />
+        <div class="card-body gauge-body">
+          <v-chart class="gauge-chart" :option="monthlyGaugeOption" autoresize />
+          <div class="gauge-center-value">{{ formatNumber(monthlyValue) }}</div>
+        </div>
       </div>
-    </el-card>
+
+      <!-- 右列 · 异常分析 -->
+      <div class="dash-card card-white">
+        <div class="card-header">
+          <span class="card-title">异常分析</span>
+          <span class="card-badge badge-purple">{{ anomalyPercent }}%</span>
+        </div>
+        <div class="card-body">
+          <v-chart class="donut-chart" :option="anomalyDonutOption" autoresize />
+        </div>
+      </div>
+
+      <!-- 左列 · 日产量 -->
+      <div class="dash-card card-white">
+        <div class="card-header">
+          <span class="card-title">日产量</span>
+        </div>
+        <div class="card-body daily-body">
+          <div class="daily-values">
+            <span class="daily-current">{{ dailyCurrent }}</span>
+            <span class="daily-sep">/</span>
+            <span class="daily-target">{{ dailyTarget }}</span>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill" :style="{ width: dailyPercent + '%' }" />
+          </div>
+          <div class="daily-percent">完成 {{ dailyPercent }}%</div>
+        </div>
+      </div>
+
+      <!-- 右列 · 产量趋势图（红底） -->
+      <div class="dash-card card-red">
+        <div class="card-header">
+          <span class="card-title light">产量趋势图</span>
+          <span class="card-highlight light">{{ productionTrendValue }}</span>
+        </div>
+        <div class="card-body">
+          <v-chart class="line-chart" :option="productionTrendOption" autoresize />
+        </div>
+      </div>
+
+      <!-- 左列 · 效率趋势 -->
+      <div class="dash-card card-white">
+        <div class="card-header">
+          <span class="card-title">效率趋势</span>
+          <div class="efficiency-badges">
+            <span class="eff-badge">
+              <em>{{ efficiencyCount }}</em> 数量
+            </span>
+            <span class="eff-badge">
+              <em>{{ efficiencyRate }}%</em> 比例
+            </span>
+          </div>
+        </div>
+        <div class="card-body">
+          <v-chart class="line-chart" :option="efficiencyLineOption" autoresize />
+        </div>
+      </div>
+
+      <!-- 右列 · 时段产量（橙底） -->
+      <div class="dash-card card-orange">
+        <div class="card-header">
+          <span class="card-title light">时段产量</span>
+          <div class="hourly-meta light">
+            <span class="card-badge badge-light">{{ hourlyPercent }}%</span>
+            <span class="hourly-avg">最近12小时平均产量 {{ hourlyAvg }}</span>
+          </div>
+        </div>
+        <div class="card-body">
+          <v-chart class="bar-chart" :option="hourlyBarOption" autoresize />
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
-import { LineChart, PieChart, BarChart } from 'echarts/charts'
+import { LineChart, PieChart, BarChart, GaugeChart } from 'echarts/charts'
 import {
   GridComponent,
   TooltipComponent,
   LegendComponent,
+  MarkPointComponent,
 } from 'echarts/components'
 import VChart from 'vue-echarts'
 
@@ -153,25 +105,41 @@ use([
   LineChart,
   PieChart,
   BarChart,
+  GaugeChart,
   GridComponent,
   TooltipComponent,
   LegendComponent,
+  MarkPointComponent,
 ])
 
-const progressColor = [
-  { color: '#667eea', percentage: 100 },
+const monthlyValue = 3535
+const dailyCurrent = 1810
+const dailyTarget = 2500
+const dailyPercent = Math.round((dailyCurrent / dailyTarget) * 100)
+const efficiencyCount = 197
+const efficiencyRate = 85
+const anomalyPercent = 81
+const productionTrendValue = '4316.0'
+const hourlyPercent = 79
+const hourlyAvg = 20.45
+
+const anomalyItems = [
+  { name: '设备异常', value: 81 },
+  { name: '品质异常', value: 12 },
+  { name: '物料异常', value: 5 },
+  { name: '其他', value: 2 },
 ]
 
-const topStats = [
-  { key: 'current_time', label: '当前生产时间', value: '7:08' },
-  { key: 'today_output', label: '当日产量', value: '525' },
-  { key: 'daily_avg', label: '日平均产量', value: '354' },
-  { key: 'recent_12h_avg', label: '最近12小时平均产量', value: '20.45' },
-]
+const efficiencyTrendData = [72, 78, 75, 82, 80, 85, 83, 88, 86, 85, 87, 85]
 
-const hourlyTrendDate = '2022.12.30'
+const productionTrendData = [3800, 3950, 4020, 4100, 4180, 4250, 4280, 4316]
 
 const hourlyProduction = [
+  { hour: '19:00', output: 18 },
+  { hour: '20:00', output: 22 },
+  { hour: '21:00', output: 15 },
+  { hour: '22:00', output: 12 },
+  { hour: '23:00', output: 10 },
   { hour: '00:00', output: 12 },
   { hour: '01:00', output: 8 },
   { hour: '02:00', output: 5 },
@@ -179,123 +147,100 @@ const hourlyProduction = [
   { hour: '04:00', output: 10 },
   { hour: '05:00', output: 18 },
   { hour: '06:00', output: 25 },
-  { hour: '07:00', output: 32 },
-  { hour: '08:00', output: 45 },
-  { hour: '09:00', output: 52 },
-  { hour: '10:00', output: 48 },
-  { hour: '11:00', output: 55 },
-  { hour: '12:00', output: 42 },
-  { hour: '13:00', output: 38 },
-  { hour: '14:00', output: 50 },
-  { hour: '15:00', output: 58 },
-  { hour: '16:00', output: 62 },
-  { hour: '17:00', output: 54 },
-  { hour: '18:00', output: 40 },
-  { hour: '19:00', output: 28 },
-  { hour: '20:00', output: 22 },
-  { hour: '21:00', output: 18 },
-  { hour: '22:00', output: 15 },
-  { hour: '23:00', output: 10 },
 ]
 
-const monthlyOutput = { value: 3535, lastMonth: 4590 }
-
-const dailyOutput = computed(() => {
-  const current = 1810
-  const target = 2500
-  return {
-    current,
-    target,
-    percent: Math.round((current / target) * 100),
-  }
-})
-
-const efficiencyTrend = { count: 197, rate: 85 }
-
-const anomalyAnalysis = {
-  mainPercent: 81,
-  items: [
-    { name: '设备异常', value: 81 },
-    { name: '品质异常', value: 12 },
-    { name: '物料异常', value: 5 },
-    { name: '其他', value: 2 },
+const monthlyGaugeOption = computed(() => ({
+  series: [
+    {
+      type: 'gauge',
+      startAngle: 180,
+      endAngle: 0,
+      center: ['50%', '78%'],
+      radius: '110%',
+      min: 0,
+      max: 5000,
+      splitNumber: 5,
+      axisLine: {
+        lineStyle: {
+          width: 14,
+          color: [
+            [0.7, '#5b8def'],
+            [0.85, '#48bb78'],
+            [1, '#ed8936'],
+          ],
+        },
+      },
+      pointer: {
+        icon: 'path://M12.8,0.7l12,40.1H0.7L12.8,0.7z',
+        length: '55%',
+        width: 8,
+        offsetCenter: [0, '-10%'],
+        itemStyle: { color: '#3d5afe' },
+      },
+      axisTick: { show: false },
+      splitLine: { show: false },
+      axisLabel: { show: false },
+      detail: { show: false },
+      data: [{ value: monthlyValue }],
+    },
   ],
-}
+}))
 
-const lineOutputData = [
-  { name: '产线A', value: 820 },
-  { name: '产线B', value: 650 },
-  { name: '产线C', value: 540 },
-  { name: '产线D', value: 480 },
-  { name: '产线E', value: 390 },
-]
+const anomalyDonutOption = computed(() => ({
+  tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+  legend: {
+    orient: 'vertical',
+    right: 4,
+    top: 'middle',
+    itemWidth: 10,
+    itemHeight: 10,
+    textStyle: { color: '#666', fontSize: 12 },
+  },
+  color: ['#667eea', '#48bb78', '#ed8936', '#cbd5e0'],
+  series: [
+    {
+      type: 'pie',
+      radius: ['46%', '72%'],
+      center: ['36%', '50%'],
+      avoidLabelOverlap: true,
+      label: { show: false },
+      emphasis: {
+        label: { show: true, fontSize: 13, fontWeight: 'bold' },
+      },
+      data: anomalyItems,
+    },
+  ],
+}))
 
-const defectCategoryData = [
-  { name: '外观', value: 45 },
-  { name: '尺寸', value: 32 },
-  { name: '功能', value: 28 },
-  { name: '包装', value: 18 },
-  { name: '其他', value: 12 },
-]
-
-const productionDetails = [
-  { line: '产线A', product: '精密零件-X1', batchNo: 'B2022123001', planQty: 500, actualQty: 485, defectQty: 8, efficiency: 97, status: '生产中', updateTime: '2022-12-30 07:05:00' },
-  { line: '产线B', product: '外壳组件-Y2', batchNo: 'B2022123002', planQty: 400, actualQty: 392, defectQty: 5, efficiency: 98, status: '生产中', updateTime: '2022-12-30 07:02:00' },
-  { line: '产线C', product: '电路板-Z3', batchNo: 'B2022123003', planQty: 350, actualQty: 310, defectQty: 12, efficiency: 89, status: '异常', updateTime: '2022-12-30 06:58:00' },
-  { line: '产线D', product: '连接器-M4', batchNo: 'B2022123004', planQty: 300, actualQty: 298, defectQty: 2, efficiency: 99, status: '已完成', updateTime: '2022-12-30 06:45:00' },
-  { line: '产线E', product: '传感器-S5', batchNo: 'B2022123005', planQty: 280, actualQty: 265, defectQty: 6, efficiency: 95, status: '生产中', updateTime: '2022-12-30 06:30:00' },
-  { line: '产线A', product: '精密零件-X2', batchNo: 'B2022123006', planQty: 450, actualQty: 420, defectQty: 10, efficiency: 93, status: '生产中', updateTime: '2022-12-30 06:15:00' },
-  { line: '产线B', product: '外壳组件-Y3', batchNo: 'B2022123007', planQty: 380, actualQty: 375, defectQty: 4, efficiency: 99, status: '已完成', updateTime: '2022-12-30 06:00:00' },
-  { line: '产线C', product: '电路板-Z4', batchNo: 'B2022123008', planQty: 320, actualQty: 280, defectQty: 15, efficiency: 88, status: '异常', updateTime: '2022-12-30 05:45:00' },
-  { line: '产线D', product: '连接器-M5', batchNo: 'B2022123009', planQty: 260, actualQty: 255, defectQty: 3, efficiency: 98, status: '已完成', updateTime: '2022-12-30 05:30:00' },
-  { line: '产线E', product: '传感器-S6', batchNo: 'B2022123010', planQty: 240, actualQty: 230, defectQty: 5, efficiency: 96, status: '生产中', updateTime: '2022-12-30 05:15:00' },
-  { line: '产线A', product: '精密零件-X3', batchNo: 'B2022123011', planQty: 420, actualQty: 400, defectQty: 7, efficiency: 95, status: '生产中', updateTime: '2022-12-30 05:00:00' },
-  { line: '产线B', product: '外壳组件-Y4', batchNo: 'B2022123012', planQty: 360, actualQty: 350, defectQty: 6, efficiency: 97, status: '已完成', updateTime: '2022-12-30 04:45:00' },
-]
-
-const currentPage = ref(1)
-const pageSize = ref(5)
-const sortProp = ref('')
-const sortOrder = ref('')
-
-const chartColors = {
-  primary: '#667eea',
-  secondary: '#764ba2',
-  palette: ['#667eea', '#764ba2', '#48bb78', '#ed8936', '#4299e1'],
-}
-
-const hourlyLineOption = computed(() => ({
+const productionTrendOption = computed(() => ({
   tooltip: { trigger: 'axis' },
-  grid: { left: 48, right: 24, top: 32, bottom: 36 },
+  grid: { left: 40, right: 16, top: 16, bottom: 28 },
   xAxis: {
     type: 'category',
-    data: hourlyProduction.map((p) => p.hour),
-    axisLine: { lineStyle: { color: '#e0e0e0' } },
-    axisLabel: { color: '#888', fontSize: 11 },
+    data: productionTrendData.map((_, i) => `${i + 1}月`),
+    axisLine: { lineStyle: { color: 'rgba(255,255,255,0.35)' } },
+    axisLabel: { color: 'rgba(255,255,255,0.75)', fontSize: 11 },
   },
   yAxis: {
     type: 'value',
-    name: '产量',
-    nameTextStyle: { color: '#888', fontSize: 12 },
     axisLine: { show: false },
-    splitLine: { lineStyle: { color: '#f0f0f0' } },
-    axisLabel: { color: '#888' },
+    splitLine: { lineStyle: { color: 'rgba(255,255,255,0.15)' } },
+    axisLabel: { color: 'rgba(255,255,255,0.75)', fontSize: 11 },
   },
   series: [
     {
-      name: '小时产量',
       type: 'line',
       smooth: true,
-      data: hourlyProduction.map((p) => p.output),
-      lineStyle: { color: chartColors.primary, width: 2.5 },
-      itemStyle: { color: chartColors.primary },
+      data: productionTrendData,
+      lineStyle: { color: '#fff', width: 2.5 },
+      itemStyle: { color: '#fff' },
       areaStyle: {
         color: {
           type: 'linear',
           x: 0, y: 0, x2: 0, y2: 1,
           colorStops: [
-            { offset: 0, color: 'rgba(102, 126, 234, 0.3)' },
-            { offset: 1, color: 'rgba(102, 126, 234, 0.02)' },
+            { offset: 0, color: 'rgba(255,255,255,0.35)' },
+            { offset: 1, color: 'rgba(255,255,255,0.02)' },
           ],
         },
       },
@@ -303,122 +248,100 @@ const hourlyLineOption = computed(() => ({
   ],
 }))
 
-const anomalyPieOption = computed(() => ({
-  tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
-  legend: {
-    orient: 'vertical',
-    right: 8,
-    top: 'center',
-    textStyle: { color: '#666', fontSize: 12 },
+const efficiencyLineOption = computed(() => ({
+  tooltip: { trigger: 'axis' },
+  grid: { left: 40, right: 16, top: 24, bottom: 28 },
+  xAxis: {
+    type: 'category',
+    data: efficiencyTrendData.map((_, i) => `${i + 1}`),
+    axisLine: { lineStyle: { color: '#e8e8e8' } },
+    axisLabel: { color: '#999', fontSize: 11 },
   },
-  color: chartColors.palette,
+  yAxis: {
+    type: 'value',
+    min: 60,
+    max: 100,
+    axisLine: { show: false },
+    splitLine: { lineStyle: { color: '#f0f0f0' } },
+    axisLabel: { color: '#999', fontSize: 11, formatter: '{value}%' },
+  },
   series: [
     {
-      name: '异常分析',
-      type: 'pie',
-      radius: ['42%', '68%'],
-      center: ['38%', '50%'],
-      avoidLabelOverlap: true,
-      label: { show: false },
-      emphasis: {
-        label: { show: true, fontSize: 14, fontWeight: 'bold' },
+      type: 'line',
+      smooth: true,
+      data: efficiencyTrendData,
+      lineStyle: { color: '#667eea', width: 2.5 },
+      itemStyle: { color: '#667eea' },
+      areaStyle: {
+        color: {
+          type: 'linear',
+          x: 0, y: 0, x2: 0, y2: 1,
+          colorStops: [
+            { offset: 0, color: 'rgba(102, 126, 234, 0.25)' },
+            { offset: 1, color: 'rgba(102, 126, 234, 0.02)' },
+          ],
+        },
       },
-      data: anomalyAnalysis.items,
+      markPoint: {
+        symbol: 'circle',
+        symbolSize: 8,
+        data: [
+          {
+            coord: [efficiencyTrendData.length - 1, efficiencyRate],
+            value: `${efficiencyRate}%`,
+            label: {
+              show: true,
+              formatter: `${efficiencyRate}%`,
+              color: '#667eea',
+              fontSize: 12,
+              fontWeight: 600,
+              position: 'top',
+            },
+            itemStyle: { color: '#667eea' },
+          },
+        ],
+      },
     },
   ],
 }))
 
-function buildBarOption(categories, values, color) {
-  return {
-    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-    grid: { left: 48, right: 24, top: 24, bottom: 32 },
-    xAxis: {
-      type: 'category',
-      data: categories,
-      axisLine: { lineStyle: { color: '#e0e0e0' } },
-      axisLabel: { color: '#888' },
-    },
-    yAxis: {
-      type: 'value',
-      axisLine: { show: false },
-      splitLine: { lineStyle: { color: '#f0f0f0' } },
-      axisLabel: { color: '#888' },
-    },
-    series: [
-      {
-        type: 'bar',
-        data: values,
-        barWidth: '45%',
-        itemStyle: {
-          color: {
-            type: 'linear',
-            x: 0, y: 0, x2: 0, y2: 1,
-            colorStops: [
-              { offset: 0, color },
-              { offset: 1, color: chartColors.secondary },
-            ],
-          },
-          borderRadius: [4, 4, 0, 0],
+const hourlyBarOption = computed(() => ({
+  tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+  grid: { left: 36, right: 12, top: 12, bottom: 28 },
+  xAxis: {
+    type: 'category',
+    data: hourlyProduction.map((p) => p.hour),
+    axisLine: { lineStyle: { color: 'rgba(255,255,255,0.35)' } },
+    axisLabel: { color: 'rgba(255,255,255,0.8)', fontSize: 10, rotate: 30 },
+  },
+  yAxis: {
+    type: 'value',
+    axisLine: { show: false },
+    splitLine: { lineStyle: { color: 'rgba(255,255,255,0.15)' } },
+    axisLabel: { color: 'rgba(255,255,255,0.75)', fontSize: 11 },
+  },
+  series: [
+    {
+      type: 'bar',
+      data: hourlyProduction.map((p) => p.output),
+      barWidth: '55%',
+      itemStyle: {
+        color: {
+          type: 'linear',
+          x: 0, y: 0, x2: 0, y2: 1,
+          colorStops: [
+            { offset: 0, color: 'rgba(255,255,255,0.95)' },
+            { offset: 1, color: 'rgba(255,255,255,0.55)' },
+          ],
         },
+        borderRadius: [4, 4, 0, 0],
       },
-    ],
-  }
-}
-
-const lineOutputBarOption = computed(() =>
-  buildBarOption(
-    lineOutputData.map((d) => d.name),
-    lineOutputData.map((d) => d.value),
-    chartColors.primary,
-  ),
-)
-
-const defectBarOption = computed(() =>
-  buildBarOption(
-    defectCategoryData.map((d) => d.name),
-    defectCategoryData.map((d) => d.value),
-    '#48bb78',
-  ),
-)
-
-const sortedTableData = computed(() => {
-  const data = [...productionDetails]
-  if (!sortProp.value || !sortOrder.value) return data
-
-  const prop = sortProp.value
-  const asc = sortOrder.value === 'ascending'
-
-  return data.sort((a, b) => {
-    const va = a[prop]
-    const vb = b[prop]
-    if (typeof va === 'number' && typeof vb === 'number') {
-      return asc ? va - vb : vb - va
-    }
-    return asc
-      ? String(va).localeCompare(String(vb), 'zh-CN')
-      : String(vb).localeCompare(String(va), 'zh-CN')
-  })
-})
-
-const pagedTableData = computed(() => {
-  const start = (currentPage.value - 1) * pageSize.value
-  return sortedTableData.value.slice(start, start + pageSize.value)
-})
+    },
+  ],
+}))
 
 function formatNumber(num) {
   return num.toLocaleString('zh-CN')
-}
-
-function statusTagType(status) {
-  if (status === '异常') return 'danger'
-  if (status === '已完成') return 'success'
-  return 'primary'
-}
-
-function handleSortChange({ prop, order }) {
-  sortProp.value = prop || ''
-  sortOrder.value = order || ''
-  currentPage.value = 1
 }
 </script>
 
@@ -429,60 +352,41 @@ function handleSortChange({ prop, order }) {
   box-sizing: border-box;
 }
 
-.top-stats-row {
-  margin-bottom: 16px;
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: repeat(3, minmax(220px, 1fr));
+  gap: 16px;
+  min-height: calc(100vh - 160px);
 }
 
-.stat-card {
-  text-align: center;
-  border: none;
-}
-
-.stat-card :deep(.el-card__body) {
-  padding: 18px 16px;
-}
-
-.stat-label {
-  font-size: 13px;
-  color: #888;
-  margin-bottom: 8px;
-}
-
-.stat-value {
-  font-size: 28px;
-  font-weight: 700;
-  color: #1a1a2e;
-  line-height: 1.2;
-}
-
-.main-row {
-  margin-bottom: 16px;
-}
-
-.right-column {
+.dash-card {
+  border-radius: 14px;
+  padding: 16px 18px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  overflow: hidden;
 }
 
-.chart-card {
-  border: none;
-  height: 100%;
+.card-white {
+  background: #fff;
 }
 
-.chart-card :deep(.el-card__header) {
-  padding: 14px 20px;
-  border-bottom: 1px solid #f0f0f0;
+.card-red {
+  background: linear-gradient(135deg, #e53e3e 0%, #fc8181 55%, #feb2b2 100%);
 }
 
-.chart-card :deep(.el-card__body) {
-  padding: 12px 16px 16px;
+.card-orange {
+  background: linear-gradient(135deg, #dd6b20 0%, #ed8936 50%, #f6ad55 100%);
 }
 
 .card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  margin-bottom: 8px;
+  flex-shrink: 0;
 }
 
 .card-title {
@@ -491,157 +395,171 @@ function handleSortChange({ prop, order }) {
   color: #1a1a2e;
 }
 
-.card-subtitle {
-  font-size: 12px;
-  color: #999;
+.card-title.light {
+  color: #fff;
 }
 
 .card-highlight {
-  font-size: 18px;
+  font-size: 22px;
   font-weight: 700;
   color: #667eea;
 }
 
-.hourly-chart {
-  height: 360px;
+.card-highlight.light {
+  color: #fff;
+}
+
+.card-badge {
+  font-size: 16px;
+  font-weight: 700;
+  padding: 2px 10px;
+  border-radius: 20px;
+}
+
+.badge-purple {
+  color: #667eea;
+  background: rgba(102, 126, 234, 0.12);
+}
+
+.badge-light {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.card-body {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+.gauge-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.gauge-chart {
   width: 100%;
+  height: 140px;
 }
 
-.summary-card {
-  border: none;
-}
-
-.summary-card :deep(.el-card__body) {
-  padding: 16px 20px;
-}
-
-.summary-label {
-  font-size: 13px;
-  color: #888;
-  margin-bottom: 8px;
-}
-
-.summary-main {
+.gauge-center-value {
+  position: absolute;
+  bottom: 28%;
+  left: 50%;
+  transform: translateX(-50%);
   font-size: 32px;
   font-weight: 700;
   color: #1a1a2e;
-  line-height: 1.2;
+  line-height: 1;
 }
 
-.summary-sub {
-  margin-top: 6px;
-  font-size: 12px;
-  color: #999;
+.donut-chart {
+  height: 100%;
+  min-height: 160px;
+  width: 100%;
 }
 
-.daily-progress-row {
+.daily-body {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 4px;
+}
+
+.daily-values {
   display: flex;
   align-items: baseline;
   gap: 4px;
-  margin-bottom: 10px;
 }
 
 .daily-current {
-  font-size: 28px;
+  font-size: 36px;
   font-weight: 700;
-  color: #667eea;
+  color: #3182ce;
 }
 
 .daily-sep {
-  font-size: 18px;
-  color: #ccc;
+  font-size: 20px;
+  color: #cbd5e0;
 }
 
 .daily-target {
-  font-size: 18px;
+  font-size: 20px;
   color: #888;
 }
 
-.daily-percent-text {
-  margin-top: 6px;
-  font-size: 12px;
-  color: #888;
+.progress-track {
+  height: 14px;
+  background: #edf2f7;
+  border-radius: 7px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4299e1 0%, #3182ce 100%);
+  border-radius: 7px;
+  transition: width 0.6s ease;
+}
+
+.daily-percent {
+  font-size: 13px;
+  color: #718096;
   text-align: right;
 }
 
-.efficiency-row {
+.efficiency-badges {
   display: flex;
-  justify-content: space-around;
-  padding-top: 4px;
+  gap: 12px;
 }
 
-.efficiency-count,
-.efficiency-rate {
-  text-align: center;
-}
-
-.efficiency-num {
-  display: block;
-  font-size: 28px;
-  font-weight: 700;
-  color: #1a1a2e;
-  line-height: 1.2;
-}
-
-.efficiency-unit {
+.eff-badge {
   font-size: 12px;
-  color: #999;
+  color: #888;
 }
 
-.pie-card :deep(.el-card__body) {
-  padding: 0 8px 8px;
+.eff-badge em {
+  font-style: normal;
+  font-size: 16px;
+  font-weight: 700;
+  color: #667eea;
+  margin-right: 2px;
 }
 
-.pie-chart {
-  height: 180px;
-  width: 100%;
-}
-
-.bar-row {
-  margin-bottom: 16px;
-}
-
+.line-chart,
 .bar-chart {
-  height: 260px;
   width: 100%;
+  height: 100%;
+  min-height: 150px;
 }
 
-.table-card {
-  border: none;
-}
-
-.table-card :deep(.el-card__header) {
-  padding: 14px 20px;
-  border-bottom: 1px solid #f0f0f0;
-}
-
-.table-pagination {
+.hourly-meta {
   display: flex;
-  justify-content: flex-end;
-  margin-top: 16px;
+  align-items: center;
+  gap: 10px;
 }
 
-@media (max-width: 1200px) {
-  .hourly-chart {
-    height: 300px;
-  }
-
-  .right-column {
-    margin-top: 16px;
-  }
+.hourly-meta.light .hourly-avg {
+  color: rgba(255, 255, 255, 0.9);
 }
 
-@media (max-width: 768px) {
-  .stat-value {
-    font-size: 22px;
+.hourly-avg {
+  font-size: 12px;
+  color: #888;
+}
+
+@media (max-width: 992px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+    min-height: auto;
   }
 
-  .hourly-chart {
-    height: 260px;
-  }
-
-  .bar-chart {
-    height: 220px;
+  .dash-card {
+    min-height: 220px;
   }
 }
 </style>

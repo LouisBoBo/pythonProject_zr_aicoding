@@ -45,13 +45,18 @@
     <div class="main-area">
       <header class="topbar">
         <div class="topbar-left">
-          <el-breadcrumb separator="/">
-            <el-breadcrumb-item :to="{ path: '/home' }">首页</el-breadcrumb-item>
-            <el-breadcrumb-item v-if="currentTitle !== '首页'">
-              {{ currentTitle }}
-            </el-breadcrumb-item>
-          </el-breadcrumb>
-          <h2 class="page-title">{{ currentTitle }}</h2>
+          <el-tabs
+            :model-value="activeTab"
+            class="top-tabs"
+            @tab-change="handleTabChange"
+          >
+            <el-tab-pane
+              v-for="tab in topTabs"
+              :key="tab.path"
+              :label="tab.label"
+              :name="tab.path"
+            />
+          </el-tabs>
         </div>
 
         <div class="topbar-right">
@@ -159,6 +164,27 @@ const menuGroups = [
 ]
 
 const currentTitle = computed(() => route.meta.title || '首页')
+
+const topTabs = [
+  { label: '首页', path: '/home' },
+  { label: '工作台', path: '/workbench' },
+  { label: '生产管理', path: '/production' },
+  { label: '品质分析', path: '/quality' },
+  { label: '报表中心', path: '/reports' },
+]
+
+const activeTab = computed(() => {
+  const match = topTabs.find(
+    (tab) => route.path === tab.path || route.path.startsWith(tab.path + '/'),
+  )
+  return match?.path || '/home'
+})
+
+function handleTabChange(path) {
+  if (path && path !== route.path) {
+    router.push(path)
+  }
+}
 
 const userInitial = computed(() => {
   const name = user.value?.username || 'U'
@@ -351,16 +377,40 @@ onMounted(async () => {
 }
 
 .topbar-left {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  flex: 1;
+  min-width: 0;
 }
 
-.page-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: #1a1a2e;
+.top-tabs {
+  --el-tabs-header-height: 40px;
+}
+
+.top-tabs :deep(.el-tabs__header) {
   margin: 0;
+  border-bottom: none;
+}
+
+.top-tabs :deep(.el-tabs__nav-wrap::after) {
+  display: none;
+}
+
+.top-tabs :deep(.el-tabs__item) {
+  font-size: 14px;
+  color: #666;
+  padding: 0 18px;
+  height: 40px;
+  line-height: 40px;
+}
+
+.top-tabs :deep(.el-tabs__item.is-active) {
+  color: #667eea;
+  font-weight: 600;
+}
+
+.top-tabs :deep(.el-tabs__active-bar) {
+  background-color: #667eea;
+  height: 3px;
+  border-radius: 2px;
 }
 
 .topbar-right {
