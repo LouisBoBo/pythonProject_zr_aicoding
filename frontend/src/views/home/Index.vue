@@ -427,9 +427,11 @@ onMounted(async () => {
 .dashboard-bottom {
   display: grid;
   grid-template-columns: 2fr 1fr;
-  grid-template-rows: 1fr 1fr;
+  /* 固定行高，避免 ECharts autoresize 与 1fr 互相撑开形成高度死循环 */
+  grid-template-rows: 160px 160px;
   gap: 12px;
-  min-height: 280px;
+  height: 332px;
+  max-height: 332px;
 }
 
 .dash-card {
@@ -456,7 +458,10 @@ onMounted(async () => {
   background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
   padding: 14px 18px;
   position: relative;
-  min-height: 260px;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
 }
 
 .card-split {
@@ -505,8 +510,11 @@ onMounted(async () => {
 }
 
 .split-chart-area {
-  flex: 1;
-  min-height: 70px;
+  flex: none;
+  height: 88px;
+  max-height: 88px;
+  overflow: hidden;
+  position: relative;
 }
 
 .card-header {
@@ -577,13 +585,15 @@ onMounted(async () => {
 
 .donut-body {
   position: relative;
-  min-height: 130px;
+  height: 140px;
+  max-height: 140px;
+  overflow: hidden;
 }
 
 .donut-chart {
-  height: 100%;
-  min-height: 120px;
   width: 100%;
+  height: 120px;
+  max-height: 120px;
 }
 
 .donut-center {
@@ -666,7 +676,11 @@ onMounted(async () => {
 }
 
 .efficiency-body {
-  min-height: 130px;
+  height: 140px;
+  max-height: 140px;
+  overflow: hidden;
+  padding-bottom: 36px;
+  box-sizing: border-box;
 }
 
 .efficiency-footer {
@@ -701,8 +715,21 @@ onMounted(async () => {
 .line-chart,
 .bar-chart {
   width: 100%;
-  height: 100%;
-  min-height: 80px;
+  /* 固定像素高度，切断 autoresize ↔ 父容器互相撑开 */
+  height: 100px;
+  max-height: 100px;
+  min-height: 0;
+}
+
+.efficiency-body > .line-chart {
+  height: 100px;
+  max-height: 100px;
+}
+
+.split-chart-area > .line-chart,
+.split-chart-area > .bar-chart {
+  height: 88px;
+  max-height: 88px;
 }
 
 .hourly-header {
@@ -740,15 +767,19 @@ onMounted(async () => {
 }
 
 .hourly-chart-wrap {
-  flex: 1;
-  min-height: 140px;
+  flex: none;
+  height: 220px;
+  max-height: 220px;
+  min-height: 0;
   position: relative;
+  overflow: hidden;
 }
 
 .hourly-line-chart {
   width: 100%;
-  height: 100%;
-  min-height: 140px;
+  height: 220px;
+  max-height: 220px;
+  min-height: 0;
 }
 
 .hourly-overlay {
@@ -791,13 +822,23 @@ onMounted(async () => {
 
   .dashboard-bottom {
     grid-template-columns: 1fr;
-    grid-template-rows: auto;
+    grid-template-rows: none;
+    height: auto;
+    max-height: none;
   }
 
   .card-hourly {
     grid-row: auto;
     grid-column: auto;
-    min-height: 280px;
+    height: auto;
+    max-height: none;
+    min-height: 0;
+  }
+
+  .hourly-chart-wrap,
+  .hourly-line-chart {
+    height: 200px;
+    max-height: 200px;
   }
 }
 
