@@ -54,11 +54,42 @@ class TodoItem(BaseModel):
     link: str
 
 
+class AnomalySegment(BaseModel):
+    name: str
+    value: int
+
+
+class HourlyStats(BaseModel):
+    production_time: str
+    daily_output: int
+    daily_avg: int
+
+
+class ManufacturingDashboard(BaseModel):
+    display_date: str
+    monthly_output: int
+    last_month_output: int
+    daily_current: int
+    daily_target: int
+    efficiency_count: int
+    efficiency_rate: int
+    efficiency_trend: list[int]
+    anomaly_percent: int
+    anomaly_segments: list[AnomalySegment]
+    production_trend_value: float
+    production_trend: list[int]
+    hourly_avg: float
+    hourly_bars: list[int]
+    hourly_output_trend: list[int]
+    hourly_stats: HourlyStats
+
+
 class DashboardResponse(BaseModel):
     stats: list[DashboardStatItem]
     production_trend: list[ProductionTrendPoint]
     work_order_status: list[WorkOrderStatusItem]
     todos: list[TodoItem]
+    manufacturing: ManufacturingDashboard
 
 
 WorkOrderPriority = Literal["low", "normal", "high", "urgent"]

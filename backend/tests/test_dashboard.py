@@ -89,3 +89,13 @@ def test_dashboard_with_valid_token(client, test_user):
     assert len(data["work_order_status"]) == 4
     assert len(data["todos"]) == 5
     assert data["todos"][0]["priority"] in ("high", "medium", "low")
+
+    mfg = data["manufacturing"]
+    assert mfg["monthly_output"] == 3535
+    assert mfg["daily_current"] == 1810
+    assert mfg["daily_target"] == 2500
+    assert mfg["anomaly_percent"] == 81
+    assert mfg["production_trend_value"] == 4316.0
+    assert len(mfg["hourly_bars"]) == 12
+    assert mfg["hourly_stats"]["production_time"] == "7:08"
+    assert mfg["hourly_stats"]["daily_output"] == 525

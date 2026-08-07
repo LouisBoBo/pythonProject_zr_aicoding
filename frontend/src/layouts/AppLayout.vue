@@ -60,13 +60,16 @@
         </div>
 
         <div class="topbar-right">
-          <el-input
-            v-model="searchKeyword"
-            placeholder="请输入"
-            class="search-input"
-            clearable
-            :prefix-icon="Search"
-          />
+          <div class="search-group">
+            <el-input
+              v-model="searchKeyword"
+              placeholder="请输入"
+              class="search-input"
+              clearable
+              @keyup.enter="handleSearch"
+            />
+            <el-button class="search-btn" :icon="Search" @click="handleSearch" />
+          </div>
           <el-dropdown trigger="click" class="org-dropdown">
             <div class="org-selector">
               <el-icon class="org-lock"><Lock /></el-icon>
@@ -212,6 +215,12 @@ const showPageTab = computed(() => route.path === '/home' || route.path === '/')
 function handleTabChange(path) {
   if (path && path !== route.path) {
     router.push(path)
+  }
+}
+
+function handleSearch() {
+  if (searchKeyword.value.trim()) {
+    // placeholder for future search integration
   }
 }
 
@@ -448,14 +457,35 @@ onMounted(async () => {
   gap: 12px;
 }
 
+.search-group {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
 .search-input {
-  width: 180px;
+  width: 160px;
 }
 
 .search-input :deep(.el-input__wrapper) {
   background: rgba(255, 255, 255, 0.12);
   box-shadow: none;
-  border-radius: 4px;
+  border-radius: 4px 0 0 4px;
+  border: none;
+}
+
+.search-btn {
+  border-radius: 0 4px 4px 0;
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: rgba(255, 255, 255, 0.85);
+  height: 32px;
+  padding: 0 10px;
+}
+
+.search-btn:hover {
+  background: rgba(255, 255, 255, 0.28);
+  color: #fff;
 }
 
 .search-input :deep(.el-input__inner) {

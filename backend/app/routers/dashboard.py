@@ -3,14 +3,47 @@ from fastapi import APIRouter, Depends
 from app.auth import get_current_user
 from app.models import User
 from app.schemas import (
+    AnomalySegment,
     DashboardResponse,
     DashboardStatItem,
+    HourlyStats,
+    ManufacturingDashboard,
     ProductionTrendPoint,
     TodoItem,
     WorkOrderStatusItem,
 )
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
+
+
+def _mock_manufacturing_data() -> ManufacturingDashboard:
+    return ManufacturingDashboard(
+        display_date="2022.12.30",
+        monthly_output=3535,
+        last_month_output=4590,
+        daily_current=1810,
+        daily_target=2500,
+        efficiency_count=197,
+        efficiency_rate=85,
+        efficiency_trend=[420, 480, 520, 610, 580, 640, 720, 680, 750, 800, 760, 790],
+        anomaly_percent=81,
+        anomaly_segments=[
+            AnomalySegment(name="10", value=10),
+            AnomalySegment(name="20", value=20),
+            AnomalySegment(name="30", value=30),
+            AnomalySegment(name="40", value=40),
+        ],
+        production_trend_value=4316.0,
+        production_trend=[3200, 3450, 3680, 3900, 4050, 4180, 4250, 4316],
+        hourly_avg=20.45,
+        hourly_bars=[18, 22, 15, 12, 10, 12, 8, 5, 6, 10, 18, 25],
+        hourly_output_trend=[150, 375, 420, 500, 160, 140],
+        hourly_stats=HourlyStats(
+            production_time="7:08",
+            daily_output=525,
+            daily_avg=354,
+        ),
+    )
 
 
 def _mock_dashboard_data() -> DashboardResponse:
@@ -102,6 +135,7 @@ def _mock_dashboard_data() -> DashboardResponse:
                 link="/warehouse/WH-0456",
             ),
         ],
+        manufacturing=_mock_manufacturing_data(),
     )
 
 
