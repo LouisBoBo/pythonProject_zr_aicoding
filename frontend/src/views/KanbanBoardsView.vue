@@ -162,7 +162,7 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -196,10 +196,14 @@ const editingId = ref(null)
 const submitLoading = ref(false)
 const formRef = ref(null)
 
+function getRouteCategory() {
+  return route.meta.category || ''
+}
+
 const defaultForm = () => ({
   board_code: '',
   board_name: '',
-  category: 'production',
+  category: getRouteCategory() || 'production',
   production_line: '',
   owner: '',
   refresh_interval: 60,
@@ -372,10 +376,14 @@ function handleReset() {
   filters.boardCode = ''
   filters.boardName = ''
   filters.productionLine = ''
-  filters.category = ''
+  filters.category = getRouteCategory()
   filters.status = ''
   page.value = 1
   loadBoards()
+}
+
+function applyRouteCategory() {
+  filters.category = getRouteCategory()
 }
 
 async function loadBoards() {
@@ -403,11 +411,21 @@ async function loadBoards() {
   }
 }
 
+watch(
+  () => route.path,
+  () => {
+    applyRouteCategory()
+    page.value = 1
+    loadBoards()
+  },
+)
+
 onMounted(() => {
+  applyRouteCategory()
   loadBoards()
   if (route.query.create === '1' || route.query.create === 'true') {
     openCreateDialog()
-    router.replace({ path: '/kanban-boards' })
+    router.replace({ path: route.path })
   }
 })
 </script>

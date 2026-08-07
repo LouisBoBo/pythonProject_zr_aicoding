@@ -18,6 +18,14 @@ import KanbanBoardsView from '../views/KanbanBoardsView.vue'
 
 const authRequired = { requiresAuth: true }
 
+const kanbanRoutes = [
+  { path: 'production', title: '生产看板', category: 'production' },
+  { path: 'quality', title: '品质看板', category: 'quality' },
+  { path: 'equipment', title: '设备看板', category: 'equipment' },
+  { path: 'warehouse', title: '仓储看板', category: 'warehouse' },
+  { path: 'general', title: '综合看板', category: 'general' },
+]
+
 const router = createRouter({
   history: createWebHistory(),
   routes: [
@@ -55,13 +63,21 @@ const router = createRouter({
         },
         {
           path: 'kanban-boards/new',
-          redirect: { path: '/kanban-boards', query: { create: '1' } },
+          redirect: { path: '/kanban/production', query: { create: '1' } },
         },
         {
           path: 'kanban-boards/:id?',
-          name: 'kanban-boards',
+          redirect: '/kanban/production',
+        },
+        ...kanbanRoutes.map(({ path, title, category }) => ({
+          path: `kanban/${path}`,
+          name: `kanban-${path}`,
           component: KanbanBoardsView,
-          meta: { title: '看板管理', ...authRequired },
+          meta: { title, category, ...authRequired },
+        })),
+        {
+          path: 'kanban',
+          redirect: '/kanban/production',
         },
         { path: 'dashboard', redirect: '/home' },
       ],
