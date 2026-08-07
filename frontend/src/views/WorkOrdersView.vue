@@ -1,10 +1,8 @@
 <template>
   <div class="work-orders-page">
-    <header class="header">
-      <button class="back-btn" @click="router.push('/home')">← 返回首页</button>
-      <h1>工单管理</h1>
+    <div class="page-toolbar">
       <button class="create-btn" @click="openCreateModal">新建工单</button>
-    </header>
+    </div>
 
     <main class="content">
       <div class="table-card">
@@ -383,46 +381,22 @@ onMounted(() => {
 
 <style scoped>
 .work-orders-page {
-  min-height: 100vh;
   display: flex;
   flex-direction: column;
 }
 
-.header {
+.page-toolbar {
   display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 16px 32px;
-  background: #fff;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  justify-content: flex-end;
+  margin-bottom: 16px;
 }
 
-.header h1 {
-  flex: 1;
-  font-size: 20px;
-  color: #1a1a2e;
-}
-
-.back-btn,
 .create-btn {
-  padding: 6px 16px;
-  border-radius: 6px;
+  padding: 8px 20px;
+  border-radius: 8px;
   font-size: 14px;
   cursor: pointer;
   transition: all 0.2s;
-}
-
-.back-btn {
-  background: #fff;
-  border: 1px solid #ddd;
-}
-
-.back-btn:hover {
-  border-color: #667eea;
-  color: #667eea;
-}
-
-.create-btn {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   border: none;
   color: #fff;
@@ -435,9 +409,7 @@ onMounted(() => {
 
 .content {
   flex: 1;
-  padding: 24px 32px;
   max-width: 1280px;
-  margin: 0 auto;
   width: 100%;
 }
 
