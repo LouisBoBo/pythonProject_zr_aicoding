@@ -3,7 +3,7 @@
     <header class="header">
       <button class="back-btn" @click="router.push('/home')">← 返回首页</button>
       <h1>工单管理</h1>
-      <button class="create-btn" @click="router.push('/work-orders/new')">新建工单</button>
+      <button class="create-btn" @click="openCreateModal">新建工单</button>
     </header>
 
     <main class="content">
@@ -84,15 +84,153 @@
         </template>
       </div>
     </main>
+
+    <Teleport to="body">
+      <div
+        v-if="showCreateModal"
+        class="modal-overlay"
+        @click.self="closeCreateModal"
+      >
+        <div
+          class="modal-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="create-modal-title"
+        >
+          <header class="modal-header">
+            <div>
+              <h2 id="create-modal-title">新建工单</h2>
+              <p class="modal-subtitle">填写工单信息并提交</p>
+            </div>
+            <button type="button" class="modal-close" aria-label="关闭" @click="closeCreateModal">
+              ×
+            </button>
+          </header>
+
+          <form class="create-form" @submit.prevent="handleCreateSubmit">
+            <div class="form-group">
+              <label for="order-no">工单号</label>
+              <input
+                id="order-no"
+                v-model="createForm.order_no"
+                type="text"
+                placeholder="请输入工单号"
+                maxlength="50"
+                required
+              />
+            </div>
+
+            <div class="form-group">
+              <label for="product-name">产品名</label>
+              <input
+                id="product-name"
+                v-model="createForm.product_name"
+                type="text"
+                placeholder="请输入产品名"
+                maxlength="100"
+                required
+              />
+            </div>
+
+            <div class="form-group">
+              <label for="product-code">产品编码</label>
+              <input
+                id="product-code"
+                v-model="createForm.product_code"
+                type="text"
+                placeholder="请输入产品编码"
+                maxlength="50"
+              />
+            </div>
+
+            <div class="form-group">
+              <label for="production-line">生产线</label>
+              <input
+                id="production-line"
+                v-model="createForm.production_line"
+                type="text"
+                placeholder="请输入生产线"
+                maxlength="50"
+              />
+            </div>
+
+            <div class="form-group">
+              <label for="plan-quantity">计划数量</label>
+              <input
+                id="plan-quantity"
+                v-model.number="createForm.plan_quantity"
+                type="number"
+                min="1"
+                placeholder="请输入计划数量"
+                required
+              />
+            </div>
+
+            <div class="form-group">
+              <label for="priority">优先级</label>
+              <select id="priority" v-model="createForm.priority">
+                <option value="low">低</option>
+                <option value="normal">普通</option>
+                <option value="high">高</option>
+                <option value="urgent">紧急</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="assignee">负责人</label>
+              <input
+                id="assignee"
+                v-model="createForm.assignee"
+                type="text"
+                placeholder="请输入负责人"
+                maxlength="50"
+              />
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label for="start-date">开始日期</label>
+                <input id="start-date" v-model="createForm.start_date" type="date" />
+              </div>
+              <div class="form-group">
+                <label for="end-date">结束日期</label>
+                <input id="end-date" v-model="createForm.end_date" type="date" />
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="remark">备注</label>
+              <textarea
+                id="remark"
+                v-model="createForm.remark"
+                placeholder="请输入备注"
+                maxlength="500"
+                rows="3"
+              />
+            </div>
+
+            <p v-if="createError" class="create-error">{{ createError }}</p>
+
+            <div class="form-actions">
+              <button type="button" class="cancel-btn" @click="closeCreateModal">取消</button>
+              <button type="submit" class="submit-btn" :disabled="createLoading">
+                {{ createLoading ? '提交中...' : '提交' }}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { fetchWorkOrders } from '../api/workOrders'
+import { useRoute, useRouter } from 'vue-router'
+import { createWorkOrder, fetchWorkOrders } from '../api/workOrders'
 
 const router = useRouter()
+const route = useRoute()
 
 const workOrders = ref([])
 const total = ref(0)
@@ -102,6 +240,25 @@ const loading = ref(true)
 const error = ref('')
 const statusFilter = ref('')
 const priorityFilter = ref('')
+
+const showCreateModal = ref(false)
+const createLoading = ref(false)
+const createError = ref('')
+
+const defaultCreateForm = () => ({
+  order_no: '',
+  product_name: '',
+  product_code: '',
+  production_line: '',
+  plan_quantity: null,
+  priority: 'normal',
+  assignee: '',
+  start_date: '',
+  end_date: '',
+  remark: '',
+})
+
+const createForm = ref(defaultCreateForm())
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
 
@@ -127,6 +284,22 @@ function statusLabel(status) {
   return statusLabels[status] || status
 }
 
+function resetCreateForm() {
+  createForm.value = defaultCreateForm()
+  createError.value = ''
+}
+
+function openCreateModal() {
+  resetCreateForm()
+  showCreateModal.value = true
+}
+
+function closeCreateModal() {
+  showCreateModal.value = false
+  createLoading.value = false
+  resetCreateForm()
+}
+
 async function loadWorkOrders() {
   loading.value = true
   error.value = ''
@@ -150,6 +323,45 @@ async function loadWorkOrders() {
   }
 }
 
+async function handleCreateSubmit() {
+  createError.value = ''
+  createLoading.value = true
+  try {
+    const payload = {
+      order_no: createForm.value.order_no.trim(),
+      product_name: createForm.value.product_name.trim(),
+      plan_quantity: createForm.value.plan_quantity,
+      priority: createForm.value.priority,
+    }
+    if (createForm.value.product_code.trim()) {
+      payload.product_code = createForm.value.product_code.trim()
+    }
+    if (createForm.value.production_line.trim()) {
+      payload.production_line = createForm.value.production_line.trim()
+    }
+    if (createForm.value.assignee.trim()) {
+      payload.assignee = createForm.value.assignee.trim()
+    }
+    if (createForm.value.start_date) {
+      payload.start_date = createForm.value.start_date
+    }
+    if (createForm.value.end_date) {
+      payload.end_date = createForm.value.end_date
+    }
+    if (createForm.value.remark.trim()) {
+      payload.remark = createForm.value.remark.trim()
+    }
+    await createWorkOrder(payload)
+    closeCreateModal()
+    page.value = 1
+    await loadWorkOrders()
+  } catch (err) {
+    createError.value = err.message || '提交失败，请重试'
+  } finally {
+    createLoading.value = false
+  }
+}
+
 function applyFilters() {
   page.value = 1
   loadWorkOrders()
@@ -162,6 +374,10 @@ function changePage(newPage) {
 
 onMounted(() => {
   loadWorkOrders()
+  if (route.query.create === '1' || route.query.create === 'true') {
+    openCreateModal()
+    router.replace({ path: '/work-orders' })
+  }
 })
 </script>
 
@@ -390,5 +606,167 @@ onMounted(() => {
 .page-buttons button:not(:disabled):hover {
   border-color: #667eea;
   color: #667eea;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(26, 26, 46, 0.45);
+}
+
+.modal-dialog {
+  width: 100%;
+  max-width: 520px;
+  max-height: 90vh;
+  overflow-y: auto;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+}
+
+.modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 24px 24px 0;
+}
+
+.modal-header h2 {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1a1a2e;
+}
+
+.modal-subtitle {
+  margin-top: 4px;
+  font-size: 14px;
+  color: #666;
+}
+
+.modal-close {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 6px;
+  background: #f5f5f5;
+  color: #666;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.modal-close:hover {
+  background: #ececec;
+  color: #333;
+}
+
+.create-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px 24px 24px;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-group label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #444;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  padding: 10px 14px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 15px;
+  transition: border-color 0.2s;
+  background: #fff;
+  font-family: inherit;
+}
+
+.form-group textarea {
+  resize: vertical;
+  min-height: 72px;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+}
+
+.create-error {
+  color: #e53e3e;
+  font-size: 14px;
+  text-align: center;
+}
+
+.form-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.cancel-btn,
+.submit-btn {
+  flex: 1;
+  padding: 12px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.cancel-btn {
+  background: #fff;
+  border: 1px solid #ddd;
+  color: #444;
+}
+
+.cancel-btn:hover {
+  border-color: #667eea;
+  color: #667eea;
+}
+
+.submit-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+  border: none;
+}
+
+.submit-btn:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.submit-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+@media (max-width: 560px) {
+  .form-row {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

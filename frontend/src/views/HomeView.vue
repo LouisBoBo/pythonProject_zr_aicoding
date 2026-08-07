@@ -199,7 +199,7 @@ const modules = [
 ]
 
 const quickLinks = [
-  { name: '新建工单', route: '/work-orders/new', icon: '➕' },
+  { name: '新建工单', route: '/work-orders?create=1', icon: '➕' },
   { name: '今日排程', route: '/production-plan', icon: '🗓️' },
   { name: '异常上报', route: '/quality', icon: '⚠️' },
   { name: '库存查询', route: '/warehouse', icon: '🔍' },
