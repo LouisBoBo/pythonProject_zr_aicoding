@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.auth import hash_password
 from app.database import Base, SessionLocal, engine
 from app.models import User
-from app.routers import auth, dashboard, work_orders
+from app.routers import auth, dashboard, kanban_boards, work_orders
 
 
 def seed_default_user():
@@ -45,6 +45,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(dashboard.router)
 app.include_router(work_orders.router)
+app.include_router(kanban_boards.router)
 
 
 @app.get("/api/health")

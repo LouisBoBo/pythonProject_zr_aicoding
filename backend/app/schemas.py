@@ -152,3 +152,57 @@ class WorkOrderListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+KanbanBoardCategory = Literal["production", "quality", "equipment", "warehouse", "general"]
+KanbanBoardStatus = Literal["draft", "active", "archived"]
+
+
+class KanbanBoardCreate(BaseModel):
+    board_code: str = Field(min_length=1, max_length=50)
+    board_name: str = Field(min_length=1, max_length=100)
+    category: KanbanBoardCategory = "production"
+    production_line: str | None = Field(default=None, max_length=50)
+    owner: str | None = Field(default=None, max_length=50)
+    description: str | None = Field(default=None, max_length=500)
+    refresh_interval: int = Field(default=60, ge=10, le=3600)
+    remark: str | None = Field(default=None, max_length=500)
+
+
+class KanbanBoardUpdate(BaseModel):
+    board_code: str | None = Field(default=None, min_length=1, max_length=50)
+    board_name: str | None = Field(default=None, min_length=1, max_length=100)
+    category: KanbanBoardCategory | None = None
+    production_line: str | None = Field(default=None, max_length=50)
+    owner: str | None = Field(default=None, max_length=50)
+    description: str | None = Field(default=None, max_length=500)
+    refresh_interval: int | None = Field(default=None, ge=10, le=3600)
+    remark: str | None = Field(default=None, max_length=500)
+
+
+class KanbanBoardStatusUpdate(BaseModel):
+    status: KanbanBoardStatus
+
+
+class KanbanBoardResponse(BaseModel):
+    id: int
+    board_code: str
+    board_name: str
+    category: str
+    status: str
+    production_line: str | None
+    owner: str | None
+    description: str | None
+    refresh_interval: int
+    remark: str | None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class KanbanBoardListResponse(BaseModel):
+    items: list[KanbanBoardResponse]
+    total: int
+    page: int
+    page_size: int

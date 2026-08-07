@@ -14,6 +14,7 @@ import SettingsIndex from '../views/settings/Index.vue'
 import MessagesIndex from '../views/messages/Index.vue'
 import HelpIndex from '../views/help/Index.vue'
 import WorkOrdersView from '../views/WorkOrdersView.vue'
+import KanbanBoardsView from '../views/KanbanBoardsView.vue'
 
 const authRequired = { requiresAuth: true }
 
@@ -51,6 +52,16 @@ const router = createRouter({
           name: 'work-orders',
           component: WorkOrdersView,
           meta: { title: '生产工单', ...authRequired },
+        },
+        {
+          path: 'kanban-boards/new',
+          redirect: { path: '/kanban-boards', query: { create: '1' } },
+        },
+        {
+          path: 'kanban-boards/:id?',
+          name: 'kanban-boards',
+          component: KanbanBoardsView,
+          meta: { title: '看板管理', ...authRequired },
         },
         { path: 'dashboard', redirect: '/home' },
       ],

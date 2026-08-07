@@ -177,6 +177,7 @@ import {
   Bell,
   QuestionFilled,
   Document,
+  Grid,
 } from '@element-plus/icons-vue'
 import { clearToken, fetchCurrentUser } from '../api/auth'
 
@@ -219,6 +220,7 @@ const menuGroups = [
         children: [
           { path: '/production', title: '生产概览', icon: SetUp },
           { path: '/work-orders', title: '生产工单', icon: Document },
+          { path: '/kanban-boards', title: '看板管理', icon: Grid },
         ],
       },
       { path: '/equipment', title: '设备管理', icon: Cpu },
