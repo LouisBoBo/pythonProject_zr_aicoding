@@ -19,17 +19,25 @@ async function authFetch(url, options = {}) {
       clearToken()
     }
     const error = await response.json().catch(() => ({}))
-    throw new Error(error.detail || '请求失败')
+    const detail = error.detail
+    const message = typeof detail === 'string' ? detail : '请求失败'
+    throw new Error(message)
   }
 
   return response.json()
 }
 
-export async function fetchWorkOrders(page = 1, pageSize = 10) {
+export async function fetchWorkOrders({ page = 1, pageSize = 10, status, priority } = {}) {
   const params = new URLSearchParams({
     page: String(page),
     page_size: String(pageSize),
   })
+  if (status) {
+    params.set('status', status)
+  }
+  if (priority) {
+    params.set('priority', priority)
+  }
   return authFetch(`/api/work-orders?${params}`)
 }
 

@@ -62,31 +62,38 @@ class DashboardResponse(BaseModel):
 
 
 WorkOrderPriority = Literal["low", "normal", "high", "urgent"]
+WorkOrderStatus = Literal["pending", "in_progress", "completed", "cancelled"]
 
 
 class WorkOrderCreate(BaseModel):
+    order_no: str = Field(min_length=1, max_length=50)
     product_name: str = Field(min_length=1, max_length=100)
-    product_code: str = Field(min_length=1, max_length=50)
-    production_line: str = Field(min_length=1, max_length=50)
+    product_code: str | None = Field(default=None, max_length=50)
+    production_line: str | None = Field(default=None, max_length=50)
     plan_quantity: int = Field(gt=0)
     priority: WorkOrderPriority = "normal"
-    assignee: str = Field(min_length=1, max_length=50)
-    start_date: date
-    end_date: date
+    assignee: str | None = Field(default=None, max_length=50)
+    start_date: date | None = None
+    end_date: date | None = None
+    remark: str | None = Field(default=None, max_length=500)
 
 
 class WorkOrderResponse(BaseModel):
     id: int
     order_no: str
     product_name: str
-    product_code: str
-    production_line: str
+    product_code: str | None
+    production_line: str | None
     plan_quantity: int
+    actual_quantity: int
+    status: str
     priority: str
-    assignee: str
-    start_date: date
-    end_date: date
+    assignee: str | None
+    start_date: date | None
+    end_date: date | None
+    remark: str | None
     created_at: datetime
+    updated_at: datetime
 
     model_config = {"from_attributes": True}
 

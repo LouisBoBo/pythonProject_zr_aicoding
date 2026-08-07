@@ -3,11 +3,13 @@ import { getToken } from '../api/auth'
 import LoginView from '../views/LoginView.vue'
 import HomeView from '../views/HomeView.vue'
 import WorkOrdersView from '../views/WorkOrdersView.vue'
+import WorkOrderNewView from '../views/WorkOrderNewView.vue'
 import PlaceholderView from '../views/PlaceholderView.vue'
 
 const authRequired = { requiresAuth: true }
 
 const moduleRoutes = [
+  { path: '/work-orders/new', name: 'work-orders-new', component: WorkOrderNewView, meta: { title: '新建工单', ...authRequired } },
   { path: '/work-orders/:id?', name: 'work-orders', component: WorkOrdersView, meta: { title: '工单管理', ...authRequired } },
   { path: '/production-plan/:id?', name: 'production-plan', meta: { title: '生产计划', ...authRequired } },
   { path: '/quality/:id?', name: 'quality', meta: { title: '品质管理', ...authRequired } },

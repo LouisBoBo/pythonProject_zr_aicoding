@@ -1,6 +1,5 @@
-from datetime import date
-
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
@@ -11,31 +10,21 @@ from app.schemas import WorkOrderCreate, WorkOrderListResponse, WorkOrderRespons
 router = APIRouter(prefix="/api/work-orders", tags=["work-orders"])
 
 
-def _generate_order_no(db: Session) -> str:
-    today = date.today()
-    date_str = today.strftime("%Y%m%d")
-    prefix = f"WO{date_str}"
-    last = (
-        db.query(WorkOrder)
-        .filter(WorkOrder.order_no.like(f"{prefix}%"))
-        .order_by(WorkOrder.order_no.desc())
-        .first()
-    )
-    if last:
-        seq = int(last.order_no[len(prefix) :]) + 1
-    else:
-        seq = 1
-    return f"{prefix}{seq:03d}"
-
-
 @router.get("", response_model=WorkOrderListResponse)
 def list_work_orders(
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
+    status: str | None = Query(None),
+    priority: str | None = Query(None),
     _current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    query = db.query(WorkOrder).order_by(WorkOrder.created_at.desc())
+    query = db.query(WorkOrder)
+    if status:
+        query = query.filter(WorkOrder.status == status)
+    if priority:
+        query = query.filter(WorkOrder.priority == priority)
+    query = query.order_by(WorkOrder.created_at.desc())
     total = query.count()
     items = query.offset((page - 1) * page_size).limit(page_size).all()
     return WorkOrderListResponse(
@@ -52,8 +41,12 @@ def create_work_order(
     _current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    existing = db.query(WorkOrder).filter(WorkOrder.order_no == payload.order_no).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="工单号已存在")
+
     work_order = WorkOrder(
-        order_no=_generate_order_no(db),
+        order_no=payload.order_no,
         product_name=payload.product_name,
         product_code=payload.product_code,
         production_line=payload.production_line,
@@ -62,8 +55,13 @@ def create_work_order(
         assignee=payload.assignee,
         start_date=payload.start_date,
         end_date=payload.end_date,
+        remark=payload.remark,
     )
     db.add(work_order)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="工单号已存在") from None
     db.refresh(work_order)
     return work_order

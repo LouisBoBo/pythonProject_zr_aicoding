@@ -69,19 +69,27 @@ def _get_token(client, test_user):
     return response.json()["access_token"]
 
 
+def _work_order_payload(order_no="WO20250807001", **overrides):
+    payload = {
+        "order_no": order_no,
+        "product_name": "测试产品",
+        "product_code": "P001",
+        "production_line": "A线",
+        "plan_quantity": 100,
+        "priority": "normal",
+        "assignee": "张三",
+        "start_date": "2025-08-07",
+        "end_date": "2025-08-10",
+        "remark": "测试备注",
+    }
+    payload.update(overrides)
+    return payload
+
+
 def test_create_work_order_without_token(client):
     response = client.post(
         "/api/work-orders",
-        json={
-            "product_name": "测试产品",
-            "product_code": "P001",
-            "production_line": "A线",
-            "plan_quantity": 100,
-            "priority": "normal",
-            "assignee": "张三",
-            "start_date": "2025-08-07",
-            "end_date": "2025-08-10",
-        },
+        json=_work_order_payload(),
     )
     assert response.status_code == 403
 
@@ -92,23 +100,17 @@ def test_create_and_list_work_orders(client, test_user):
 
     create_response = client.post(
         "/api/work-orders",
-        json={
-            "product_name": "测试产品",
-            "product_code": "P001",
-            "production_line": "A线",
-            "plan_quantity": 100,
-            "priority": "high",
-            "assignee": "张三",
-            "start_date": "2025-08-07",
-            "end_date": "2025-08-10",
-        },
+        json=_work_order_payload(priority="high"),
         headers=headers,
     )
     assert create_response.status_code == 201
     data = create_response.json()
-    assert data["order_no"].startswith("WO")
+    assert data["order_no"] == "WO20250807001"
     assert data["product_name"] == "测试产品"
     assert data["priority"] == "high"
+    assert data["status"] == "pending"
+    assert data["actual_quantity"] == 0
+    assert data["remark"] == "测试备注"
 
     list_response = client.get("/api/work-orders", headers=headers)
     assert list_response.status_code == 200
@@ -118,22 +120,74 @@ def test_create_and_list_work_orders(client, test_user):
     assert list_data["items"][0]["order_no"] == data["order_no"]
 
 
-def test_order_no_increments(client, test_user):
+def test_create_work_order_minimal_fields(client, test_user):
     token = _get_token(client, test_user)
     headers = {"Authorization": f"Bearer {token}"}
-    payload = {
-        "product_name": "产品",
-        "product_code": "P002",
-        "production_line": "B线",
-        "plan_quantity": 50,
-        "priority": "low",
-        "assignee": "李四",
-        "start_date": "2025-08-07",
-        "end_date": "2025-08-08",
-    }
 
-    first = client.post("/api/work-orders", json=payload, headers=headers).json()
-    second = client.post("/api/work-orders", json=payload, headers=headers).json()
+    response = client.post(
+        "/api/work-orders",
+        json={
+            "order_no": "WO-MIN-001",
+            "product_name": "最小字段产品",
+            "plan_quantity": 10,
+        },
+        headers=headers,
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["order_no"] == "WO-MIN-001"
+    assert data["status"] == "pending"
+    assert data["actual_quantity"] == 0
 
-    assert first["order_no"] != second["order_no"]
-    assert int(second["order_no"][-3:]) == int(first["order_no"][-3:]) + 1
+
+def test_duplicate_order_no_returns_409(client, test_user):
+    token = _get_token(client, test_user)
+    headers = {"Authorization": f"Bearer {token}"}
+    payload = _work_order_payload(order_no="WO-DUP-001")
+
+    first = client.post("/api/work-orders", json=payload, headers=headers)
+    assert first.status_code == 201
+
+    second = client.post("/api/work-orders", json=payload, headers=headers)
+    assert second.status_code == 409
+    assert second.json()["detail"] == "工单号已存在"
+
+
+def test_list_work_orders_filter_by_status(client, test_user):
+    token = _get_token(client, test_user)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    client.post(
+        "/api/work-orders",
+        json=_work_order_payload(order_no="WO-FILTER-001"),
+        headers=headers,
+    )
+
+    pending_response = client.get("/api/work-orders?status=pending", headers=headers)
+    assert pending_response.status_code == 200
+    assert pending_response.json()["total"] == 1
+
+    completed_response = client.get("/api/work-orders?status=completed", headers=headers)
+    assert completed_response.status_code == 200
+    assert completed_response.json()["total"] == 0
+
+
+def test_list_work_orders_filter_by_priority(client, test_user):
+    token = _get_token(client, test_user)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    client.post(
+        "/api/work-orders",
+        json=_work_order_payload(order_no="WO-PRI-001", priority="high"),
+        headers=headers,
+    )
+    client.post(
+        "/api/work-orders",
+        json=_work_order_payload(order_no="WO-PRI-002", priority="low"),
+        headers=headers,
+    )
+
+    high_response = client.get("/api/work-orders?priority=high", headers=headers)
+    assert high_response.status_code == 200
+    assert high_response.json()["total"] == 1
+    assert high_response.json()["items"][0]["order_no"] == "WO-PRI-001"
