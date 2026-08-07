@@ -126,7 +126,7 @@
           </div>
         </div>
         <div class="split-bottom">
-          <span class="split-label">最近12个小时平均产量</span>
+          <span class="split-label">最近12小时平均产量</span>
           <span class="split-value">{{ data.hourly_avg }}</span>
         </div>
       </div>
@@ -428,10 +428,10 @@ onMounted(async () => {
   display: grid;
   grid-template-columns: 2fr 1fr;
   /* 固定行高，避免 ECharts autoresize 与 1fr 互相撑开形成高度死循环 */
-  grid-template-rows: 160px 160px;
+  grid-template-rows: 200px 200px;
   gap: 12px;
-  height: 332px;
-  max-height: 332px;
+  height: 412px;
+  max-height: 412px;
 }
 
 .dash-card {
@@ -465,54 +465,75 @@ onMounted(async () => {
 }
 
 .card-split {
+  grid-column: 2;
   padding: 0;
   display: flex;
   flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .card-red .split-top {
   background: linear-gradient(135deg, #e91e63 0%, #c2185b 100%);
-  flex: 1;
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
-  padding: 14px 16px 8px;
+  padding: 12px 14px 6px;
   min-height: 0;
+  overflow: hidden;
 }
 
 .card-orange .split-top {
   background: linear-gradient(135deg, #ff9800 0%, #e65100 100%);
-  flex: 1;
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
-  padding: 14px 16px 8px;
+  padding: 12px 14px 6px;
   min-height: 0;
+  overflow: hidden;
 }
 
 .split-bottom {
   background: #fff;
-  padding: 12px 16px;
+  padding: 10px 14px 12px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  flex-shrink: 0;
+  gap: 2px;
+  flex: 0 0 auto;
+  min-height: 58px;
+  box-sizing: border-box;
 }
 
 .split-label {
+  display: block;
+  width: 100%;
   font-size: 12px;
+  line-height: 1.3;
   color: #999;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .split-value {
-  font-size: 26px;
+  display: block;
+  width: 100%;
+  font-size: 24px;
   font-weight: 700;
   color: #1a1a2e;
   line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .split-chart-area {
   flex: none;
-  height: 88px;
-  max-height: 88px;
+  height: 96px;
+  max-height: 96px;
   overflow: hidden;
   position: relative;
 }
@@ -728,8 +749,8 @@ onMounted(async () => {
 
 .split-chart-area > .line-chart,
 .split-chart-area > .bar-chart {
-  height: 88px;
-  max-height: 88px;
+  height: 96px;
+  max-height: 96px;
 }
 
 .hourly-header {
@@ -768,8 +789,8 @@ onMounted(async () => {
 
 .hourly-chart-wrap {
   flex: none;
-  height: 220px;
-  max-height: 220px;
+  height: 280px;
+  max-height: 280px;
   min-height: 0;
   position: relative;
   overflow: hidden;
@@ -777,8 +798,8 @@ onMounted(async () => {
 
 .hourly-line-chart {
   width: 100%;
-  height: 220px;
-  max-height: 220px;
+  height: 280px;
+  max-height: 280px;
   min-height: 0;
 }
 
@@ -833,6 +854,12 @@ onMounted(async () => {
     height: auto;
     max-height: none;
     min-height: 0;
+  }
+
+  .card-split {
+    grid-column: auto;
+    height: auto;
+    max-height: none;
   }
 
   .hourly-chart-wrap,
