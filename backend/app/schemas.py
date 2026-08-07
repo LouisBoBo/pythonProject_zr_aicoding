@@ -1,5 +1,7 @@
 from typing import Literal
 
+from datetime import date, datetime
+
 from pydantic import BaseModel, Field
 
 ENTERPRISE_CODES = ("江西中软", "前海中软", "测试企业")
@@ -57,3 +59,40 @@ class DashboardResponse(BaseModel):
     production_trend: list[ProductionTrendPoint]
     work_order_status: list[WorkOrderStatusItem]
     todos: list[TodoItem]
+
+
+WorkOrderPriority = Literal["low", "normal", "high", "urgent"]
+
+
+class WorkOrderCreate(BaseModel):
+    product_name: str = Field(min_length=1, max_length=100)
+    product_code: str = Field(min_length=1, max_length=50)
+    production_line: str = Field(min_length=1, max_length=50)
+    plan_quantity: int = Field(gt=0)
+    priority: WorkOrderPriority = "normal"
+    assignee: str = Field(min_length=1, max_length=50)
+    start_date: date
+    end_date: date
+
+
+class WorkOrderResponse(BaseModel):
+    id: int
+    order_no: str
+    product_name: str
+    product_code: str
+    production_line: str
+    plan_quantity: int
+    priority: str
+    assignee: str
+    start_date: date
+    end_date: date
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class WorkOrderListResponse(BaseModel):
+    items: list[WorkOrderResponse]
+    total: int
+    page: int
+    page_size: int
