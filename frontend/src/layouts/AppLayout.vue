@@ -62,17 +62,31 @@
         <div class="topbar-right">
           <el-input
             v-model="searchKeyword"
-            placeholder="搜索功能、工单..."
+            placeholder="请输入"
             class="search-input"
             clearable
             :prefix-icon="Search"
           />
+          <el-dropdown trigger="click" class="org-dropdown">
+            <div class="org-selector">
+              <el-icon class="org-lock"><Lock /></el-icon>
+              <span>多组织</span>
+              <el-icon><ArrowDown /></el-icon>
+            </div>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item>默认组织</el-dropdown-item>
+                <el-dropdown-item>华东工厂</el-dropdown-item>
+                <el-dropdown-item>华南工厂</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
           <el-dropdown trigger="click" @command="handleUserCommand">
             <div class="user-dropdown">
               <el-avatar :size="32" class="user-avatar">
                 {{ userInitial }}
               </el-avatar>
-              <span class="user-name">{{ user?.username || '用户' }}</span>
+              <span class="user-name">{{ user?.username || '李杰' }}</span>
               <el-icon><ArrowDown /></el-icon>
             </div>
             <template #dropdown>
@@ -89,6 +103,16 @@
         </div>
       </header>
 
+      <div v-if="showPageTab" class="page-tab-bar">
+        <span class="page-tab active">{{ currentTitle }}</span>
+        <div class="page-tab-actions">
+          <el-icon><MoreFilled /></el-icon>
+          <el-icon><Refresh /></el-icon>
+          <el-icon><ArrowDown /></el-icon>
+          <el-icon><FullScreen /></el-icon>
+        </div>
+      </div>
+
       <main class="content-area">
         <router-view />
       </main>
@@ -104,6 +128,10 @@ import {
   Expand,
   Fold,
   Search,
+  Lock,
+  MoreFilled,
+  Refresh,
+  FullScreen,
   HomeFilled,
   Star,
   Monitor,
@@ -167,10 +195,9 @@ const currentTitle = computed(() => route.meta.title || '首页')
 
 const topTabs = [
   { label: '首页', path: '/home' },
+  { label: '收藏夹', path: '/favorites' },
   { label: '工作台', path: '/workbench' },
-  { label: '生产管理', path: '/production' },
   { label: '品质分析', path: '/quality' },
-  { label: '报表中心', path: '/reports' },
 ]
 
 const activeTab = computed(() => {
@@ -180,6 +207,8 @@ const activeTab = computed(() => {
   return match?.path || '/home'
 })
 
+const showPageTab = computed(() => route.path === '/home' || route.path === '/')
+
 function handleTabChange(path) {
   if (path && path !== route.path) {
     router.push(path)
@@ -187,7 +216,7 @@ function handleTabChange(path) {
 }
 
 const userInitial = computed(() => {
-  const name = user.value?.username || 'U'
+  const name = user.value?.username || '李'
   return name.charAt(0).toUpperCase()
 })
 
@@ -370,10 +399,10 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 24px;
-  background: #fff;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  padding: 0 24px;
+  background: #3d3d3d;
   gap: 16px;
+  min-height: 48px;
 }
 
 .topbar-left {
@@ -382,7 +411,7 @@ onMounted(async () => {
 }
 
 .top-tabs {
-  --el-tabs-header-height: 40px;
+  --el-tabs-header-height: 48px;
 }
 
 .top-tabs :deep(.el-tabs__header) {
@@ -396,31 +425,70 @@ onMounted(async () => {
 
 .top-tabs :deep(.el-tabs__item) {
   font-size: 14px;
-  color: #666;
+  color: rgba(255, 255, 255, 0.65);
   padding: 0 18px;
-  height: 40px;
-  line-height: 40px;
+  height: 48px;
+  line-height: 48px;
 }
 
 .top-tabs :deep(.el-tabs__item.is-active) {
-  color: #667eea;
-  font-weight: 600;
+  color: #fff;
+  font-weight: 500;
 }
 
 .top-tabs :deep(.el-tabs__active-bar) {
-  background-color: #667eea;
-  height: 3px;
-  border-radius: 2px;
+  background-color: #409eff;
+  height: 2px;
+  border-radius: 0;
 }
 
 .topbar-right {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
 }
 
 .search-input {
-  width: 240px;
+  width: 180px;
+}
+
+.search-input :deep(.el-input__wrapper) {
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: none;
+  border-radius: 4px;
+}
+
+.search-input :deep(.el-input__inner) {
+  color: #fff;
+}
+
+.search-input :deep(.el-input__inner::placeholder) {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.search-input :deep(.el-input__prefix .el-icon) {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.org-selector {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.org-selector:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.org-lock {
+  font-size: 14px;
 }
 
 .user-dropdown {
@@ -429,12 +497,13 @@ onMounted(async () => {
   gap: 8px;
   cursor: pointer;
   padding: 4px 8px;
-  border-radius: 8px;
+  border-radius: 4px;
   transition: background 0.2s;
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .user-dropdown:hover {
-  background: #f5f6fa;
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .user-avatar {
@@ -445,12 +514,60 @@ onMounted(async () => {
 
 .user-name {
   font-size: 14px;
-  color: #444;
+}
+
+.page-tab-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  background: #fff;
+  border-bottom: 1px solid #e8e8e8;
+  min-height: 40px;
+}
+
+.page-tab {
+  font-size: 14px;
+  color: #666;
+  padding: 10px 0;
+  position: relative;
+}
+
+.page-tab.active {
+  color: #409eff;
+  font-weight: 500;
+}
+
+.page-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #409eff;
+}
+
+.page-tab-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: #999;
+  font-size: 16px;
+}
+
+.page-tab-actions .el-icon {
+  cursor: pointer;
+}
+
+.page-tab-actions .el-icon:hover {
+  color: #666;
 }
 
 .content-area {
   flex: 1;
-  padding: 24px;
+  padding: 16px 20px;
   overflow-y: auto;
+  background: #f0f2f5;
 }
 </style>
