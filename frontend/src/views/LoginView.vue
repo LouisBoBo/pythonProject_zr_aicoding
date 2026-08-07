@@ -60,7 +60,7 @@ import { login } from '../api/auth'
 const router = useRouter()
 const route = useRoute()
 
-const enterpriseOptions = ['江西中软', '前海中软']
+const enterpriseOptions = ['江西中软', '前海中软', '测试企业']
 const enterpriseCode = ref('江西中软')
 const username = ref('')
 const password = ref('')

@@ -2,8 +2,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-ENTERPRISE_CODES = ("江西中软", "前海中软")
-EnterpriseCode = Literal["江西中软", "前海中软"]
+ENTERPRISE_CODES = ("江西中软", "前海中软", "测试企业")
+EnterpriseCode = Literal["江西中软", "前海中软", "测试企业"]
 
 
 class Token(BaseModel):
