@@ -1,17 +1,24 @@
 <template>
   <div v-loading="loading" class="production-overview">
+    <header class="overview-header">
+      <h1 class="overview-title">生产概览</h1>
+      <div class="overview-datetime">
+        <span class="datetime-text">{{ displayTime }}</span>
+        <span class="weekday-text">{{ weekday }}</span>
+      </div>
+    </header>
+
     <div class="overview-grid">
-      <!-- 顶行：双仪表盘 -->
       <div class="gauge-row">
         <div class="overview-card gauge-card">
-          <div class="card-title">产量达成率</div>
+          <div class="card-title card-title--orange">产量达成率</div>
           <div class="gauge-body">
             <v-chart class="gauge-chart" :option="achievementGaugeOption" autoresize />
             <div class="gauge-value">{{ formatGaugeValue(data.achievement_rate) }}</div>
           </div>
         </div>
         <div class="overview-card gauge-card">
-          <div class="card-title">产量面积</div>
+          <div class="card-title card-title--orange">产量面积</div>
           <div class="gauge-body">
             <v-chart class="gauge-chart" :option="areaGaugeOption" autoresize />
             <div class="gauge-value">{{ formatGaugeValue(data.production_area) }}</div>
@@ -19,7 +26,6 @@
         </div>
       </div>
 
-      <!-- 中左：生产信息统计（标签+数值行） -->
       <div class="overview-card stats-card">
         <div class="card-title">生产信息统计</div>
         <div class="stats-kv-list">
@@ -30,15 +36,13 @@
         </div>
       </div>
 
-      <!-- 中右：完成数统计图表 -->
       <div class="overview-card chart-card">
-        <div class="card-title">完成数统计图表</div>
+        <div class="card-title card-title--gold">完成数统计图表</div>
         <div class="chart-wrap">
           <v-chart class="bar-chart" :option="completionBarOption" autoresize />
         </div>
       </div>
 
-      <!-- 底行：生产信息详细 -->
       <div class="overview-card table-card detail-card">
         <div class="card-title">生产信息详细</div>
         <div class="table-wrap">
@@ -64,7 +68,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { BarChart, GaugeChart } from 'echarts/charts'
@@ -87,6 +91,8 @@ use([
 
 const loading = ref(true)
 const loadError = ref('')
+const displayTime = ref('')
+const weekday = ref('')
 
 const defaultData = {
   achievement_rate: 0,
@@ -105,6 +111,7 @@ const defaultData = {
 const data = reactive({ ...defaultData })
 
 function buildGaugeOption(value) {
+  const ratio = Math.min(Math.max(value / 100, 0), 1)
   return {
     series: [
       {
@@ -112,31 +119,43 @@ function buildGaugeOption(value) {
         startAngle: 180,
         endAngle: 0,
         center: ['50%', '75%'],
-        radius: '110%',
+        radius: '105%',
         min: 0,
         max: 100,
         splitNumber: 5,
         axisLine: {
           lineStyle: {
-            width: 16,
+            width: 14,
             color: [
-              [Math.min(value / 100, 1), '#f5a623'],
-              [1, 'rgba(4, 10, 26, 0.5)'],
+              [ratio, '#ff9900'],
+              [1, 'rgba(4, 10, 26, 0.55)'],
             ],
           },
         },
         pointer: {
           icon: 'path://M12.8,0.7l12,40.1H0.7L12.8,0.7z',
-          length: '52%',
-          width: 7,
+          length: '50%',
+          width: 6,
           offsetCenter: [0, '-6%'],
-          itemStyle: { color: '#0a1a3a' },
+          itemStyle: {
+            color: {
+              type: 'linear',
+              x: 0,
+              y: 0,
+              x2: 1,
+              y2: 1,
+              colorStops: [
+                { offset: 0, color: '#ffb347' },
+                { offset: 1, color: '#ff6600' },
+              ],
+            },
+          },
         },
         axisTick: {
           show: true,
           length: 4,
-          distance: -18,
-          lineStyle: { color: 'rgba(255,255,255,0.15)', width: 1 },
+          distance: -16,
+          lineStyle: { color: 'rgba(255, 255, 255, 0.18)', width: 1 },
         },
         splitLine: { show: false },
         axisLabel: { show: false },
@@ -147,13 +166,8 @@ function buildGaugeOption(value) {
   }
 }
 
-const achievementGaugeOption = computed(() =>
-  buildGaugeOption(data.achievement_rate),
-)
-
-const areaGaugeOption = computed(() =>
-  buildGaugeOption(data.production_area),
-)
+const achievementGaugeOption = computed(() => buildGaugeOption(data.achievement_rate))
+const areaGaugeOption = computed(() => buildGaugeOption(data.production_area))
 
 const statsRows = computed(() => {
   const s = data.stats
@@ -170,7 +184,7 @@ const completionBarOption = computed(() => ({
   tooltip: {
     trigger: 'axis',
     backgroundColor: 'rgba(10, 26, 58, 0.95)',
-    borderColor: 'rgba(64, 224, 208, 0.3)',
+    borderColor: 'rgba(0, 242, 255, 0.3)',
     textStyle: { color: '#fff' },
   },
   legend: {
@@ -181,7 +195,7 @@ const completionBarOption = computed(() => ({
     itemWidth: 14,
     itemHeight: 8,
   },
-  grid: { left: 60, right: 24, top: 40, bottom: 32 },
+  grid: { left: 56, right: 20, top: 40, bottom: 28 },
   xAxis: {
     type: 'category',
     data: data.completion_chart.map((p) => p.label),
@@ -195,7 +209,7 @@ const completionBarOption = computed(() => ({
     splitNumber: 6,
     axisLine: { show: false },
     axisLabel: {
-      color: 'rgba(255,255,255,0.5)',
+      color: 'rgba(255, 255, 255, 0.5)',
       fontSize: 11,
       formatter: (v) => (v >= 1000000 ? `${v / 1000000}M` : v),
     },
@@ -211,7 +225,10 @@ const completionBarOption = computed(() => ({
         borderRadius: [3, 3, 0, 0],
         color: {
           type: 'linear',
-          x: 0, y: 1, x2: 0, y2: 0,
+          x: 0,
+          y: 1,
+          x2: 0,
+          y2: 0,
           colorStops: [
             { offset: 0, color: '#1e3a8a' },
             { offset: 1, color: '#3b82f6' },
@@ -228,7 +245,10 @@ const completionBarOption = computed(() => ({
         borderRadius: [3, 3, 0, 0],
         color: {
           type: 'linear',
-          x: 0, y: 1, x2: 0, y2: 0,
+          x: 0,
+          y: 1,
+          x2: 0,
+          y2: 0,
           colorStops: [
             { offset: 0, color: '#0e7490' },
             { offset: 1, color: '#00f2fe' },
@@ -262,6 +282,16 @@ function applyData(resp) {
   })
 }
 
+let clockTimer = null
+
+function updateClock() {
+  const now = new Date()
+  const pad = (n) => String(n).padStart(2, '0')
+  const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六']
+  displayTime.value = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
+  weekday.value = weekdays[now.getDay()]
+}
+
 async function loadData() {
   loading.value = true
   loadError.value = ''
@@ -276,61 +306,128 @@ async function loadData() {
 }
 
 onMounted(() => {
+  updateClock()
+  clockTimer = setInterval(updateClock, 1000)
   loadData()
+})
+
+onUnmounted(() => {
+  if (clockTimer) clearInterval(clockTimer)
 })
 </script>
 
 <style scoped>
 .production-overview {
   margin: -16px -20px;
-  min-height: calc(100vh - 120px);
+  width: calc(100% + 40px);
+  max-width: calc(100% + 40px);
+  min-width: 0;
+  min-height: 100%;
   padding: 12px 16px 16px;
   background: #040a1a;
   color: #fff;
   box-sizing: border-box;
   overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.overview-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  margin-bottom: 12px;
+  padding: 4px 0 8px;
+  flex-shrink: 0;
+}
+
+.overview-title {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 600;
+  color: #fff;
+  letter-spacing: 4px;
+}
+
+.overview-datetime {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.datetime-text {
+  font-size: 14px;
+  color: #00f2ff;
+  font-family: 'Courier New', monospace;
+}
+
+.weekday-text {
+  font-size: 13px;
+  color: rgba(0, 242, 255, 0.75);
 }
 
 .overview-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   grid-template-rows: auto 1fr auto;
   gap: 12px;
-  height: calc(100vh - 180px);
-  min-height: 560px;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  max-width: 100%;
 }
 
 .gauge-row {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 12px;
+  min-width: 0;
 }
 
 .overview-card {
-  border-radius: 8px;
-  border: 1px solid rgba(64, 224, 208, 0.12);
+  border-radius: 10px;
+  border: 1px solid rgba(0, 242, 255, 0.12);
   overflow: hidden;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .card-title {
   text-align: center;
   font-size: 15px;
   font-weight: 500;
-  color: #40e0d0;
+  color: #00f2ff;
   padding: 10px 12px 6px;
   letter-spacing: 1px;
+}
+
+.card-title--orange {
+  color: #ff9900;
+}
+
+.card-title--gold {
+  background: linear-gradient(90deg, #00f2ff 0%, #ffc107 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .gauge-card {
   background: linear-gradient(
     180deg,
-    rgba(245, 166, 35, 0.55) 0%,
-    rgba(245, 166, 35, 0.25) 35%,
-    rgba(10, 26, 58, 0.85) 100%
+    rgba(255, 153, 0, 0.62) 0%,
+    rgba(255, 153, 0, 0.28) 38%,
+    rgba(10, 26, 58, 0.88) 100%
   );
   min-height: 180px;
-  border-color: rgba(245, 166, 35, 0.25);
+  border-color: rgba(255, 153, 0, 0.35);
 }
 
 .gauge-body {
@@ -339,11 +436,14 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .gauge-chart {
   width: 100%;
   height: 110px;
+  min-width: 0;
 }
 
 .gauge-value {
@@ -353,9 +453,9 @@ onMounted(() => {
   transform: translateX(-50%);
   font-size: 36px;
   font-weight: 700;
-  color: #f5a623;
+  color: #ff9900;
   line-height: 1;
-  text-shadow: 0 0 12px rgba(245, 166, 35, 0.4);
+  text-shadow: 0 0 14px rgba(255, 153, 0, 0.45);
 }
 
 .stats-card,
@@ -386,7 +486,6 @@ onMounted(() => {
   flex-direction: column;
   justify-content: center;
   padding: 4px 20px 16px;
-  gap: 0;
 }
 
 .stats-kv-row {
@@ -394,7 +493,7 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: 12px 8px;
-  border-bottom: 1px solid rgba(64, 224, 208, 0.1);
+  border-bottom: 1px solid rgba(0, 242, 255, 0.08);
 }
 
 .stats-kv-row:last-child {
@@ -409,13 +508,15 @@ onMounted(() => {
 .stats-kv-value {
   font-size: 18px;
   font-weight: 600;
-  color: #40e0d0;
+  color: #00f2ff;
   font-variant-numeric: tabular-nums;
 }
 
 .chart-wrap {
   flex: 1;
   min-height: 0;
+  min-width: 0;
+  overflow: hidden;
   padding: 0 8px 12px;
 }
 
@@ -423,22 +524,27 @@ onMounted(() => {
   width: 100%;
   height: 100%;
   min-height: 220px;
+  min-width: 0;
 }
 
 .table-wrap {
   flex: 1;
-  overflow: auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: auto;
   padding: 0 8px 8px;
 }
 
 .dark-table {
+  width: 100%;
   --el-table-bg-color: transparent;
   --el-table-tr-bg-color: transparent;
-  --el-table-header-bg-color: rgba(10, 40, 80, 0.8);
-  --el-table-row-hover-bg-color: rgba(64, 224, 208, 0.06);
+  --el-table-header-bg-color: rgba(10, 40, 80, 0.85);
+  --el-table-row-hover-bg-color: rgba(0, 242, 255, 0.06);
   --el-table-border-color: transparent;
   --el-table-text-color: rgba(255, 255, 255, 0.85);
-  --el-table-header-text-color: #40e0d0;
+  --el-table-header-text-color: #00f2ff;
   background: transparent !important;
 }
 
@@ -447,11 +553,11 @@ onMounted(() => {
 }
 
 .dark-table :deep(th.el-table__cell) {
-  background: rgba(10, 40, 80, 0.8) !important;
-  color: #40e0d0 !important;
+  background: rgba(10, 40, 80, 0.85) !important;
+  color: #00f2ff !important;
   font-weight: 500;
   font-size: 13px;
-  border-bottom: 1px solid rgba(64, 224, 208, 0.15) !important;
+  border-bottom: 1px solid rgba(0, 242, 255, 0.15) !important;
   padding: 8px 0;
 }
 
@@ -468,7 +574,7 @@ onMounted(() => {
 }
 
 .dark-table :deep(.el-table__body tr:hover > td.el-table__cell) {
-  background: rgba(64, 224, 208, 0.06) !important;
+  background: rgba(0, 242, 255, 0.06) !important;
 }
 
 .load-error {
