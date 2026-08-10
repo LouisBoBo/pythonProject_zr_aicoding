@@ -284,7 +284,7 @@ async function saveDraft() {
   try {
     await createInspectionRecord(await buildPayload('draft'))
     ElMessage.success('草稿已暂存')
-    router.push('/inspection/records?status=draft')
+    router.push({ path: '/equipment/inspection', query: { tab: 'records', status: 'draft' } })
   } catch (e) {
     ElMessage.error(e.message)
   } finally {
@@ -306,7 +306,7 @@ async function submitRecord() {
   try {
     await createInspectionRecord(await buildPayload('normal'))
     ElMessage.success('点检记录已提交')
-    router.push('/inspection/records')
+    router.push({ path: '/equipment/inspection', query: { tab: 'records' } })
   } catch (e) {
     ElMessage.error(e.message)
   } finally {

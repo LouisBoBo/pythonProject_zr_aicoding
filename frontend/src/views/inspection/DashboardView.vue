@@ -90,7 +90,10 @@
     <section class="abnormal-section">
       <div class="panel-head">
         <span class="panel-title">最近异常记录</span>
-        <router-link to="/inspection/records?status=abnormal" class="view-all">
+        <router-link
+          :to="{ path: '/equipment/inspection', query: { tab: 'records', status: 'abnormal' } }"
+          class="view-all"
+        >
           查看全部 →
         </router-link>
       </div>
@@ -267,7 +270,7 @@ function switchTrend(days) {
 }
 
 function goRecord(id) {
-  router.push({ path: '/inspection/records', query: { detail: id } })
+  router.push({ path: '/equipment/inspection', query: { tab: 'records', detail: id } })
 }
 
 onMounted(loadStats)

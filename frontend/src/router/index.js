@@ -17,11 +17,6 @@ import HelpIndex from '../views/help/Index.vue'
 import WorkOrdersView from '../views/WorkOrdersView.vue'
 import KanbanBoardsView from '../views/KanbanBoardsView.vue'
 import ProductionKanbanView from '../views/kanban/ProductionKanbanView.vue'
-import InspectionDashboard from '../views/inspection/DashboardView.vue'
-import InspectionRecords from '../views/inspection/RecordsView.vue'
-import InspectionExecute from '../views/inspection/ExecuteView.vue'
-import InspectionPlans from '../views/inspection/PlansView.vue'
-
 const authRequired = { requiresAuth: true }
 
 const kanbanRoutes = [
@@ -52,11 +47,11 @@ const router = createRouter({
         { path: 'equipment', name: 'equipment', component: EquipmentIndex, meta: { title: '设备管理', ...authRequired } },
         { path: 'equipment/inspection', name: 'equipment-inspection', component: EquipmentInspection, meta: { title: '设备点检', ...authRequired } },
         { path: 'equipment/:id', name: 'equipment-detail', component: EquipmentIndex, meta: { title: '设备管理', ...authRequired } },
-        { path: 'inspection/dashboard', name: 'inspection-dashboard', component: InspectionDashboard, meta: { title: '点检统计看板', ...authRequired } },
-        { path: 'inspection/records', name: 'inspection-records', component: InspectionRecords, meta: { title: '点检记录', ...authRequired } },
-        { path: 'inspection/execute', name: 'inspection-execute', component: InspectionExecute, meta: { title: '执行点检', ...authRequired } },
-        { path: 'inspection/plans', name: 'inspection-plans', component: InspectionPlans, meta: { title: '点检计划', ...authRequired } },
-        { path: 'inspection', redirect: '/inspection/dashboard' },
+        { path: 'inspection/dashboard', redirect: { path: '/equipment/inspection', query: { tab: 'dashboard' } } },
+        { path: 'inspection/records', redirect: (to) => ({ path: '/equipment/inspection', query: { tab: 'records', ...to.query } }) },
+        { path: 'inspection/execute', redirect: { path: '/equipment/inspection', query: { tab: 'execute' } } },
+        { path: 'inspection/plans', redirect: { path: '/equipment/inspection', query: { tab: 'plans' } } },
+        { path: 'inspection', redirect: { path: '/equipment/inspection', query: { tab: 'dashboard' } } },
         { path: 'warehouse', name: 'warehouse', component: WarehouseIndex, meta: { title: '仓储管理', ...authRequired } },
         { path: 'warehouse/:id', name: 'warehouse-detail', component: WarehouseIndex, meta: { title: '仓储管理', ...authRequired } },
         { path: 'reports', name: 'reports', component: ReportsIndex, meta: { title: '报表中心', ...authRequired } },
