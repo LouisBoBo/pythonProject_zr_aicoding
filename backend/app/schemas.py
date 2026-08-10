@@ -241,3 +241,19 @@ class ProductionKanbanDashboard(BaseModel):
     stats_rows: list[ProductionStatsRow]
     detail_rows: list[ProductionDetailRow]
     completion_chart: list[CompletionChartPoint]
+
+
+class ProductionOverviewStats(BaseModel):
+    today_completed: int
+    today_area_output: float
+    today_defect_total: int
+    daily_defect_rate: str
+    today_incoming_boards: int
+
+
+class ProductionOverviewResponse(BaseModel):
+    achievement_rate: float
+    production_area: float
+    stats: ProductionOverviewStats
+    completion_chart: list[CompletionChartPoint]
+    detail_rows: list[ProductionDetailRow]

@@ -1,7 +1,7 @@
 <template>
-  <HomeIndex />
+  <ProductionOverview />
 </template>
 
 <script setup>
-import HomeIndex from '../home/Index.vue'
+import ProductionOverview from './Overview.vue'
 </script>
