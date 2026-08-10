@@ -9,7 +9,8 @@
     </header>
 
     <div class="overview-grid">
-      <div class="gauge-row">
+      <!-- 第一行：双仪表盘 -->
+      <div class="grid-row gauge-row">
         <div class="overview-card gauge-card">
           <div class="card-title card-title--orange">产量达成率</div>
           <div class="gauge-body">
@@ -26,39 +27,60 @@
         </div>
       </div>
 
-      <div class="overview-card stats-card">
-        <div class="card-title">生产信息统计</div>
-        <div class="stats-kv-list">
-          <div v-for="row in statsRows" :key="row.label" class="stats-kv-row">
-            <span class="stats-kv-label">{{ row.label }}</span>
-            <span class="stats-kv-value">{{ row.value }}</span>
+      <!-- 第二行：双表格 -->
+      <div class="grid-row table-row">
+        <div class="overview-card table-card">
+          <div class="card-title">生产信息统计</div>
+          <div class="table-wrap">
+            <el-table
+              :data="statsTableData"
+              class="dark-table"
+              :show-header="true"
+            >
+              <el-table-column prop="today_completed" label="今日完成数" min-width="100" align="right">
+                <template #default="{ row }">{{ formatNumber(row.today_completed) }}</template>
+              </el-table-column>
+              <el-table-column prop="today_area_output" label="今日面积产量" min-width="110" align="right">
+                <template #default="{ row }">{{ formatArea(row.today_area_output) }}</template>
+              </el-table-column>
+              <el-table-column prop="today_defect_total" label="今日缺陷总数" min-width="110" align="right">
+                <template #default="{ row }">{{ formatNumber(row.today_defect_total) }}</template>
+              </el-table-column>
+              <el-table-column prop="daily_defect_rate" label="日不良率" min-width="90" align="right" />
+              <el-table-column prop="today_incoming_boards" label="今日来板数" min-width="100" align="right">
+                <template #default="{ row }">{{ formatNumber(row.today_incoming_boards) }}</template>
+              </el-table-column>
+            </el-table>
+          </div>
+        </div>
+
+        <div class="overview-card table-card">
+          <div class="card-title">生产信息详细</div>
+          <div class="table-wrap">
+            <el-table
+              :data="data.detail_rows"
+              class="dark-table"
+              :show-header="true"
+              stripe
+            >
+              <el-table-column prop="time" label="时间" min-width="90" />
+              <el-table-column prop="process_card_no" label="流程卡号" min-width="130" />
+              <el-table-column prop="product_model" label="产品型号" min-width="90" />
+              <el-table-column prop="quantity" label="数量" min-width="70" align="right" />
+              <el-table-column prop="today_completed" label="今日完成数" min-width="95" align="right" />
+              <el-table-column prop="total_completed" label="已完成总数" min-width="95" align="right" />
+            </el-table>
           </div>
         </div>
       </div>
 
-      <div class="overview-card chart-card">
-        <div class="card-title card-title--gold">完成数统计图表</div>
-        <div class="chart-wrap">
-          <v-chart class="bar-chart" :option="completionBarOption" autoresize />
-        </div>
-      </div>
-
-      <div class="overview-card table-card detail-card">
-        <div class="card-title">生产信息详细</div>
-        <div class="table-wrap">
-          <el-table
-            :data="data.detail_rows"
-            class="dark-table"
-            :show-header="true"
-            stripe
-          >
-            <el-table-column prop="time" label="时间" min-width="100" />
-            <el-table-column prop="process_card_no" label="流程卡号" min-width="140" />
-            <el-table-column prop="product_model" label="产品型号" min-width="100" />
-            <el-table-column prop="quantity" label="数量" min-width="80" align="right" />
-            <el-table-column prop="today_completed" label="今日完成数" min-width="100" align="right" />
-            <el-table-column prop="total_completed" label="已完成总数" min-width="100" align="right" />
-          </el-table>
+      <!-- 第三行：柱状图 -->
+      <div class="grid-row chart-row">
+        <div class="overview-card chart-card">
+          <div class="card-title">完成数统计图表</div>
+          <div class="chart-wrap">
+            <v-chart class="bar-chart" :option="completionBarOption" autoresize />
+          </div>
         </div>
       </div>
     </div>
@@ -94,16 +116,18 @@ const loadError = ref('')
 const displayTime = ref('')
 const weekday = ref('')
 
+const defaultStats = {
+  today_completed: 0,
+  today_area_output: 0,
+  today_defect_total: 0,
+  daily_defect_rate: '0%',
+  today_incoming_boards: 0,
+}
+
 const defaultData = {
   achievement_rate: 0,
   production_area: 0,
-  stats: {
-    today_completed: 0,
-    today_area_output: 0,
-    today_defect_total: 0,
-    daily_defect_rate: '0%',
-    today_incoming_boards: 0,
-  },
+  stats: { ...defaultStats },
   completion_chart: [],
   detail_rows: [],
 }
@@ -169,29 +193,20 @@ function buildGaugeOption(value) {
 const achievementGaugeOption = computed(() => buildGaugeOption(data.achievement_rate))
 const areaGaugeOption = computed(() => buildGaugeOption(data.production_area))
 
-const statsRows = computed(() => {
-  const s = data.stats
-  return [
-    { label: '今日完成数', value: formatNumber(s.today_completed) },
-    { label: '今日面积产量', value: formatArea(s.today_area_output) },
-    { label: '今日缺陷总数', value: formatNumber(s.today_defect_total) },
-    { label: '日不良率', value: s.daily_defect_rate },
-    { label: '今日来板数', value: formatNumber(s.today_incoming_boards) },
-  ]
-})
+const statsTableData = computed(() => [data.stats])
 
 const completionBarOption = computed(() => ({
   tooltip: {
     trigger: 'axis',
     backgroundColor: 'rgba(10, 26, 58, 0.95)',
-    borderColor: 'rgba(0, 242, 255, 0.3)',
+    borderColor: 'rgba(255, 153, 0, 0.25)',
     textStyle: { color: '#fff' },
   },
   legend: {
     data: ['LOT产出', '型号产出'],
     top: 4,
     right: 16,
-    textStyle: { color: 'rgba(255,255,255,0.75)', fontSize: 12 },
+    textStyle: { color: 'rgba(255, 255, 255, 0.7)', fontSize: 12 },
     itemWidth: 14,
     itemHeight: 8,
   },
@@ -199,8 +214,8 @@ const completionBarOption = computed(() => ({
   xAxis: {
     type: 'category',
     data: data.completion_chart.map((p) => p.label),
-    axisLine: { lineStyle: { color: 'rgba(255,255,255,0.15)' } },
-    axisLabel: { color: 'rgba(255,255,255,0.6)', fontSize: 11 },
+    axisLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.15)' } },
+    axisLabel: { color: 'rgba(255, 255, 255, 0.6)', fontSize: 11 },
     axisTick: { show: false },
   },
   yAxis: {
@@ -213,7 +228,7 @@ const completionBarOption = computed(() => ({
       fontSize: 11,
       formatter: (v) => (v >= 1000000 ? `${v / 1000000}M` : v),
     },
-    splitLine: { lineStyle: { color: 'rgba(255,255,255,0.08)' } },
+    splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.08)' } },
   },
   series: [
     {
@@ -251,7 +266,7 @@ const completionBarOption = computed(() => ({
           y2: 0,
           colorStops: [
             { offset: 0, color: '#0e7490' },
-            { offset: 1, color: '#00f2fe' },
+            { offset: 1, color: '#22d3ee' },
           ],
         },
       },
@@ -276,7 +291,7 @@ function applyData(resp) {
   Object.assign(data, {
     achievement_rate: resp.achievement_rate,
     production_area: resp.production_area,
-    stats: resp.stats || defaultData.stats,
+    stats: resp.stats || { ...defaultStats },
     completion_chart: resp.completion_chart || [],
     detail_rows: resp.detail_rows || [],
   })
@@ -363,19 +378,18 @@ onUnmounted(() => {
 
 .datetime-text {
   font-size: 14px;
-  color: #00f2ff;
+  color: rgba(255, 255, 255, 0.75);
   font-family: 'Courier New', monospace;
 }
 
 .weekday-text {
   font-size: 13px;
-  color: rgba(0, 242, 255, 0.75);
+  color: rgba(255, 255, 255, 0.55);
 }
 
 .overview-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  grid-template-rows: auto 1fr auto;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
   flex: 1;
   min-height: 0;
@@ -383,17 +397,33 @@ onUnmounted(() => {
   max-width: 100%;
 }
 
+.grid-row {
+  min-width: 0;
+  max-width: 100%;
+}
+
 .gauge-row {
-  grid-column: 1 / -1;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 12px;
-  min-width: 0;
+  flex-shrink: 0;
+}
+
+.table-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  flex: 1;
+  min-height: 180px;
+}
+
+.chart-row {
+  flex-shrink: 0;
 }
 
 .overview-card {
   border-radius: 10px;
-  border: 1px solid rgba(0, 242, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   overflow: hidden;
   min-width: 0;
   max-width: 100%;
@@ -403,20 +433,13 @@ onUnmounted(() => {
   text-align: center;
   font-size: 15px;
   font-weight: 500;
-  color: #00f2ff;
+  color: rgba(255, 255, 255, 0.85);
   padding: 10px 12px 6px;
   letter-spacing: 1px;
 }
 
 .card-title--orange {
   color: #ff9900;
-}
-
-.card-title--gold {
-  background: linear-gradient(90deg, #00f2ff 0%, #ffc107 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
 }
 
 .gauge-card {
@@ -455,61 +478,27 @@ onUnmounted(() => {
   font-weight: 700;
   color: #ff9900;
   line-height: 1;
-  text-shadow: 0 0 14px rgba(255, 153, 0, 0.45);
 }
 
-.stats-card,
-.chart-card,
-.table-card {
+.table-card,
+.chart-card {
   background: #0a1a3a;
   display: flex;
   flex-direction: column;
   min-height: 0;
 }
 
-.stats-card {
-  grid-column: 1;
-}
-
 .chart-card {
-  grid-column: 2;
+  min-height: 240px;
 }
 
-.detail-card {
-  grid-column: 1 / -1;
-  max-height: 240px;
-}
-
-.stats-kv-list {
+.table-wrap {
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  padding: 4px 20px 16px;
-}
-
-.stats-kv-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 8px;
-  border-bottom: 1px solid rgba(0, 242, 255, 0.08);
-}
-
-.stats-kv-row:last-child {
-  border-bottom: none;
-}
-
-.stats-kv-label {
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.65);
-}
-
-.stats-kv-value {
-  font-size: 18px;
-  font-weight: 600;
-  color: #00f2ff;
-  font-variant-numeric: tabular-nums;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: auto;
+  padding: 0 8px 8px;
 }
 
 .chart-wrap {
@@ -527,24 +516,15 @@ onUnmounted(() => {
   min-width: 0;
 }
 
-.table-wrap {
-  flex: 1;
-  min-width: 0;
-  max-width: 100%;
-  overflow-x: auto;
-  overflow-y: auto;
-  padding: 0 8px 8px;
-}
-
 .dark-table {
   width: 100%;
   --el-table-bg-color: transparent;
   --el-table-tr-bg-color: transparent;
-  --el-table-header-bg-color: rgba(10, 40, 80, 0.85);
-  --el-table-row-hover-bg-color: rgba(0, 242, 255, 0.06);
+  --el-table-header-bg-color: rgba(6, 20, 48, 0.95);
+  --el-table-row-hover-bg-color: rgba(255, 153, 0, 0.06);
   --el-table-border-color: transparent;
   --el-table-text-color: rgba(255, 255, 255, 0.85);
-  --el-table-header-text-color: #00f2ff;
+  --el-table-header-text-color: rgba(255, 255, 255, 0.75);
   background: transparent !important;
 }
 
@@ -553,11 +533,11 @@ onUnmounted(() => {
 }
 
 .dark-table :deep(th.el-table__cell) {
-  background: rgba(10, 40, 80, 0.85) !important;
-  color: #00f2ff !important;
+  background: rgba(6, 20, 48, 0.95) !important;
+  color: rgba(255, 255, 255, 0.75) !important;
   font-weight: 500;
   font-size: 13px;
-  border-bottom: 1px solid rgba(0, 242, 255, 0.15) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
   padding: 8px 0;
 }
 
@@ -574,7 +554,7 @@ onUnmounted(() => {
 }
 
 .dark-table :deep(.el-table__body tr:hover > td.el-table__cell) {
-  background: rgba(0, 242, 255, 0.06) !important;
+  background: rgba(255, 153, 0, 0.06) !important;
 }
 
 .load-error {
