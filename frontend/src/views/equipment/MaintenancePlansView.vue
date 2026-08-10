@@ -74,9 +74,13 @@
         </el-table-column>
         <el-table-column label="状态" width="90" align="center">
           <template #default="{ row }">
-            <span class="plan-status" :class="'status-' + row.status">
-              {{ row.status === 'enabled' ? '启用' : '停用' }}
-            </span>
+            <el-switch
+              :model-value="row.status === 'enabled'"
+              inline-prompt
+              active-text="启"
+              inactive-text="停"
+              @change="handleToggle(row)"
+            />
           </template>
         </el-table-column>
         <el-table-column label="操作" width="220" fixed="right">
@@ -387,6 +391,17 @@ async function handleGenerate(row) {
   }
 }
 
+async function handleToggle(row) {
+  const nextStatus = row.status === 'enabled' ? 'disabled' : 'enabled'
+  try {
+    await updateMaintenancePlan(row.id, { status: nextStatus })
+    ElMessage.success(nextStatus === 'enabled' ? '计划已启用' : '计划已停用')
+    loadPlans()
+  } catch (err) {
+    ElMessage.error(err.message || '状态更新失败')
+  }
+}
+
 onMounted(() => {
   loadEquipmentOptions()
   loadPlans()
@@ -518,25 +533,6 @@ onMounted(() => {
 .eq-name {
   font-size: 13px;
   color: #334155;
-}
-
-.plan-status {
-  display: inline-block;
-  padding: 2px 8px;
-  font-size: 12px;
-  border-radius: 2px;
-}
-
-.status-enabled {
-  color: #3d7a5a;
-  background: #edf7f0;
-  border: 1px solid #b8dcc8;
-}
-
-.status-disabled {
-  color: #78716c;
-  background: #f5f5f4;
-  border: 1px solid #d6d3d1;
 }
 
 .pagination-wrap {
