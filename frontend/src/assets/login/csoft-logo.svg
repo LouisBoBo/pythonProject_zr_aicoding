@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 130 50" fill="none">
+  <!-- Stylized A icon -->
+  <path d="M4 4 L22 4 L14 46 L6 46 L10 30 L16 30 L14 22 L10 22 Z M8 18 L16 18 L14 10 Z" fill="#ffffff" fill-rule="evenodd"/>
+  <text x="28" y="22" fill="#ffffff" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="600" letter-spacing="0.5">????</text>
+  <text x="28" y="40" fill="rgba(255,255,255,0.55)" font-family="Arial, sans-serif" font-size="9.5">www.cssoft.cn</text>
+</svg>
