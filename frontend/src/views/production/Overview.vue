@@ -1,100 +1,77 @@
 <template>
   <div v-loading="loading" class="production-overview">
     <div class="kpi-banner">
-      <div class="kpi-card kpi-card--blue">
-        <div class="kpi-card-label">产量达成率</div>
-        <div class="kpi-card-value">{{ formatGaugeValue(data.achievement_rate) }}%</div>
-        <div class="kpi-card-sub">
-          产量面积 {{ formatGaugeValue(data.production_area) }}
-          · 面积产量 {{ formatArea(data.stats.today_area_output) }}
-        </div>
-        <div class="kpi-card-bar">
-          <div
-            class="kpi-card-bar-fill kpi-card-bar-fill--blue"
-            :style="{ width: `${Math.min(data.achievement_rate, 100)}%` }"
-          />
-        </div>
-      </div>
-
-      <div class="kpi-card kpi-card--green">
-        <div class="kpi-card-label">今日完成数</div>
-        <div class="kpi-card-row">
-          <span class="kpi-card-value">{{ formatNumber(data.stats.today_completed) }}</span>
+      <div
+        v-for="tile in topKpiTiles"
+        :key="tile.key"
+        class="kpi-tile"
+        :class="`kpi-tile--${tile.accent}`"
+      >
+        <div class="kpi-tile-label">{{ tile.label }}</div>
+        <div class="kpi-tile-main">
+          <span class="kpi-tile-value">{{ tile.displayValue }}</span>
           <span
-            v-if="statsTrends.today_completed"
-            class="kpi-trend"
-            :class="statsTrends.today_completed.direction === 'up' ? 'kpi-trend--up' : 'kpi-trend--down'"
+            v-if="tile.trend"
+            class="kpi-tile-trend"
+            :class="tile.trendClass"
           >
-            {{ statsTrends.today_completed.direction === 'up' ? '↑' : '↓' }}
-            较昨日 {{ statsTrends.today_completed.text }}
+            {{ tile.trend.direction === 'up' ? '↑' : '↓' }} {{ tile.trend.text }}
           </span>
-        </div>
-      </div>
-
-      <div class="kpi-card kpi-card--orange">
-        <div class="kpi-card-label">日不良率</div>
-        <div class="kpi-card-row">
-          <span class="kpi-card-value">{{ data.stats.daily_defect_rate }}</span>
           <span
+            v-if="tile.statusTag"
             class="kpi-status-tag"
-            :class="defectStatusGood ? 'kpi-status-tag--good' : 'kpi-status-tag--bad'"
+            :class="tile.statusTag.class"
           >
-            {{ defectStatusGood ? '正常' : '偏高' }}
+            {{ tile.statusTag.label }}
           </span>
         </div>
-        <div class="kpi-card-sub">缺陷总数 {{ formatNumber(data.stats.today_defect_total) }}</div>
-      </div>
-
-      <div class="kpi-card kpi-card--purple">
-        <div class="kpi-card-label">今日来板数</div>
-        <div class="kpi-card-row">
-          <span class="kpi-card-value">{{ formatNumber(data.stats.today_incoming_boards) }}</span>
-          <span
-            v-if="statsTrends.today_incoming_boards"
-            class="kpi-trend"
-            :class="statsTrends.today_incoming_boards.direction === 'up' ? 'kpi-trend--up' : 'kpi-trend--down'"
-          >
-            {{ statsTrends.today_incoming_boards.direction === 'up' ? '↑' : '↓' }}
-            {{ statsTrends.today_incoming_boards.text }}
-          </span>
+        <div v-if="tile.subLine" class="kpi-tile-sub">{{ tile.subLine }}</div>
+        <div v-if="tile.barPercent != null" class="kpi-tile-bar">
+          <div class="kpi-tile-bar-fill" :style="{ width: `${tile.barPercent}%` }" />
         </div>
       </div>
     </div>
 
     <div class="main-body">
-      <div class="card card-timeline">
-        <div class="card-head">生产进度时间线</div>
-        <div class="timeline-scroll">
-          <ul class="timeline-list">
-            <li v-for="(item, idx) in timelineItems" :key="item.process_card_no + idx" class="timeline-item">
-              <div class="timeline-axis">
-                <span class="timeline-dot" />
-                <span v-if="idx < timelineItems.length - 1" class="timeline-line" />
+      <div class="panel panel-timeline">
+        <div class="panel-head">
+          <span class="panel-title">生产进度时间线</span>
+          <span class="panel-meta">最近 {{ timelineItems.length }} 条</span>
+        </div>
+        <div class="timeline-wrap">
+          <div
+            v-for="(item, idx) in timelineItems"
+            :key="item.process_card_no + idx"
+            class="timeline-item"
+          >
+            <div class="timeline-axis">
+              <span class="timeline-dot" :class="`timeline-dot--${item.status.type}`" />
+              <span v-if="idx < timelineItems.length - 1" class="timeline-line" />
+            </div>
+            <div class="timeline-content">
+              <div class="timeline-top">
+                <span class="timeline-time">{{ item.time }}</span>
+                <span class="timeline-status" :class="`timeline-status--${item.status.type}`">
+                  {{ item.status.label }}
+                </span>
               </div>
-              <div class="timeline-content">
-                <div class="timeline-top">
-                  <span class="timeline-time">{{ item.time }}</span>
-                  <span class="timeline-tag" :class="`timeline-tag--${item.statusKey}`">{{ item.statusLabel }}</span>
-                </div>
-                <div class="timeline-card-no">{{ item.process_card_no }}</div>
-                <div class="timeline-meta">
-                  <span>{{ item.product_model }}</span>
-                  <span class="timeline-qty">数量 {{ formatNumber(item.quantity) }}</span>
-                </div>
+              <div class="timeline-card-no">{{ item.process_card_no }}</div>
+              <div class="timeline-meta">
+                <span>{{ item.product_model }}</span>
+                <span class="timeline-qty">× {{ formatNumber(item.quantity) }}</span>
               </div>
-            </li>
-          </ul>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div class="card card-defect">
-        <div class="card-head">不良率分析</div>
+      <div class="panel panel-defect">
+        <div class="panel-head">
+          <span class="panel-title">不良率分析</span>
+          <span class="panel-meta">缺陷 {{ formatNumber(data.stats.today_defect_total) }}</span>
+        </div>
         <div class="donut-wrap">
           <v-chart class="donut-chart" :option="defectDonutOption" autoresize />
-          <div class="donut-center">
-            <div class="donut-center-value">{{ data.stats.daily_defect_rate }}</div>
-            <div class="donut-center-label">日不良率</div>
-          </div>
         </div>
         <div class="defect-table-wrap">
           <table class="defect-table">
@@ -108,8 +85,8 @@
             <tbody>
               <tr v-for="row in defectBreakdown" :key="row.type">
                 <td>{{ row.type }}</td>
-                <td>{{ row.count }}</td>
-                <td>{{ row.percent }}</td>
+                <td>{{ formatNumber(row.count) }}</td>
+                <td>{{ row.ratio }}</td>
               </tr>
             </tbody>
           </table>
@@ -119,10 +96,10 @@
 
     <el-collapse v-model="collapseActive" class="detail-collapse">
       <el-collapse-item name="detail" title="生产明细">
-        <div class="detail-table-wrap">
+        <div class="table-wrap">
           <el-table
             :data="data.detail_rows"
-            class="detail-table"
+            class="compact-table"
             :show-header="true"
             :row-class-name="tableRowClass"
           >
@@ -146,11 +123,11 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { PieChart } from 'echarts/charts'
-import { TooltipComponent } from 'echarts/components'
+import { TooltipComponent, GraphicComponent } from 'echarts/components'
 import VChart from 'vue-echarts'
 import { fetchProductionOverview } from '../../api/productionOverview'
 
-use([CanvasRenderer, PieChart, TooltipComponent])
+use([CanvasRenderer, PieChart, TooltipComponent, GraphicComponent])
 
 const loading = ref(true)
 const loadError = ref('')
@@ -176,77 +153,153 @@ const defaultData = {
 
 const data = reactive({ ...defaultData })
 
-const statsTrends = computed(() => data.stats.trends || {})
+const topKpiTiles = computed(() => {
+  const kpiTrends = data.kpi_trends || {}
+  const statsTrends = data.stats.trends || {}
+  const s = data.stats
+  const defectTrend = statsTrends.daily_defect_rate
+  const defectIsGood = defectTrend?.direction === 'down'
 
-const defectStatusGood = computed(() => {
-  const t = statsTrends.value.daily_defect_rate
-  return !t || t.direction === 'down'
+  return [
+    {
+      key: 'achievement_rate',
+      label: '产量达成率',
+      displayValue: `${formatGaugeValue(data.achievement_rate)}%`,
+      trend: kpiTrends.achievement_rate || statsTrends.achievement_rate,
+      trendClass: trendClass(kpiTrends.achievement_rate || statsTrends.achievement_rate, true),
+      subLine: `产量面积 ${formatGaugeValue(data.production_area)}`,
+      barPercent: Math.min(Math.max(data.achievement_rate, 0), 100),
+      accent: 'blue',
+    },
+    {
+      key: 'today_completed',
+      label: '今日完成数',
+      displayValue: formatNumber(s.today_completed),
+      trend: statsTrends.today_completed,
+      trendClass: trendClass(statsTrends.today_completed, true),
+      subLine: `今日面积产量 ${formatGaugeValue(s.today_area_output)}`,
+      accent: 'green',
+    },
+    {
+      key: 'daily_defect_rate',
+      label: '日不良率',
+      displayValue: s.daily_defect_rate,
+      statusTag: {
+        label: defectIsGood ? '正常' : '偏高',
+        class: defectIsGood ? 'kpi-status-tag--good' : 'kpi-status-tag--bad',
+      },
+      accent: 'orange',
+    },
+    {
+      key: 'today_incoming_boards',
+      label: '今日来板数',
+      displayValue: formatNumber(s.today_incoming_boards),
+      trend: statsTrends.today_incoming_boards,
+      trendClass: trendClass(statsTrends.today_incoming_boards, true),
+      accent: 'purple',
+    },
+  ]
 })
 
-const timelineItems = computed(() => {
-  const rows = [...(data.detail_rows || [])].slice(-8).reverse()
-  return rows.map((row) => {
-    let statusKey = 'pending'
-    let statusLabel = '待开始'
-    if (row.today_completed >= row.quantity) {
-      statusKey = 'done'
-      statusLabel = '已完成'
-    } else if (row.today_completed > 0) {
-      statusKey = 'progress'
-      statusLabel = '进行中'
-    }
-    return { ...row, statusKey, statusLabel }
-  })
-})
+const timelineItems = computed(() =>
+  data.detail_rows.slice(0, 8).map((row) => ({
+    ...row,
+    status: resolveRowStatus(row),
+  })),
+)
 
 const defectBreakdown = computed(() => {
-  const total = data.stats.today_defect_total
-  if (!total) return []
-  const types = [
-    { type: '外观不良', ratio: 0.32 },
-    { type: '尺寸偏差', ratio: 0.28 },
-    { type: '焊接缺陷', ratio: 0.18 },
-    { type: '物料缺失', ratio: 0.14 },
-    { type: '其他', ratio: 0.08 },
+  const total = data.stats.today_defect_total || 0
+  if (total === 0) return []
+  const weights = [
+    { type: '表面划痕', weight: 0.28 },
+    { type: '尺寸偏差', weight: 0.22 },
+    { type: '色差', weight: 0.18 },
+    { type: '气泡', weight: 0.17 },
+    { type: '其他', weight: 0.15 },
   ]
-  return types.map((t) => ({
-    type: t.type,
-    count: Math.max(1, Math.round(total * t.ratio)),
-    percent: `${(t.ratio * 100).toFixed(1)}%`,
+  return weights.map(({ type, weight }) => ({
+    type,
+    count: Math.round(total * weight),
+    ratio: `${(weight * 100).toFixed(1)}%`,
   }))
 })
 
 const defectDonutOption = computed(() => {
-  const rate = parseFloat(String(data.stats.daily_defect_rate).replace('%', '')) || 0
-  const good = Math.max(100 - rate, 0)
+  const rateStr = data.stats.daily_defect_rate || '0%'
+  const defectRate = parseFloat(String(rateStr).replace('%', '')) || 0
+  const goodRate = Math.max(100 - defectRate, 0)
+
   return {
     tooltip: {
       trigger: 'item',
-      formatter: '{b}: {d}%',
+      backgroundColor: 'rgba(48, 49, 51, 0.92)',
+      borderColor: 'rgba(91, 127, 165, 0.4)',
+      textStyle: { color: '#ecf0f1', fontSize: 12 },
+      formatter: '{b}: {c}%',
     },
+    graphic: [
+      {
+        type: 'text',
+        left: 'center',
+        top: '42%',
+        style: {
+          text: rateStr,
+          fill: '#303133',
+          fontSize: 22,
+          fontWeight: 700,
+          textAlign: 'center',
+        },
+      },
+      {
+        type: 'text',
+        left: 'center',
+        top: '54%',
+        style: {
+          text: '日不良率',
+          fill: '#909399',
+          fontSize: 11,
+          textAlign: 'center',
+        },
+      },
+    ],
     series: [
       {
         type: 'pie',
-        radius: ['58%', '78%'],
+        radius: ['52%', '72%'],
         center: ['50%', '50%'],
-        silent: true,
+        avoidLabelOverlap: false,
         label: { show: false },
+        labelLine: { show: false },
         data: [
-          { value: good, name: '良品', itemStyle: { color: '#e4e7ed' } },
-          { value: rate || 0.01, name: '不良', itemStyle: { color: '#5b7fa5' } },
+          { value: goodRate, name: '良品率', itemStyle: { color: '#e4e7ed' } },
+          { value: defectRate, name: '不良率', itemStyle: { color: '#5b7fa5' } },
         ],
       },
     ],
   }
 })
 
+function trendClass(trend, upIsGood = false) {
+  if (!trend) return ''
+  const isUp = trend.direction === 'up'
+  const positive = upIsGood ? isUp : !isUp
+  return positive ? 'kpi-tile-trend--up' : 'kpi-tile-trend--down'
+}
+
+function resolveRowStatus(row) {
+  if (row.today_completed >= row.quantity) {
+    return { label: '已完成', type: 'done' }
+  }
+  if (row.today_completed > 0) {
+    return { label: '进行中', type: 'active' }
+  }
+  return { label: '待开始', type: 'pending' }
+}
+
 function formatGaugeValue(val) {
   if (Number.isInteger(val)) return String(val)
   return val.toFixed(1)
-}
-
-function formatArea(val) {
-  return Number(val).toLocaleString('zh-CN', { maximumFractionDigits: 1 })
 }
 
 function formatNumber(val) {
@@ -254,7 +307,7 @@ function formatNumber(val) {
 }
 
 function tableRowClass() {
-  return 'detail-row'
+  return 'compact-row'
 }
 
 function applyData(resp) {
@@ -306,112 +359,104 @@ onMounted(() => {
 .kpi-banner {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
+  gap: 10px;
   flex-shrink: 0;
 }
 
-.kpi-card {
+.kpi-tile {
   background: #ffffff;
   border: 1px solid #e4e7ed;
-  border-radius: 6px;
-  padding: 14px 16px 12px;
-  min-width: 0;
   border-left-width: 4px;
+  border-radius: 4px;
+  padding: 12px 14px 10px;
+  min-width: 0;
 }
 
-.kpi-card--blue { border-left-color: #409eff; }
-.kpi-card--green { border-left-color: #67c23a; }
-.kpi-card--orange { border-left-color: #e6a23c; }
-.kpi-card--purple { border-left-color: #9b59b6; }
+.kpi-tile--blue { border-left-color: #409eff; }
+.kpi-tile--green { border-left-color: #67c23a; }
+.kpi-tile--orange { border-left-color: #e6a23c; }
+.kpi-tile--purple { border-left-color: #9b59b6; }
 
-.kpi-card-label {
+.kpi-tile-label {
   font-size: 12px;
   color: #909399;
   margin-bottom: 6px;
 }
 
-.kpi-card-value {
+.kpi-tile-main {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.kpi-tile-value {
   font-size: 28px;
   font-weight: 700;
   color: #303133;
   font-variant-numeric: tabular-nums;
-  line-height: 1.1;
+  line-height: 1;
 }
 
-.kpi-card-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  min-width: 0;
-}
-
-.kpi-card-sub {
-  margin-top: 6px;
+.kpi-tile-sub {
+  margin-top: 4px;
   font-size: 11px;
   color: #909399;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
-.kpi-card-bar {
-  margin-top: 10px;
-  height: 4px;
-  background: #ebeef5;
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.kpi-card-bar-fill {
-  height: 100%;
-  border-radius: 2px;
-  transition: width 0.5s ease;
-}
-
-.kpi-card-bar-fill--blue {
-  background: #409eff;
-}
-
-.kpi-trend {
+.kpi-tile-trend {
   font-size: 12px;
   font-weight: 500;
-  white-space: nowrap;
 }
 
-.kpi-trend--up { color: #67c23a; }
-.kpi-trend--down { color: #f56c6c; }
+.kpi-tile-trend--up { color: #67c23a; }
+.kpi-tile-trend--down { color: #f56c6c; }
 
 .kpi-status-tag {
   font-size: 11px;
-  padding: 2px 8px;
+  padding: 1px 6px;
   border-radius: 3px;
   font-weight: 500;
 }
 
 .kpi-status-tag--good {
   color: #67c23a;
-  background: rgba(103, 194, 58, 0.12);
+  background: rgba(103, 194, 58, 0.1);
 }
 
 .kpi-status-tag--bad {
   color: #f56c6c;
-  background: rgba(245, 108, 108, 0.12);
+  background: rgba(245, 108, 108, 0.1);
+}
+
+.kpi-tile-bar {
+  margin-top: 8px;
+  height: 3px;
+  background: #ebeef5;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.kpi-tile-bar-fill {
+  height: 100%;
+  background: #409eff;
+  border-radius: 2px;
+  transition: width 0.6s ease;
 }
 
 .main-body {
   display: grid;
   grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
-  gap: 12px;
+  gap: 10px;
   flex: 1;
   min-height: 0;
   min-width: 0;
 }
 
-.card {
+.panel {
   background: #ffffff;
   border: 1px solid #e4e7ed;
-  border-radius: 6px;
+  border-radius: 4px;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -419,36 +464,39 @@ onMounted(() => {
   overflow: hidden;
 }
 
-.card-head {
-  padding: 12px 16px 10px;
-  font-size: 14px;
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px 8px;
+  font-size: 13px;
   font-weight: 600;
   color: #303133;
   border-bottom: 1px solid #ebeef5;
   flex-shrink: 0;
 }
 
-.card-timeline {
-  min-height: 280px;
+.panel-meta {
+  font-size: 11px;
+  font-weight: 400;
+  color: #909399;
 }
 
-.timeline-scroll {
+.panel-timeline {
+  min-height: 320px;
+}
+
+.timeline-wrap {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 12px 16px;
-}
-
-.timeline-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+  padding: 8px 14px 12px;
 }
 
 .timeline-item {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
 }
 
@@ -456,99 +504,103 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  width: 12px;
   flex-shrink: 0;
+  width: 12px;
+  padding-top: 4px;
 }
 
 .timeline-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #5b7fa5;
-  margin-top: 6px;
   flex-shrink: 0;
 }
 
+.timeline-dot--done { background: #67c23a; }
+.timeline-dot--active { background: #409eff; }
+.timeline-dot--pending { background: #c0c4cc; }
+
 .timeline-line {
   flex: 1;
-  width: 2px;
-  background: #e4e7ed;
+  width: 1px;
   min-height: 24px;
+  background: #e4e7ed;
+  margin: 4px 0;
 }
 
 .timeline-content {
   flex: 1;
   min-width: 0;
-  padding-bottom: 16px;
+  padding-bottom: 14px;
 }
 
 .timeline-top {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .timeline-time {
-  font-size: 12px;
+  font-size: 11px;
   color: #909399;
-  font-family: 'Courier New', monospace;
+  font-variant-numeric: tabular-nums;
 }
 
-.timeline-tag {
+.timeline-status {
   font-size: 10px;
   padding: 1px 6px;
   border-radius: 3px;
-  font-weight: 500;
+  flex-shrink: 0;
 }
 
-.timeline-tag--done {
+.timeline-status--done {
   color: #67c23a;
-  background: rgba(103, 194, 58, 0.12);
+  background: rgba(103, 194, 58, 0.1);
 }
 
-.timeline-tag--progress {
+.timeline-status--active {
   color: #409eff;
-  background: rgba(64, 158, 255, 0.12);
+  background: rgba(64, 158, 255, 0.1);
 }
 
-.timeline-tag--pending {
+.timeline-status--pending {
   color: #909399;
-  background: #f0f2f5;
+  background: #f4f4f5;
 }
 
 .timeline-card-no {
   font-size: 13px;
   font-weight: 600;
   color: #303133;
-  margin-bottom: 4px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .timeline-meta {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 12px;
+  margin-top: 2px;
+  font-size: 11px;
   color: #606266;
-  flex-wrap: wrap;
+  display: flex;
+  gap: 6px;
+  align-items: center;
 }
 
 .timeline-qty {
   color: #909399;
 }
 
-.card-defect {
-  min-height: 280px;
+.panel-defect {
+  min-height: 320px;
 }
 
 .donut-wrap {
-  position: relative;
-  height: 160px;
   flex-shrink: 0;
+  height: 180px;
   min-width: 0;
+  padding: 4px 8px 0;
 }
 
 .donut-chart {
@@ -557,83 +609,58 @@ onMounted(() => {
   min-width: 0;
 }
 
-.donut-center {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-}
-
-.donut-center-value {
-  font-size: 22px;
-  font-weight: 700;
-  color: #303133;
-  line-height: 1.1;
-}
-
-.donut-center-label {
-  font-size: 11px;
-  color: #909399;
-  margin-top: 2px;
-}
-
 .defect-table-wrap {
   flex: 1;
   min-height: 0;
-  overflow: auto;
-  padding: 0 16px 12px;
+  overflow-x: auto;
+  overflow-y: auto;
+  padding: 0 14px 12px;
 }
 
 .defect-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: 11px;
+  min-width: 200px;
 }
 
 .defect-table th {
   text-align: left;
   color: #909399;
-  font-weight: 500;
-  padding: 6px 4px;
+  font-weight: 600;
+  padding: 4px 6px;
   border-bottom: 1px solid #ebeef5;
 }
 
 .defect-table td {
-  padding: 7px 4px;
   color: #606266;
-  border-bottom: 1px solid #f5f7fa;
+  padding: 5px 6px;
+  border-bottom: 1px solid #f2f3f5;
 }
 
-.defect-table th:last-child,
-.defect-table td:last-child {
+.defect-table td:nth-child(2),
+.defect-table td:nth-child(3),
+.defect-table th:nth-child(2),
+.defect-table th:nth-child(3) {
   text-align: right;
 }
 
 .detail-collapse {
   flex-shrink: 0;
-  border: none;
-  background: transparent;
-  min-width: 0;
-}
-
-.detail-collapse :deep(.el-collapse-item) {
-  background: #ffffff;
   border: 1px solid #e4e7ed;
-  border-radius: 6px;
+  border-radius: 4px;
   overflow: hidden;
+  background: #ffffff;
 }
 
 .detail-collapse :deep(.el-collapse-item__header) {
-  padding: 0 16px;
-  height: 44px;
-  font-size: 14px;
+  padding: 0 14px;
+  height: 40px;
+  font-size: 13px;
   font-weight: 600;
   color: #303133;
-  border-bottom: none;
   background: #ffffff;
+  border-bottom: none;
 }
 
 .detail-collapse :deep(.el-collapse-item__wrap) {
@@ -644,16 +671,16 @@ onMounted(() => {
   padding: 0;
 }
 
-.detail-table-wrap {
-  width: 100%;
+.table-wrap {
   overflow-x: auto;
-  overflow-y: hidden;
-  padding: 0 8px 8px;
+  overflow-y: auto;
+  max-height: 280px;
+  padding: 0 6px 6px;
+  min-width: 0;
 }
 
-.detail-table {
+.compact-table {
   width: 100%;
-  min-width: 640px;
   --el-table-bg-color: transparent;
   --el-table-tr-bg-color: transparent;
   --el-table-header-bg-color: #fafafa;
@@ -663,23 +690,28 @@ onMounted(() => {
   --el-table-header-text-color: #909399;
 }
 
-.detail-table :deep(.el-table__inner-wrapper)::before {
+.compact-table :deep(.el-table__inner-wrapper)::before {
   display: none;
 }
 
-.detail-table :deep(th.el-table__cell) {
+.compact-table :deep(th.el-table__cell) {
   background: #fafafa !important;
+  color: #909399 !important;
   font-weight: 600;
   font-size: 11px;
   padding: 6px 0;
+  border-bottom: 1px solid #ebeef5 !important;
 }
 
-.detail-table :deep(td.el-table__cell) {
+.compact-table :deep(td.el-table__cell) {
+  background: transparent !important;
+  color: #606266 !important;
   font-size: 11px;
   padding: 5px 0;
+  border-bottom: 1px solid #f2f3f5 !important;
 }
 
-.detail-table :deep(.detail-row:hover > td.el-table__cell) {
+.compact-table :deep(.compact-row:hover > td.el-table__cell) {
   background: #f5f7fa !important;
 }
 
