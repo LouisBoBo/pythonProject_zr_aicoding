@@ -24,6 +24,8 @@ def _mock_production_overview() -> ProductionOverviewResponse:
             daily_defect_rate="0.67%",
             today_incoming_boards=3800,
             trends={
+                "achievement_rate": ProductionStatTrend(direction="up", text="2.1%"),
+                "production_area": ProductionStatTrend(direction="up", text="1.8%"),
                 "today_completed": ProductionStatTrend(direction="up", text="8.2%"),
                 "today_area_output": ProductionStatTrend(direction="up", text="5.6%"),
                 "today_defect_total": ProductionStatTrend(direction="down", text="12.0%"),

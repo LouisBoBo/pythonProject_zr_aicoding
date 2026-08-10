@@ -1,80 +1,79 @@
 <template>
   <div v-loading="loading" class="production-overview">
-    <header class="overview-header">
-      <h1 class="overview-title">生产概览</h1>
-      <div class="overview-datetime">
-        <span class="datetime-text">{{ displayTime }}</span>
-        <span class="weekday-text">{{ weekday }}</span>
-      </div>
-    </header>
-
-    <div class="overview-grid">
-      <div class="grid-row gauge-row">
-        <div class="overview-card gauge-card gauge-rate">
-          <div class="card-title card-title--orange">产量达成率</div>
-          <div class="gauge-body">
-            <v-chart class="gauge-chart" :option="achievementGaugeOption" autoresize />
-            <div class="gauge-value">{{ formatGaugeValue(data.achievement_rate) }}</div>
-          </div>
+    <div class="kpi-banner">
+      <div
+        v-for="tile in topKpiTiles"
+        :key="tile.key"
+        class="kpi-tile"
+        :class="`kpi-tile--${tile.accent}`"
+      >
+        <div class="kpi-tile-label">{{ tile.label }}</div>
+        <div class="kpi-tile-main">
+          <span class="kpi-tile-value">{{ tile.displayValue }}</span>
+          <span
+            v-if="tile.trend"
+            class="kpi-tile-trend"
+            :class="tile.trend.direction === 'up' ? 'kpi-tile-trend--up' : 'kpi-tile-trend--down'"
+          >
+            {{ tile.trend.direction === 'up' ? '↑' : '↓' }} {{ tile.trend.text }}
+          </span>
         </div>
-        <div class="overview-card gauge-card gauge-area">
-          <div class="card-title card-title--orange">产量面积</div>
-          <div class="gauge-body">
-            <v-chart class="gauge-chart" :option="areaGaugeOption" autoresize />
-            <div class="gauge-value gauge-value-area">{{ formatGaugeValue(data.production_area) }}</div>
-          </div>
+        <div class="kpi-tile-bar">
+          <div class="kpi-tile-bar-fill" :style="{ width: `${tile.barPercent}%` }" />
         </div>
       </div>
+    </div>
 
-      <div class="grid-row middle-row">
-        <div class="overview-card kpi-card">
-          <div class="card-title">生产信息统计</div>
-          <div class="kpi-list">
-            <div v-for="item in kpiItems" :key="item.key" class="kpi-row">
-              <span class="kpi-label">{{ item.label }}</span>
-              <div class="kpi-right">
-                <span class="kpi-value">{{ item.displayValue }}</span>
-                <span
-                  v-if="item.trend"
-                  class="kpi-trend"
-                  :class="{
-                    'kpi-trend--up': item.trend.direction === 'up',
-                    'kpi-trend--down': item.trend.direction === 'down',
-                  }"
-                >
-                  <span class="kpi-arrow">{{ item.trend.direction === 'up' ? '↑' : '↓' }}</span>
-                  {{ item.trend.text }}
-                </span>
-              </div>
-            </div>
-          </div>
+    <div class="main-body">
+      <div class="panel panel-table">
+        <div class="panel-head">生产信息详细</div>
+        <div class="table-wrap">
+          <el-table
+            :data="data.detail_rows"
+            class="compact-table"
+            :show-header="true"
+            :row-class-name="tableRowClass"
+          >
+            <el-table-column prop="time" label="时间" min-width="88" />
+            <el-table-column prop="process_card_no" label="流程卡号" min-width="128" />
+            <el-table-column prop="product_model" label="产品型号" min-width="88" />
+            <el-table-column prop="quantity" label="数量" min-width="64" align="right" />
+            <el-table-column prop="today_completed" label="今日完成数" min-width="92" align="right" />
+            <el-table-column prop="total_completed" label="已完成总数" min-width="92" align="right" />
+          </el-table>
         </div>
+      </div>
 
-        <div class="overview-card chart-card">
-          <div class="card-title">完成数统计图表</div>
+      <div class="right-stack">
+        <div class="panel panel-chart">
+          <div class="panel-head">完成数统计图表</div>
           <div class="chart-wrap">
             <v-chart class="bar-chart" :option="completionBarOption" autoresize />
           </div>
         </div>
-      </div>
 
-      <div class="grid-row detail-row">
-        <div class="overview-card table-card">
-          <div class="card-title">生产信息详细</div>
-          <div class="table-wrap">
-            <el-table
-              :data="data.detail_rows"
-              class="dark-table"
-              :show-header="true"
-              stripe
+        <div class="mini-metrics">
+          <div class="mini-metric mini-metric--defect">
+            <div class="mini-metric-label">缺陷总数</div>
+            <div class="mini-metric-value">{{ formatNumber(data.stats.today_defect_total) }}</div>
+            <div
+              v-if="data.stats.trends?.today_defect_total"
+              class="mini-metric-trend"
+              :class="data.stats.trends.today_defect_total.direction === 'down' ? 'mini-metric-trend--good' : 'mini-metric-trend--warn'"
             >
-              <el-table-column prop="time" label="时间" min-width="90" />
-              <el-table-column prop="process_card_no" label="流程卡号" min-width="130" />
-              <el-table-column prop="product_model" label="产品型号" min-width="90" />
-              <el-table-column prop="quantity" label="数量" min-width="70" align="right" />
-              <el-table-column prop="today_completed" label="今日完成数" min-width="95" align="right" />
-              <el-table-column prop="total_completed" label="已完成总数" min-width="95" align="right" />
-            </el-table>
+              {{ data.stats.trends.today_defect_total.direction === 'up' ? '↑' : '↓' }}
+              {{ data.stats.trends.today_defect_total.text }}
+            </div>
+          </div>
+          <div class="mini-metric mini-metric--incoming">
+            <div class="mini-metric-label">今日来板数</div>
+            <div class="mini-metric-value">{{ formatNumber(data.stats.today_incoming_boards) }}</div>
+            <div
+              v-if="data.stats.trends?.today_incoming_boards"
+              class="mini-metric-trend mini-metric-trend--up"
+            >
+              ↑ {{ data.stats.trends.today_incoming_boards.text }}
+            </div>
           </div>
         </div>
       </div>
@@ -85,10 +84,10 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
-import { BarChart, GaugeChart } from 'echarts/charts'
+import { BarChart } from 'echarts/charts'
 import {
   GridComponent,
   TooltipComponent,
@@ -100,7 +99,6 @@ import { fetchProductionOverview } from '../../api/productionOverview'
 use([
   CanvasRenderer,
   BarChart,
-  GaugeChart,
   GridComponent,
   TooltipComponent,
   LegendComponent,
@@ -108,8 +106,6 @@ use([
 
 const loading = ref(true)
 const loadError = ref('')
-const displayTime = ref('')
-const weekday = ref('')
 
 const defaultStats = {
   today_completed: 0,
@@ -130,150 +126,41 @@ const defaultData = {
 
 const data = reactive({ ...defaultData })
 
-function buildRateGaugeOption(value) {
-  const ratio = Math.min(Math.max(value / 100, 0), 1)
-  return {
-    animation: true,
-    animationDuration: 1200,
-    animationEasing: 'cubicOut',
-    series: [
-      {
-        type: 'gauge',
-        startAngle: 180,
-        endAngle: 0,
-        center: ['50%', '78%'],
-        radius: '105%',
-        min: 0,
-        max: 100,
-        splitNumber: 10,
-        axisLine: {
-          lineStyle: {
-            width: 14,
-            color: [
-              [ratio, '#ff9900'],
-              [1, 'rgba(4, 10, 26, 0.55)'],
-            ],
-          },
-        },
-        pointer: {
-          icon: 'path://M12.8,0.7l12,40.1H0.7L12.8,0.7z',
-          length: '50%',
-          width: 6,
-          offsetCenter: [0, '-4%'],
-          itemStyle: {
-            color: {
-              type: 'linear',
-              x: 0, y: 0, x2: 1, y2: 1,
-              colorStops: [
-                { offset: 0, color: '#ffb347' },
-                { offset: 1, color: '#ff6600' },
-              ],
-            },
-          },
-        },
-        axisTick: {
-          show: true,
-          length: 3,
-          distance: -16,
-          lineStyle: { color: 'rgba(255, 255, 255, 0.2)', width: 1 },
-        },
-        splitLine: { show: false },
-        axisLabel: { show: false },
-        detail: { show: false },
-        data: [{ value }],
-      },
-    ],
-  }
-}
-
-function buildAreaGaugeOption(value) {
-  const max = Math.max(10, Math.ceil(value / 5) * 5)
-  const ratio = Math.min(value / max, 1)
-  return {
-    animation: true,
-    animationDuration: 1200,
-    animationEasing: 'cubicOut',
-    series: [
-      {
-        type: 'gauge',
-        startAngle: 200,
-        endAngle: -20,
-        center: ['50%', '72%'],
-        radius: '95%',
-        min: 0,
-        max,
-        splitNumber: 5,
-        axisLine: {
-          lineStyle: {
-            width: 12,
-            color: [
-              [ratio, '#e8940f'],
-              [1, 'rgba(4, 10, 26, 0.45)'],
-            ],
-          },
-        },
-        pointer: {
-          length: '45%',
-          width: 4,
-          offsetCenter: [0, '0%'],
-          itemStyle: { color: '#f5a623' },
-        },
-        axisTick: {
-          show: true,
-          length: 5,
-          distance: -14,
-          lineStyle: { color: 'rgba(245, 166, 35, 0.35)', width: 1 },
-        },
-        splitLine: {
-          show: true,
-          length: 8,
-          distance: -14,
-          lineStyle: { color: 'rgba(245, 166, 35, 0.2)', width: 1 },
-        },
-        axisLabel: { show: false },
-        detail: { show: false },
-        data: [{ value }],
-      },
-    ],
-  }
-}
-
-const achievementGaugeOption = computed(() => buildRateGaugeOption(data.achievement_rate))
-const areaGaugeOption = computed(() => buildAreaGaugeOption(data.production_area))
-
-const kpiItems = computed(() => {
+const topKpiTiles = computed(() => {
   const s = data.stats
   const t = s.trends || {}
   return [
+    {
+      key: 'achievement_rate',
+      label: '产量达成率',
+      displayValue: `${formatGaugeValue(data.achievement_rate)}%`,
+      trend: t.achievement_rate,
+      barPercent: Math.min(data.achievement_rate, 100),
+      accent: 'steel',
+    },
+    {
+      key: 'production_area',
+      label: '产量面积',
+      displayValue: formatGaugeValue(data.production_area),
+      trend: t.production_area,
+      barPercent: Math.min((data.production_area / 10) * 100, 100),
+      accent: 'slate',
+    },
     {
       key: 'today_completed',
       label: '今日完成数',
       displayValue: formatNumber(s.today_completed),
       trend: t.today_completed,
-    },
-    {
-      key: 'today_area_output',
-      label: '面积产量',
-      displayValue: formatArea(s.today_area_output),
-      trend: t.today_area_output,
-    },
-    {
-      key: 'today_defect_total',
-      label: '缺陷总数',
-      displayValue: formatNumber(s.today_defect_total),
-      trend: t.today_defect_total,
+      barPercent: Math.min((s.today_completed / 5000) * 100, 100),
+      accent: 'blue',
     },
     {
       key: 'daily_defect_rate',
-      label: '不良率',
+      label: '日不良率',
       displayValue: s.daily_defect_rate,
       trend: t.daily_defect_rate,
-    },
-    {
-      key: 'today_incoming_boards',
-      label: '来板数',
-      displayValue: formatNumber(s.today_incoming_boards),
-      trend: t.today_incoming_boards,
+      barPercent: Math.min(parseFloat(s.daily_defect_rate) * 15 || 0, 100),
+      accent: 'amber',
     },
   ]
 })
@@ -281,72 +168,58 @@ const kpiItems = computed(() => {
 const completionBarOption = computed(() => ({
   tooltip: {
     trigger: 'axis',
-    backgroundColor: 'rgba(10, 26, 58, 0.95)',
-    borderColor: 'rgba(255, 153, 0, 0.25)',
-    textStyle: { color: '#fff' },
+    backgroundColor: 'rgba(44, 62, 80, 0.95)',
+    borderColor: 'rgba(91, 141, 239, 0.4)',
+    textStyle: { color: '#ecf0f1' },
   },
   legend: {
     data: ['LOT产出', '型号产出'],
-    top: 4,
-    right: 16,
-    textStyle: { color: 'rgba(255, 255, 255, 0.7)', fontSize: 12 },
-    itemWidth: 14,
+    top: 2,
+    right: 8,
+    textStyle: { color: '#5a6d82', fontSize: 11 },
+    itemWidth: 12,
     itemHeight: 8,
   },
-  grid: { left: 56, right: 24, top: 36, bottom: 28 },
+  grid: { left: 48, right: 12, top: 32, bottom: 24 },
   xAxis: {
     type: 'category',
     data: data.completion_chart.map((p) => p.label),
-    axisLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.15)' } },
-    axisLabel: { color: 'rgba(255, 255, 255, 0.6)', fontSize: 11 },
+    axisLine: { lineStyle: { color: '#b8c5d4' } },
+    axisLabel: { color: '#5a6d82', fontSize: 11 },
     axisTick: { show: false },
   },
   yAxis: {
     type: 'value',
     max: 6000000,
-    splitNumber: 6,
+    splitNumber: 4,
     axisLine: { show: false },
     axisLabel: {
-      color: 'rgba(255, 255, 255, 0.5)',
-      fontSize: 11,
+      color: '#7a8fa6',
+      fontSize: 10,
       formatter: (v) => (v >= 1000000 ? `${v / 1000000}M` : v),
     },
-    splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.08)' } },
+    splitLine: { lineStyle: { color: '#d0dae6' } },
   },
   series: [
     {
       name: 'LOT产出',
       type: 'bar',
-      barWidth: 20,
-      barGap: '30%',
+      barWidth: 16,
+      barGap: '25%',
       data: data.completion_chart.map((p) => p.lot_output),
       itemStyle: {
-        borderRadius: [3, 3, 0, 0],
-        color: {
-          type: 'linear',
-          x: 0, y: 1, x2: 0, y2: 0,
-          colorStops: [
-            { offset: 0, color: '#1e3a8a' },
-            { offset: 1, color: '#3b82f6' },
-          ],
-        },
+        borderRadius: [2, 2, 0, 0],
+        color: '#4a6fa5',
       },
     },
     {
       name: '型号产出',
       type: 'bar',
-      barWidth: 20,
+      barWidth: 16,
       data: data.completion_chart.map((p) => p.model_output),
       itemStyle: {
-        borderRadius: [3, 3, 0, 0],
-        color: {
-          type: 'linear',
-          x: 0, y: 1, x2: 0, y2: 0,
-          colorStops: [
-            { offset: 0, color: '#0e7490' },
-            { offset: 1, color: '#22d3ee' },
-          ],
-        },
+        borderRadius: [2, 2, 0, 0],
+        color: '#7a9cc6',
       },
     },
   ],
@@ -361,8 +234,8 @@ function formatNumber(val) {
   return Number(val).toLocaleString('zh-CN')
 }
 
-function formatArea(val) {
-  return Number(val).toLocaleString('zh-CN', { maximumFractionDigits: 1 })
+function tableRowClass() {
+  return 'compact-row'
 }
 
 function applyData(resp) {
@@ -373,16 +246,6 @@ function applyData(resp) {
     completion_chart: resp.completion_chart || [],
     detail_rows: resp.detail_rows || [],
   })
-}
-
-let clockTimer = null
-
-function updateClock() {
-  const now = new Date()
-  const pad = (n) => String(n).padStart(2, '0')
-  const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六']
-  displayTime.value = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
-  weekday.value = weekdays[now.getDay()]
 }
 
 async function loadData() {
@@ -399,13 +262,7 @@ async function loadData() {
 }
 
 onMounted(() => {
-  updateClock()
-  clockTimer = setInterval(updateClock, 1000)
   loadData()
-})
-
-onUnmounted(() => {
-  if (clockTimer) clearInterval(clockTimer)
 })
 </script>
 
@@ -416,310 +273,241 @@ onUnmounted(() => {
   max-width: calc(100% + 40px);
   min-width: 0;
   min-height: 100%;
-  padding: 10px 14px 14px;
-  background: #040a1a;
-  color: #fff;
+  padding: 14px 16px 16px;
+  background: #dfe6ed;
+  color: #2c3e50;
   box-sizing: border-box;
   overflow-x: hidden;
   display: flex;
   flex-direction: column;
+  gap: 12px;
 }
 
-.overview-header {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  margin-bottom: 10px;
-  padding: 2px 0 6px;
+.kpi-banner {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
   flex-shrink: 0;
 }
 
-.overview-title {
-  margin: 0;
-  font-size: 26px;
-  font-weight: 600;
-  color: #fff;
-  letter-spacing: 4px;
+.kpi-tile {
+  background: #f4f7fa;
+  border: 1px solid #c5d0dc;
+  border-radius: 8px;
+  padding: 12px 14px 10px;
+  min-width: 0;
 }
 
-.overview-datetime {
-  position: absolute;
-  right: 8px;
-  top: 50%;
-  transform: translateY(-50%);
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
-}
+.kpi-tile--steel { border-top: 3px solid #4a6fa5; }
+.kpi-tile--slate { border-top: 3px solid #5a6d82; }
+.kpi-tile--blue { border-top: 3px solid #5b8def; }
+.kpi-tile--amber { border-top: 3px solid #c49a3a; }
 
-.datetime-text {
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.75);
-  font-family: 'Courier New', monospace;
-}
-
-.weekday-text {
+.kpi-tile-label {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.55);
+  color: #5a6d82;
+  margin-bottom: 6px;
 }
 
-.overview-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  flex: 1;
-  min-height: 0;
-  width: 100%;
-  max-width: 100%;
-}
-
-.grid-row {
-  min-width: 0;
-  max-width: 100%;
-}
-
-.gauge-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 10px;
-  flex-shrink: 0;
-}
-
-.middle-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 10px;
-  flex: 1;
-  min-height: 200px;
-}
-
-.detail-row {
-  flex-shrink: 0;
-  min-height: 160px;
-  max-height: 220px;
-}
-
-.overview-card {
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  overflow: hidden;
-  min-width: 0;
-  max-width: 100%;
-}
-
-.card-title {
-  text-align: center;
-  font-size: 14px;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.85);
-  padding: 8px 12px 4px;
-  letter-spacing: 1px;
-}
-
-.card-title--orange {
-  color: #ff9900;
-}
-
-.gauge-card {
-  min-height: 180px;
-}
-
-.gauge-rate {
-  background: linear-gradient(
-    180deg,
-    rgba(255, 153, 0, 0.62) 0%,
-    rgba(255, 153, 0, 0.28) 38%,
-    rgba(10, 26, 58, 0.88) 100%
-  );
-  border-color: rgba(255, 153, 0, 0.35);
-}
-
-.gauge-area {
-  background: linear-gradient(
-    160deg,
-    rgba(232, 148, 15, 0.45) 0%,
-    rgba(245, 166, 35, 0.12) 45%,
-    rgba(10, 26, 58, 0.92) 100%
-  );
-  border-color: rgba(245, 166, 35, 0.28);
-}
-
-.gauge-body {
-  position: relative;
-  height: 120px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.gauge-chart {
-  width: 100%;
-  height: 100px;
-  min-width: 0;
-}
-
-.gauge-value {
-  position: absolute;
-  bottom: 6px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 32px;
-  font-weight: 700;
-  color: #ff9900;
-  line-height: 1;
-}
-
-.gauge-value-area {
-  font-size: 34px;
-  color: #ffb84d;
-}
-
-.kpi-card,
-.chart-card,
-.table-card {
-  background: #0a1a3a;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
-.kpi-list {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-evenly;
-  padding: 4px 16px 12px;
-  gap: 2px;
-}
-
-.kpi-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 6px 4px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.kpi-row:last-child {
-  border-bottom: none;
-}
-
-.kpi-label {
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.55);
-  flex-shrink: 0;
-}
-
-.kpi-right {
+.kpi-tile-main {
   display: flex;
   align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.kpi-tile-value {
+  font-size: 26px;
+  font-weight: 700;
+  color: #2c3e50;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.kpi-tile-trend {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.kpi-tile-trend--up { color: #3d8b5f; }
+.kpi-tile-trend--down { color: #a06850; }
+
+.kpi-tile-bar {
+  margin-top: 10px;
+  height: 4px;
+  background: #d0dae6;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.kpi-tile-bar-fill {
+  height: 100%;
+  background: #4a6fa5;
+  border-radius: 2px;
+  transition: width 0.6s ease;
+}
+
+.kpi-tile--amber .kpi-tile-bar-fill { background: #c49a3a; }
+
+.main-body {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
   gap: 10px;
+  flex: 1;
+  min-height: 0;
+}
+
+.panel {
+  background: #f4f7fa;
+  border: 1px solid #c5d0dc;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.panel-head {
+  padding: 10px 14px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #3d5166;
+  border-bottom: 1px solid #d0dae6;
+  flex-shrink: 0;
+}
+
+.panel-table {
+  min-height: 280px;
+}
+
+.right-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
   min-width: 0;
 }
 
-.kpi-value {
-  font-size: 22px;
-  font-weight: 700;
-  color: #fff;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.1;
-}
-
-.kpi-trend {
-  font-size: 12px;
-  font-weight: 500;
-  white-space: nowrap;
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.kpi-trend--up {
-  color: #ff9900;
-}
-
-.kpi-trend--down {
-  color: rgba(255, 255, 255, 0.45);
-}
-
-.kpi-arrow {
-  font-size: 13px;
-  line-height: 1;
+.panel-chart {
+  flex: 1;
+  min-height: 180px;
 }
 
 .chart-wrap {
   flex: 1;
   min-height: 0;
-  min-width: 0;
-  overflow: hidden;
-  padding: 0 8px 10px;
+  padding: 4px 8px 8px;
 }
 
 .bar-chart {
   width: 100%;
   height: 100%;
-  min-height: 180px;
-  min-width: 0;
+  min-height: 160px;
 }
 
 .table-wrap {
   flex: 1;
-  min-width: 0;
-  max-width: 100%;
-  overflow-x: auto;
-  overflow-y: auto;
-  padding: 0 8px 8px;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 6px 6px;
 }
 
-.dark-table {
+.compact-table {
   width: 100%;
   --el-table-bg-color: transparent;
   --el-table-tr-bg-color: transparent;
-  --el-table-header-bg-color: rgba(6, 20, 48, 0.95);
-  --el-table-row-hover-bg-color: rgba(255, 153, 0, 0.06);
-  --el-table-border-color: transparent;
-  --el-table-text-color: rgba(255, 255, 255, 0.85);
-  --el-table-header-text-color: rgba(255, 255, 255, 0.75);
-  background: transparent !important;
+  --el-table-header-bg-color: #e8edf2;
+  --el-table-row-hover-bg-color: #eef3f8;
+  --el-table-border-color: #d0dae6;
+  --el-table-text-color: #3d5166;
+  --el-table-header-text-color: #5a6d82;
 }
 
-.dark-table :deep(.el-table__inner-wrapper)::before {
+.compact-table :deep(.el-table__inner-wrapper)::before {
   display: none;
 }
 
-.dark-table :deep(th.el-table__cell) {
-  background: rgba(6, 20, 48, 0.95) !important;
-  color: rgba(255, 255, 255, 0.75) !important;
-  font-weight: 500;
+.compact-table :deep(th.el-table__cell) {
+  background: #e8edf2 !important;
+  color: #5a6d82 !important;
+  font-weight: 600;
   font-size: 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
-  padding: 7px 0;
-}
-
-.dark-table :deep(td.el-table__cell) {
-  background: transparent !important;
-  color: rgba(255, 255, 255, 0.82) !important;
-  font-size: 12px;
-  border-bottom: none !important;
   padding: 6px 0;
+  border-bottom: 1px solid #d0dae6 !important;
 }
 
-.dark-table :deep(.el-table__row--striped td.el-table__cell) {
-  background: rgba(255, 255, 255, 0.02) !important;
+.compact-table :deep(td.el-table__cell) {
+  background: transparent !important;
+  color: #3d5166 !important;
+  font-size: 12px;
+  padding: 5px 0;
+  border-bottom: 1px solid #e4eaf0 !important;
 }
 
-.dark-table :deep(.el-table__body tr:hover > td.el-table__cell) {
-  background: rgba(255, 153, 0, 0.06) !important;
+.compact-table :deep(.compact-row) {
+  transition: background 0.15s;
 }
+
+.compact-table :deep(.compact-row:hover > td.el-table__cell) {
+  background: #eef3f8 !important;
+}
+
+.compact-table :deep(.compact-row:hover > td.el-table__cell:first-child) {
+  box-shadow: inset 3px 0 0 #4a6fa5;
+}
+
+.mini-metrics {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.mini-metric {
+  background: #f4f7fa;
+  border: 1px solid #c5d0dc;
+  border-radius: 8px;
+  padding: 12px 14px;
+  min-width: 0;
+}
+
+.mini-metric--defect {
+  border-left: 3px solid #a06850;
+}
+
+.mini-metric--incoming {
+  border-left: 3px solid #3d8b5f;
+}
+
+.mini-metric-label {
+  font-size: 11px;
+  color: #7a8fa6;
+  margin-bottom: 4px;
+}
+
+.mini-metric-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: #2c3e50;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.mini-metric-trend {
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.mini-metric-trend--good { color: #3d8b5f; }
+.mini-metric-trend--warn { color: #a06850; }
+.mini-metric-trend--up { color: #3d8b5f; }
 
 .load-error {
   text-align: center;
-  color: #f56c6c;
-  padding: 12px;
-  font-size: 14px;
+  color: #c0392b;
+  padding: 10px;
+  font-size: 13px;
 }
 </style>
