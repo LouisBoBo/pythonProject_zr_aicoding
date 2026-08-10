@@ -324,18 +324,21 @@ onMounted(async () => {
 <style scoped>
 .app-layout {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   background: #f0f2f5;
 }
 
 .sidebar {
   width: 220px;
+  height: 100%;
   background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
   display: flex;
   flex-direction: column;
   transition: width 0.25s ease;
   flex-shrink: 0;
   position: relative;
+  overflow: hidden;
 }
 
 .sidebar.collapsed {
@@ -373,6 +376,7 @@ onMounted(async () => {
 
 .sidebar-nav {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 12px 0;
 }
@@ -497,6 +501,8 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .topbar {
@@ -691,8 +697,10 @@ onMounted(async () => {
 
 .content-area {
   flex: 1;
+  min-height: 0;
   padding: 16px 20px;
   overflow-y: auto;
+  overflow-x: hidden;
   background: #f0f2f5;
 }
 </style>
