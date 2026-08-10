@@ -267,7 +267,13 @@ const activeTab = computed(() => {
   return match?.path || '/home'
 })
 
-const showPageTab = computed(() => route.path === '/home' || route.path === '/')
+const showPageTab = computed(
+  () =>
+    route.path === '/home' ||
+    route.path === '/' ||
+    route.path === '/production' ||
+    route.path.startsWith('/production-plan'),
+)
 
 function handleTabChange(path) {
   if (path && path !== route.path) {
