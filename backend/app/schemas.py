@@ -260,6 +260,7 @@ class ProductionOverviewStats(BaseModel):
 class ProductionOverviewResponse(BaseModel):
     achievement_rate: float
     production_area: float
+    kpi_trends: dict[str, ProductionStatTrend]
     stats: ProductionOverviewStats
     completion_chart: list[CompletionChartPoint]
     detail_rows: list[ProductionDetailRow]

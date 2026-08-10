@@ -26,7 +26,10 @@
 
     <div class="main-body">
       <div class="panel panel-table">
-        <div class="panel-head">生产信息详细</div>
+        <div class="panel-head">
+          <span class="panel-title">生产信息详细</span>
+          <span class="panel-meta">{{ data.detail_rows.length }} 条</span>
+        </div>
         <div class="table-wrap">
           <el-table
             :data="data.detail_rows"
@@ -46,7 +49,9 @@
 
       <div class="right-stack">
         <div class="panel panel-chart">
-          <div class="panel-head">完成数统计图表</div>
+          <div class="panel-head">
+            <span class="panel-title">完成数统计图表</span>
+          </div>
           <div class="chart-wrap">
             <v-chart class="bar-chart" :option="completionBarOption" autoresize />
           </div>
@@ -57,22 +62,21 @@
             <div class="mini-metric-label">缺陷总数</div>
             <div class="mini-metric-value">{{ formatNumber(data.stats.today_defect_total) }}</div>
             <div
-              v-if="data.stats.trends?.today_defect_total"
+              v-if="sideTrends.defect"
               class="mini-metric-trend"
-              :class="data.stats.trends.today_defect_total.direction === 'down' ? 'mini-metric-trend--good' : 'mini-metric-trend--warn'"
+              :class="sideTrends.defect.direction === 'down' ? 'mini-metric-trend--good' : 'mini-metric-trend--warn'"
             >
-              {{ data.stats.trends.today_defect_total.direction === 'up' ? '↑' : '↓' }}
-              {{ data.stats.trends.today_defect_total.text }}
+              {{ sideTrends.defect.direction === 'up' ? '↑' : '↓' }} {{ sideTrends.defect.text }}
             </div>
           </div>
           <div class="mini-metric mini-metric--incoming">
             <div class="mini-metric-label">今日来板数</div>
             <div class="mini-metric-value">{{ formatNumber(data.stats.today_incoming_boards) }}</div>
             <div
-              v-if="data.stats.trends?.today_incoming_boards"
+              v-if="sideTrends.boards"
               class="mini-metric-trend mini-metric-trend--up"
             >
-              ↑ {{ data.stats.trends.today_incoming_boards.text }}
+              {{ sideTrends.boards.direction === 'up' ? '↑' : '↓' }} {{ sideTrends.boards.text }}
             </div>
           </div>
         </div>
@@ -119,6 +123,7 @@ const defaultStats = {
 const defaultData = {
   achievement_rate: 0,
   production_area: 0,
+  kpi_trends: {},
   stats: { ...defaultStats },
   completion_chart: [],
   detail_rows: [],
@@ -127,42 +132,53 @@ const defaultData = {
 const data = reactive({ ...defaultData })
 
 const topKpiTiles = computed(() => {
+  const kpiTrends = data.kpi_trends || {}
+  const statsTrends = data.stats.trends || {}
   const s = data.stats
-  const t = s.trends || {}
   return [
     {
       key: 'achievement_rate',
       label: '产量达成率',
       displayValue: `${formatGaugeValue(data.achievement_rate)}%`,
-      trend: t.achievement_rate,
-      barPercent: Math.min(data.achievement_rate, 100),
+      trend: kpiTrends.achievement_rate || statsTrends.achievement_rate,
+      barPercent: Math.min(Math.max(data.achievement_rate, 0), 100),
       accent: 'steel',
     },
     {
       key: 'production_area',
       label: '产量面积',
       displayValue: formatGaugeValue(data.production_area),
-      trend: t.production_area,
-      barPercent: Math.min((data.production_area / 10) * 100, 100),
+      trend: kpiTrends.production_area || statsTrends.production_area,
+      barPercent: Math.min(data.production_area * 10, 100),
       accent: 'slate',
     },
     {
       key: 'today_completed',
       label: '今日完成数',
       displayValue: formatNumber(s.today_completed),
-      trend: t.today_completed,
-      barPercent: Math.min((s.today_completed / 5000) * 100, 100),
+      trend: statsTrends.today_completed,
+      barPercent: s.today_incoming_boards
+        ? Math.min((s.today_completed / s.today_incoming_boards) * 100, 100)
+        : 0,
       accent: 'blue',
     },
     {
       key: 'daily_defect_rate',
       label: '日不良率',
       displayValue: s.daily_defect_rate,
-      trend: t.daily_defect_rate,
-      barPercent: Math.min(parseFloat(s.daily_defect_rate) * 15 || 0, 100),
+      trend: statsTrends.daily_defect_rate,
+      barPercent: parseDefectRatePercent(s.daily_defect_rate),
       accent: 'amber',
     },
   ]
+})
+
+const sideTrends = computed(() => {
+  const t = data.stats.trends || {}
+  return {
+    defect: t.today_defect_total,
+    boards: t.today_incoming_boards,
+  }
 })
 
 const completionBarOption = computed(() => ({
@@ -225,6 +241,12 @@ const completionBarOption = computed(() => ({
   ],
 }))
 
+function parseDefectRatePercent(rateStr) {
+  const num = parseFloat(String(rateStr).replace('%', ''))
+  if (Number.isNaN(num)) return 0
+  return Math.min(num * 15, 100)
+}
+
 function formatGaugeValue(val) {
   if (Number.isInteger(val)) return String(val)
   return val.toFixed(1)
@@ -242,6 +264,7 @@ function applyData(resp) {
   Object.assign(data, {
     achievement_rate: resp.achievement_rate,
     production_area: resp.production_area,
+    kpi_trends: resp.kpi_trends || {},
     stats: resp.stats || { ...defaultStats },
     completion_chart: resp.completion_chart || [],
     detail_rows: resp.detail_rows || [],
@@ -298,10 +321,10 @@ onMounted(() => {
   min-width: 0;
 }
 
-.kpi-tile--steel { border-top: 3px solid #4a6fa5; }
-.kpi-tile--slate { border-top: 3px solid #5a6d82; }
-.kpi-tile--blue { border-top: 3px solid #5b8def; }
-.kpi-tile--amber { border-top: 3px solid #c49a3a; }
+.kpi-tile--steel { border-left: 3px solid #4a6fa5; }
+.kpi-tile--slate { border-left: 3px solid #5a6d82; }
+.kpi-tile--blue { border-left: 3px solid #5b8def; }
+.kpi-tile--amber { border-left: 3px solid #c49a3a; }
 
 .kpi-tile-label {
   font-size: 12px;
@@ -355,6 +378,7 @@ onMounted(() => {
   gap: 10px;
   flex: 1;
   min-height: 0;
+  min-width: 0;
 }
 
 .panel {
@@ -369,12 +393,25 @@ onMounted(() => {
 }
 
 .panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 10px 14px 8px;
   font-size: 13px;
   font-weight: 600;
   color: #3d5166;
   border-bottom: 1px solid #d0dae6;
   flex-shrink: 0;
+}
+
+.panel-title {
+  letter-spacing: 0.5px;
+}
+
+.panel-meta {
+  font-size: 11px;
+  font-weight: 400;
+  color: #7a8fa6;
 }
 
 .panel-table {
@@ -397,6 +434,7 @@ onMounted(() => {
 .chart-wrap {
   flex: 1;
   min-height: 0;
+  min-width: 0;
   padding: 4px 8px 8px;
 }
 
@@ -404,11 +442,13 @@ onMounted(() => {
   width: 100%;
   height: 100%;
   min-height: 160px;
+  min-width: 0;
 }
 
 .table-wrap {
   flex: 1;
   min-height: 0;
+  min-width: 0;
   overflow: auto;
   padding: 0 6px 6px;
 }
@@ -432,7 +472,7 @@ onMounted(() => {
   background: #e8edf2 !important;
   color: #5a6d82 !important;
   font-weight: 600;
-  font-size: 12px;
+  font-size: 11px;
   padding: 6px 0;
   border-bottom: 1px solid #d0dae6 !important;
 }
@@ -440,7 +480,7 @@ onMounted(() => {
 .compact-table :deep(td.el-table__cell) {
   background: transparent !important;
   color: #3d5166 !important;
-  font-size: 12px;
+  font-size: 11px;
   padding: 5px 0;
   border-bottom: 1px solid #e4eaf0 !important;
 }
@@ -509,5 +549,15 @@ onMounted(() => {
   color: #c0392b;
   padding: 10px;
   font-size: 13px;
+}
+
+@media (max-width: 1100px) {
+  .kpi-banner {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .main-body {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

@@ -17,6 +17,10 @@ def _mock_production_overview() -> ProductionOverviewResponse:
     return ProductionOverviewResponse(
         achievement_rate=4,
         production_area=4,
+        kpi_trends={
+            "achievement_rate": ProductionStatTrend(direction="up", text="2.1%"),
+            "production_area": ProductionStatTrend(direction="up", text="1.5%"),
+        },
         stats=ProductionOverviewStats(
             today_completed=3720,
             today_area_output=11450.8,
