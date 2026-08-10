@@ -309,11 +309,15 @@ onUnmounted(() => {
 <style scoped>
 .production-kanban {
   margin: -16px -20px;
+  width: calc(100% + 40px);
+  max-width: calc(100% + 40px);
+  min-width: 0;
   min-height: calc(100vh - 120px);
   padding: 12px 16px 16px;
   background: #040a1a;
   color: #fff;
   box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 .kanban-header {
@@ -357,10 +361,13 @@ onUnmounted(() => {
 
 .kanban-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 12px;
   height: calc(100vh - 180px);
   min-height: 560px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .kanban-col-left,
@@ -369,19 +376,26 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 12px;
   min-height: 0;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .gauge-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 12px;
   flex-shrink: 0;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .kanban-card {
   border-radius: 8px;
   border: 1px solid rgba(64, 224, 208, 0.12);
   overflow: hidden;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .card-title {
@@ -411,11 +425,16 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .gauge-chart {
   width: 100%;
+  max-width: 100%;
   height: 110px;
+  min-width: 0;
 }
 
 .gauge-value {
@@ -442,24 +461,34 @@ onUnmounted(() => {
 
 .table-wrap {
   flex: 1;
-  overflow: auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: auto;
   padding: 0 8px 8px;
 }
 
 .chart-wrap {
   flex: 1;
   min-height: 0;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
   padding: 0 8px 12px;
 }
 
 .bar-chart {
   width: 100%;
+  max-width: 100%;
   height: 100%;
   min-height: 240px;
+  min-width: 0;
 }
 
 /* 深色表格样式 */
 .dark-table {
+  width: max-content;
+  min-width: 100%;
   --el-table-bg-color: transparent;
   --el-table-tr-bg-color: transparent;
   --el-table-header-bg-color: rgba(10, 40, 80, 0.8);
