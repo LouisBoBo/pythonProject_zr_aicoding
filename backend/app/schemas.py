@@ -524,3 +524,150 @@ class EquipmentImportResult(BaseModel):
     created: int
     skipped: int
     errors: list[str]
+
+
+# --- Equipment Maintenance ---
+
+MaintenanceCycleType = Literal["day", "week", "month", "runtime"]
+MaintenancePlanStatus = Literal["enabled", "disabled"]
+MaintenanceOrderStatus = Literal["pending", "in_progress", "completed", "closed"]
+
+
+class MaintenanceItemStandard(BaseModel):
+    item_name: str = Field(min_length=1, max_length=100)
+    check_method: str = Field(min_length=1, max_length=200)
+    standard: str = Field(min_length=1, max_length=200)
+
+
+class MaintenanceResultItem(BaseModel):
+    item_name: str = Field(min_length=1, max_length=100)
+    check_method: str | None = Field(default=None, max_length=200)
+    standard: str | None = Field(default=None, max_length=200)
+    result: str = Field(min_length=1, max_length=200)
+    remark: str | None = Field(default=None, max_length=500)
+
+
+class EquipmentMaintenancePlanCreate(BaseModel):
+    equipment_id: int
+    name: str = Field(min_length=1, max_length=100)
+    cycle_type: MaintenanceCycleType = "day"
+    cycle_value: int = Field(default=1, ge=1)
+    items: list[MaintenanceItemStandard] = Field(default_factory=list)
+    status: MaintenancePlanStatus = "enabled"
+
+
+class EquipmentMaintenancePlanUpdate(BaseModel):
+    equipment_id: int | None = None
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    cycle_type: MaintenanceCycleType | None = None
+    cycle_value: int | None = Field(default=None, ge=1)
+    items: list[MaintenanceItemStandard] | None = None
+    status: MaintenancePlanStatus | None = None
+
+
+class EquipmentMaintenancePlanResponse(BaseModel):
+    id: int
+    equipment_id: int
+    equipment_code: str | None = None
+    equipment_name: str | None = None
+    name: str
+    cycle_type: str
+    cycle_value: int
+    items: list[MaintenanceItemStandard]
+    status: str
+    next_due_at: datetime | None
+    alert_level: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class EquipmentMaintenancePlanListResponse(BaseModel):
+    items: list[EquipmentMaintenancePlanResponse]
+    total: int
+    page: int
+    page_size: int
+
+
+class EquipmentMaintenanceOrderCreate(BaseModel):
+    plan_id: int | None = None
+    equipment_id: int
+    planned_start_at: datetime
+    assignee: str | None = Field(default=None, max_length=50)
+    remark: str | None = Field(default=None, max_length=500)
+
+
+class EquipmentMaintenanceOrderUpdate(BaseModel):
+    plan_id: int | None = None
+    equipment_id: int | None = None
+    planned_start_at: datetime | None = None
+    assignee: str | None = Field(default=None, max_length=50)
+    remark: str | None = Field(default=None, max_length=500)
+    status: MaintenanceOrderStatus | None = None
+
+
+class EquipmentMaintenanceOrderDispatch(BaseModel):
+    assignee: str = Field(min_length=1, max_length=50)
+    planned_start_at: datetime | None = None
+
+
+class EquipmentMaintenanceOrderExecute(BaseModel):
+    executor: str = Field(min_length=1, max_length=50)
+    results: list[MaintenanceResultItem] = Field(default_factory=list)
+    remark: str | None = Field(default=None, max_length=500)
+
+
+class EquipmentMaintenanceOrderResponse(BaseModel):
+    id: int
+    plan_id: int | None
+    plan_name: str | None = None
+    equipment_id: int
+    equipment_code: str | None = None
+    equipment_name: str | None = None
+    order_no: str
+    status: str
+    assignee: str | None
+    planned_start_at: datetime
+    actual_start_at: datetime | None
+    actual_end_at: datetime | None
+    executor: str | None
+    results: list[MaintenanceResultItem] | None = None
+    remark: str | None
+    alert_level: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class EquipmentMaintenanceOrderListResponse(BaseModel):
+    items: list[EquipmentMaintenanceOrderResponse]
+    total: int
+    page: int
+    page_size: int
+
+
+class MaintenanceAlertItem(BaseModel):
+    id: int
+    type: str
+    name: str
+    equipment_id: int
+    equipment_code: str | None = None
+    equipment_name: str | None = None
+    due_at: datetime | None = None
+    alert_level: str
+
+
+class MaintenanceAlertsResponse(BaseModel):
+    due_soon: list[MaintenanceAlertItem]
+    overdue: list[MaintenanceAlertItem]
+
+
+class EquipmentMaintenanceStatusResponse(BaseModel):
+    equipment_id: int
+    status_label: str
+    alert_level: str
+    active_plans: int
+    pending_orders: int
+    next_due_at: datetime | None = None

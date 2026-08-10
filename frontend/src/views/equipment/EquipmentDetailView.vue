@@ -17,6 +17,13 @@
           <span class="eq-status" :class="'eq-status-' + equipment.status">
             {{ equipment.status }}
           </span>
+          <span
+            v-if="maintStatus"
+            class="maint-status-tag"
+            :class="'maint-' + maintStatus.alert_level"
+          >
+            {{ maintStatus.status_label }}
+          </span>
         </div>
         <h2 class="eq-name">{{ equipment.name }}</h2>
         <div class="primary-grid">
@@ -32,6 +39,41 @@
             <span class="cell-label">安装位置</span>
             <span class="cell-value">{{ equipment.location || '-' }}</span>
           </div>
+        </div>
+      </div>
+
+      <!-- 保养状态 -->
+      <div v-if="maintStatus" class="info-maintenance">
+        <h3 class="section-title">保养状态</h3>
+        <div class="maint-summary">
+          <div class="maint-cell">
+            <span class="maint-label">状态</span>
+            <span
+              class="maint-value maint-value-tag"
+              :class="'maint-' + maintStatus.alert_level"
+            >
+              {{ maintStatus.status_label }}
+            </span>
+          </div>
+          <div v-if="maintStatus.active_plans > 0" class="maint-cell">
+            <span class="maint-label">启用计划</span>
+            <span class="maint-value">{{ maintStatus.active_plans }}</span>
+          </div>
+          <div v-if="maintStatus.pending_orders > 0" class="maint-cell">
+            <span class="maint-label">待办工单</span>
+            <span class="maint-value">{{ maintStatus.pending_orders }}</span>
+          </div>
+          <div v-if="maintStatus.next_due_at" class="maint-cell">
+            <span class="maint-label">下次到期</span>
+            <span class="maint-value">{{ formatMaintDue(maintStatus.next_due_at) }}</span>
+          </div>
+          <router-link
+            v-if="maintStatus.active_plans > 0 || maintStatus.pending_orders > 0"
+            :to="{ path: '/equipment/maintenance-orders', query: { equipment_id: equipment.id } }"
+            class="maint-link"
+          >
+            查看保养工单 →
+          </router-link>
         </div>
       </div>
 
@@ -139,6 +181,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { fetchEquipment, updateEquipment } from '../../api/equipment'
+import { fetchEquipmentMaintenanceStatus } from '../../api/equipmentMaintenance'
 
 const route = useRoute()
 const router = useRouter()
@@ -146,6 +189,7 @@ const router = useRouter()
 const loading = ref(false)
 const submitting = ref(false)
 const equipment = ref(null)
+const maintStatus = ref(null)
 const dialogVisible = ref(false)
 const formRef = ref(null)
 
@@ -175,10 +219,22 @@ function formatDateTime(val) {
   return d.toLocaleString('zh-CN', { hour12: false })
 }
 
+function formatMaintDue(val) {
+  if (!val) return '-'
+  const d = new Date(val)
+  if (Number.isNaN(d.getTime())) return val
+  return d.toLocaleDateString('zh-CN')
+}
+
 async function loadDetail() {
   loading.value = true
   try {
     equipment.value = await fetchEquipment(route.params.id)
+    try {
+      maintStatus.value = await fetchEquipmentMaintenanceStatus(route.params.id)
+    } catch {
+      maintStatus.value = null
+    }
   } catch (err) {
     ElMessage.error(err.message || '加载失败')
     router.push('/equipment/ledger')
@@ -400,5 +456,88 @@ onMounted(loadDetail)
   display: flex;
   gap: 12px;
   padding: 16px 0;
+}
+
+.maint-status-tag {
+  display: inline-block;
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 2px;
+  margin-left: 8px;
+}
+
+.maint-none {
+  color: #64748b;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+}
+
+.maint-normal {
+  color: #15803d;
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+}
+
+.maint-due_soon {
+  color: #b45309;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+}
+
+.maint-overdue {
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+}
+
+.info-maintenance {
+  padding: 20px 24px;
+  background: #fff;
+  border: 1px solid #dce3eb;
+  border-left: 3px solid #d4a55a;
+  border-radius: 4px;
+  margin-bottom: 12px;
+}
+
+.maint-summary {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.maint-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.maint-label {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.maint-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.maint-value-tag {
+  font-size: 13px;
+  padding: 2px 8px;
+  border-radius: 2px;
+  font-weight: 500;
+}
+
+.maint-link {
+  margin-left: auto;
+  font-size: 13px;
+  color: #8b7355;
+  text-decoration: none;
+}
+
+.maint-link:hover {
+  color: #d4a55a;
 }
 </style>

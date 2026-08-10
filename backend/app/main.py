@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,13 +11,15 @@ from app.models import (
     Device,
     DeviceType,
     Equipment,
+    EquipmentMaintenanceOrder,
+    EquipmentMaintenancePlan,
     InspectionPlan,
     InspectionPlanItem,
     InspectionRecord,
     InspectionRecordItem,
     User,
 )
-from app.routers import auth, dashboard, devices, equipment, inspection, kanban_boards, kanban_production, production, work_orders
+from app.routers import auth, dashboard, devices, equipment, equipment_maintenance, inspection, kanban_boards, kanban_production, production, work_orders
 
 
 def seed_default_user():
@@ -203,12 +205,75 @@ def seed_equipment_data():
         db.close()
 
 
+def seed_equipment_maintenance_data():
+    db = SessionLocal()
+    try:
+        if db.query(EquipmentMaintenancePlan).first():
+            return
+
+        equipment_list = db.query(Equipment).limit(3).all()
+        if not equipment_list:
+            return
+
+        now = datetime.utcnow()
+        plan1 = EquipmentMaintenancePlan(
+            equipment_id=equipment_list[0].id,
+            name="CNC月度保养",
+            cycle_type="month",
+            cycle_value=1,
+            items=[
+                {
+                    "item_name": "主轴润滑",
+                    "check_method": "目视检查油位",
+                    "standard": "油位在标线范围内",
+                },
+                {
+                    "item_name": "导轨清洁",
+                    "check_method": "清洁后目视",
+                    "standard": "无切屑堆积、无锈蚀",
+                },
+            ],
+            status="enabled",
+            next_due_at=now + timedelta(days=2),
+        )
+        plan2 = EquipmentMaintenancePlan(
+            equipment_id=equipment_list[1].id,
+            name="CNC周保养",
+            cycle_type="week",
+            cycle_value=1,
+            items=[
+                {
+                    "item_name": "冷却液检测",
+                    "check_method": "浓度计测量",
+                    "standard": "浓度 5-8%",
+                },
+            ],
+            status="enabled",
+            next_due_at=now - timedelta(days=1),
+        )
+        db.add_all([plan1, plan2])
+        db.flush()
+
+        order1 = EquipmentMaintenanceOrder(
+            plan_id=plan2.id,
+            equipment_id=equipment_list[1].id,
+            order_no=f"MO-{now.strftime('%Y%m%d')}-0001",
+            status="pending",
+            planned_start_at=now - timedelta(days=1),
+        )
+        db.add(order1)
+        db.commit()
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     seed_default_user()
     seed_inspection_data()
     seed_equipment_data()
+    seed_equipment_maintenance_data()
     yield
 
 
@@ -231,6 +296,7 @@ app.include_router(production.router)
 app.include_router(devices.router)
 app.include_router(inspection.router)
 app.include_router(equipment.router)
+app.include_router(equipment_maintenance.router)
 
 
 @app.get("/api/health")

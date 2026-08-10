@@ -179,6 +179,8 @@ import {
   Document,
   Grid,
   List,
+  Calendar,
+  Tools,
 } from '@element-plus/icons-vue'
 import { clearToken, fetchCurrentUser } from '../api/auth'
 
@@ -244,6 +246,8 @@ const menuGroups = [
         children: [
           { path: '/equipment/ledger', title: '设备台账', icon: Cpu },
           { path: '/equipment/inspection', title: '设备点检', icon: List },
+          { path: '/equipment/maintenance-plans', title: '保养计划', icon: Calendar },
+          { path: '/equipment/maintenance-orders', title: '保养工单', icon: Tools },
         ],
       },
       { path: '/warehouse', title: '仓储管理', icon: Box },
@@ -325,6 +329,9 @@ function isChildActive(path) {
   if (route.path === path) return true
   if (!route.path.startsWith(path + '/')) return false
   if (path === '/equipment/ledger' && route.path.startsWith('/equipment/inspection')) {
+    return false
+  }
+  if (path === '/equipment/ledger' && route.path.startsWith('/equipment/maintenance-')) {
     return false
   }
   if (path === '/equipment/ledger' && route.path.startsWith('/equipment/ledger/')) {

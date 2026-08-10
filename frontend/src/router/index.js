@@ -10,6 +10,8 @@ import ProductionIndex from '../views/production/Index.vue'
 import EquipmentInspection from '../views/equipment/InspectionView.vue'
 import EquipmentLedgerView from '../views/equipment/EquipmentLedgerView.vue'
 import EquipmentDetailView from '../views/equipment/EquipmentDetailView.vue'
+import MaintenancePlansView from '../views/equipment/MaintenancePlansView.vue'
+import MaintenanceOrdersView from '../views/equipment/MaintenanceOrdersView.vue'
 import WarehouseIndex from '../views/warehouse/Index.vue'
 import ReportsIndex from '../views/reports/Index.vue'
 import SettingsIndex from '../views/settings/Index.vue'
@@ -59,6 +61,18 @@ const router = createRouter({
           meta: { title: '设备详情', ...authRequired },
         },
         { path: 'equipment/inspection', name: 'equipment-inspection', component: EquipmentInspection, meta: { title: '设备点检', ...authRequired } },
+        {
+          path: 'equipment/maintenance-plans',
+          name: 'equipment-maintenance-plans',
+          component: MaintenancePlansView,
+          meta: { title: '保养计划', ...authRequired },
+        },
+        {
+          path: 'equipment/maintenance-orders',
+          name: 'equipment-maintenance-orders',
+          component: MaintenanceOrdersView,
+          meta: { title: '保养工单', ...authRequired },
+        },
         { path: 'inspection/dashboard', redirect: { path: '/equipment/inspection', query: { tab: 'dashboard' } } },
         { path: 'inspection/records', redirect: (to) => ({ path: '/equipment/inspection', query: { tab: 'records', ...to.query } }) },
         { path: 'inspection/execute', redirect: { path: '/equipment/inspection', query: { tab: 'execute' } } },

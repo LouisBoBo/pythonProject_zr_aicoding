@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -164,6 +164,65 @@ class Equipment(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
     )
+
+    maintenance_plans: Mapped[list["EquipmentMaintenancePlan"]] = relationship(
+        back_populates="equipment"
+    )
+    maintenance_orders: Mapped[list["EquipmentMaintenanceOrder"]] = relationship(
+        back_populates="equipment"
+    )
+
+
+class EquipmentMaintenancePlan(Base):
+    __tablename__ = "equipment_maintenance_plans"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    equipment_id: Mapped[int] = mapped_column(ForeignKey("equipment.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    cycle_type: Mapped[str] = mapped_column(String(20), nullable=False, default="day")
+    cycle_value: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    items: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="enabled")
+    next_due_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    equipment: Mapped["Equipment"] = relationship(back_populates="maintenance_plans")
+    orders: Mapped[list["EquipmentMaintenanceOrder"]] = relationship(
+        back_populates="plan"
+    )
+
+
+class EquipmentMaintenanceOrder(Base):
+    __tablename__ = "equipment_maintenance_orders"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    plan_id: Mapped[int | None] = mapped_column(
+        ForeignKey("equipment_maintenance_plans.id"), nullable=True
+    )
+    equipment_id: Mapped[int] = mapped_column(ForeignKey("equipment.id"), nullable=False)
+    order_no: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    assignee: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    planned_start_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    actual_start_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    actual_end_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    executor: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    results: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    remark: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    plan: Mapped["EquipmentMaintenancePlan | None"] = relationship(back_populates="orders")
+    equipment: Mapped["Equipment"] = relationship(back_populates="maintenance_orders")
 
 
 class InspectionRecordItem(Base):
