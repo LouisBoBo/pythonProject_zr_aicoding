@@ -10,13 +10,14 @@ from app.database import Base, SessionLocal, engine
 from app.models import (
     Device,
     DeviceType,
+    Equipment,
     InspectionPlan,
     InspectionPlanItem,
     InspectionRecord,
     InspectionRecordItem,
     User,
 )
-from app.routers import auth, dashboard, devices, inspection, kanban_boards, kanban_production, production, work_orders
+from app.routers import auth, dashboard, devices, equipment, inspection, kanban_boards, kanban_production, production, work_orders
 
 
 def seed_default_user():
@@ -129,11 +130,85 @@ def seed_inspection_data():
         db.close()
 
 
+def seed_equipment_data():
+    db = SessionLocal()
+    try:
+        if db.query(Equipment).first():
+            return
+
+        from datetime import date
+
+        samples = [
+            Equipment(
+                equipment_code="EQ-2024-001",
+                name="1号CNC加工中心",
+                spec_model="VMC-850",
+                department="机加工车间",
+                location="A区-01",
+                status="运行",
+                purchase_date=date(2022, 3, 15),
+                commission_date=date(2022, 4, 1),
+                supplier="沈阳机床",
+            ),
+            Equipment(
+                equipment_code="EQ-2024-002",
+                name="2号CNC加工中心",
+                spec_model="VMC-850",
+                department="机加工车间",
+                location="A区-02",
+                status="运行",
+                purchase_date=date(2022, 3, 15),
+                commission_date=date(2022, 4, 1),
+                supplier="沈阳机床",
+            ),
+            Equipment(
+                equipment_code="EQ-2024-003",
+                name="1号注塑机",
+                spec_model="HTF-160X1",
+                department="注塑车间",
+                location="B区-01",
+                status="停机",
+                purchase_date=date(2021, 8, 20),
+                commission_date=date(2021, 9, 10),
+                supplier="海天塑机",
+            ),
+            Equipment(
+                equipment_code="EQ-2024-004",
+                name="自动包装线",
+                spec_model="PKG-A200",
+                department="包装车间",
+                location="C区-01",
+                status="维修",
+                purchase_date=date(2023, 1, 10),
+                commission_date=date(2023, 2, 1),
+                supplier="博世包装",
+                remark="传送带待更换",
+            ),
+            Equipment(
+                equipment_code="EQ-2023-015",
+                name="老旧铣床",
+                spec_model="XK5032",
+                department="机加工车间",
+                location="A区-旧区",
+                status="报废",
+                purchase_date=date(2010, 5, 1),
+                commission_date=date(2010, 6, 1),
+                supplier="北京第一机床厂",
+                remark="已停用待处置",
+            ),
+        ]
+        db.add_all(samples)
+        db.commit()
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     seed_default_user()
     seed_inspection_data()
+    seed_equipment_data()
     yield
 
 
@@ -155,6 +230,7 @@ app.include_router(kanban_production.router)
 app.include_router(production.router)
 app.include_router(devices.router)
 app.include_router(inspection.router)
+app.include_router(equipment.router)
 
 
 @app.get("/api/health")

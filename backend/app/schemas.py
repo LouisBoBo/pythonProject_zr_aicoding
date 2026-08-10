@@ -462,3 +462,65 @@ class InspectionDashboardStats(BaseModel):
     trend: list[InspectionTrendPoint]
     type_rates: list[InspectionTypeRate]
     recent_abnormals: list[InspectionAbnormalBrief]
+
+
+# --- Equipment Ledger ---
+
+EquipmentStatus = Literal["运行", "停机", "维修", "报废"]
+
+
+class EquipmentCreate(BaseModel):
+    equipment_code: str = Field(min_length=1, max_length=50)
+    name: str = Field(min_length=1, max_length=100)
+    spec_model: str | None = Field(default=None, max_length=100)
+    department: str | None = Field(default=None, max_length=50)
+    location: str | None = Field(default=None, max_length=100)
+    status: EquipmentStatus = "运行"
+    purchase_date: date | None = None
+    commission_date: date | None = None
+    supplier: str | None = Field(default=None, max_length=100)
+    remark: str | None = Field(default=None, max_length=500)
+
+
+class EquipmentUpdate(BaseModel):
+    equipment_code: str | None = Field(default=None, min_length=1, max_length=50)
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    spec_model: str | None = Field(default=None, max_length=100)
+    department: str | None = Field(default=None, max_length=50)
+    location: str | None = Field(default=None, max_length=100)
+    status: EquipmentStatus | None = None
+    purchase_date: date | None = None
+    commission_date: date | None = None
+    supplier: str | None = Field(default=None, max_length=100)
+    remark: str | None = Field(default=None, max_length=500)
+
+
+class EquipmentResponse(BaseModel):
+    id: int
+    equipment_code: str
+    name: str
+    spec_model: str | None
+    department: str | None
+    location: str | None
+    status: str
+    purchase_date: date | None
+    commission_date: date | None
+    supplier: str | None
+    remark: str | None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class EquipmentListResponse(BaseModel):
+    items: list[EquipmentResponse]
+    total: int
+    page: int
+    page_size: int
+
+
+class EquipmentImportResult(BaseModel):
+    created: int
+    skipped: int
+    errors: list[str]

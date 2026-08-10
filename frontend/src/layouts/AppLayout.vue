@@ -242,7 +242,7 @@ const menuGroups = [
         title: '设备管理',
         icon: Cpu,
         children: [
-          { path: '/equipment', title: '设备台账', icon: Cpu },
+          { path: '/equipment/ledger', title: '设备台账', icon: Cpu },
           { path: '/equipment/inspection', title: '设备点检', icon: List },
         ],
       },
@@ -324,8 +324,11 @@ function isActive(path) {
 function isChildActive(path) {
   if (route.path === path) return true
   if (!route.path.startsWith(path + '/')) return false
-  if (path === '/equipment' && route.path.startsWith('/equipment/inspection')) {
+  if (path === '/equipment/ledger' && route.path.startsWith('/equipment/inspection')) {
     return false
+  }
+  if (path === '/equipment/ledger' && route.path.startsWith('/equipment/ledger/')) {
+    return true
   }
   return true
 }

@@ -7,8 +7,9 @@ import FavoritesIndex from '../views/favorites/Index.vue'
 import WorkbenchIndex from '../views/workbench/Index.vue'
 import QualityIndex from '../views/quality/Index.vue'
 import ProductionIndex from '../views/production/Index.vue'
-import EquipmentIndex from '../views/equipment/Index.vue'
 import EquipmentInspection from '../views/equipment/InspectionView.vue'
+import EquipmentLedgerView from '../views/equipment/EquipmentLedgerView.vue'
+import EquipmentDetailView from '../views/equipment/EquipmentDetailView.vue'
 import WarehouseIndex from '../views/warehouse/Index.vue'
 import ReportsIndex from '../views/reports/Index.vue'
 import SettingsIndex from '../views/settings/Index.vue'
@@ -44,9 +45,20 @@ const router = createRouter({
         { path: 'quality/:id', name: 'quality-detail', component: QualityIndex, meta: { title: '品质分析', ...authRequired } },
         { path: 'production', name: 'production', component: ProductionIndex, meta: { title: '生产概览', ...authRequired } },
         { path: 'production-plan/:id?', name: 'production-plan', component: ProductionIndex, meta: { title: '生产概览', ...authRequired } },
-        { path: 'equipment', name: 'equipment', component: EquipmentIndex, meta: { title: '设备管理', ...authRequired } },
+        { path: 'equipment', redirect: '/equipment/ledger' },
+        {
+          path: 'equipment/ledger',
+          name: 'equipment-ledger',
+          component: EquipmentLedgerView,
+          meta: { title: '设备台账', ...authRequired },
+        },
+        {
+          path: 'equipment/ledger/:id',
+          name: 'equipment-ledger-detail',
+          component: EquipmentDetailView,
+          meta: { title: '设备详情', ...authRequired },
+        },
         { path: 'equipment/inspection', name: 'equipment-inspection', component: EquipmentInspection, meta: { title: '设备点检', ...authRequired } },
-        { path: 'equipment/:id', name: 'equipment-detail', component: EquipmentIndex, meta: { title: '设备管理', ...authRequired } },
         { path: 'inspection/dashboard', redirect: { path: '/equipment/inspection', query: { tab: 'dashboard' } } },
         { path: 'inspection/records', redirect: (to) => ({ path: '/equipment/inspection', query: { tab: 'records', ...to.query } }) },
         { path: 'inspection/execute', redirect: { path: '/equipment/inspection', query: { tab: 'execute' } } },

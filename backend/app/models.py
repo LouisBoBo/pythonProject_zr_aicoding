@@ -144,6 +144,28 @@ class InspectionRecord(Base):
     )
 
 
+class Equipment(Base):
+    __tablename__ = "equipment"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    equipment_code: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    spec_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    department: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    location: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="运行")
+    purchase_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    commission_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    supplier: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    remark: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+
 class InspectionRecordItem(Base):
     __tablename__ = "inspection_record_items"
 

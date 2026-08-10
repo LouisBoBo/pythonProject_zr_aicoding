@@ -187,7 +187,7 @@ const modules = [
   {
     name: '设备管理',
     desc: '设备台账与维护保养',
-    route: '/equipment',
+    route: '/equipment/ledger',
     icon: '⚙️',
   },
   {
