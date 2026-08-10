@@ -11,18 +11,18 @@
     <div class="overview-grid">
       <!-- 第一行：双仪表盘 -->
       <div class="grid-row gauge-row">
-        <div class="overview-card gauge-card">
+        <div class="overview-card gauge-card gauge-rate">
           <div class="card-title card-title--orange">产量达成率</div>
           <div class="gauge-body">
             <v-chart class="gauge-chart" :option="achievementGaugeOption" autoresize />
             <div class="gauge-value">{{ formatGaugeValue(data.achievement_rate) }}</div>
           </div>
         </div>
-        <div class="overview-card gauge-card">
+        <div class="overview-card gauge-card gauge-area">
           <div class="card-title card-title--orange">产量面积</div>
           <div class="gauge-body">
             <v-chart class="gauge-chart" :option="areaGaugeOption" autoresize />
-            <div class="gauge-value">{{ formatGaugeValue(data.production_area) }}</div>
+            <div class="gauge-value gauge-value-area">{{ formatGaugeValue(data.production_area) }}</div>
           </div>
         </div>
       </div>
@@ -33,23 +33,21 @@
           <div class="card-title">生产信息统计</div>
           <div class="table-wrap">
             <el-table
-              :data="statsTableData"
+              :data="data.stats_rows"
               class="dark-table"
               :show-header="true"
+              stripe
             >
-              <el-table-column prop="today_completed" label="今日完成数" min-width="100" align="right">
-                <template #default="{ row }">{{ formatNumber(row.today_completed) }}</template>
+              <el-table-column prop="time" label="时间" min-width="72" />
+              <el-table-column prop="today_completed" label="今日完成数" min-width="96" align="right" />
+              <el-table-column prop="today_area_output" label="今日面积产量" min-width="108" align="right">
+                <template #default="{ row }">
+                  {{ formatArea(row.today_area_output) }}
+                </template>
               </el-table-column>
-              <el-table-column prop="today_area_output" label="今日面积产量" min-width="110" align="right">
-                <template #default="{ row }">{{ formatArea(row.today_area_output) }}</template>
-              </el-table-column>
-              <el-table-column prop="today_defect_total" label="今日缺陷总数" min-width="110" align="right">
-                <template #default="{ row }">{{ formatNumber(row.today_defect_total) }}</template>
-              </el-table-column>
-              <el-table-column prop="daily_defect_rate" label="日不良率" min-width="90" align="right" />
-              <el-table-column prop="today_incoming_boards" label="今日来板数" min-width="100" align="right">
-                <template #default="{ row }">{{ formatNumber(row.today_incoming_boards) }}</template>
-              </el-table-column>
+              <el-table-column prop="today_defect_total" label="今日缺陷总数" min-width="96" align="right" />
+              <el-table-column prop="daily_defect_rate" label="日不良率" min-width="80" align="right" />
+              <el-table-column prop="today_incoming_boards" label="今日来板数" min-width="96" align="right" />
             </el-table>
           </div>
         </div>
@@ -116,25 +114,17 @@ const loadError = ref('')
 const displayTime = ref('')
 const weekday = ref('')
 
-const defaultStats = {
-  today_completed: 0,
-  today_area_output: 0,
-  today_defect_total: 0,
-  daily_defect_rate: '0%',
-  today_incoming_boards: 0,
-}
-
 const defaultData = {
   achievement_rate: 0,
   production_area: 0,
-  stats: { ...defaultStats },
+  stats_rows: [],
   completion_chart: [],
   detail_rows: [],
 }
 
 const data = reactive({ ...defaultData })
 
-function buildGaugeOption(value) {
+function buildRateGaugeOption(value) {
   const ratio = Math.min(Math.max(value / 100, 0), 1)
   return {
     series: [
@@ -142,11 +132,11 @@ function buildGaugeOption(value) {
         type: 'gauge',
         startAngle: 180,
         endAngle: 0,
-        center: ['50%', '75%'],
+        center: ['50%', '78%'],
         radius: '105%',
         min: 0,
         max: 100,
-        splitNumber: 5,
+        splitNumber: 10,
         axisLine: {
           lineStyle: {
             width: 14,
@@ -160,7 +150,7 @@ function buildGaugeOption(value) {
           icon: 'path://M12.8,0.7l12,40.1H0.7L12.8,0.7z',
           length: '50%',
           width: 6,
-          offsetCenter: [0, '-6%'],
+          offsetCenter: [0, '-4%'],
           itemStyle: {
             color: {
               type: 'linear',
@@ -177,9 +167,9 @@ function buildGaugeOption(value) {
         },
         axisTick: {
           show: true,
-          length: 4,
+          length: 3,
           distance: -16,
-          lineStyle: { color: 'rgba(255, 255, 255, 0.18)', width: 1 },
+          lineStyle: { color: 'rgba(255, 255, 255, 0.2)', width: 1 },
         },
         splitLine: { show: false },
         axisLabel: { show: false },
@@ -190,10 +180,62 @@ function buildGaugeOption(value) {
   }
 }
 
-const achievementGaugeOption = computed(() => buildGaugeOption(data.achievement_rate))
-const areaGaugeOption = computed(() => buildGaugeOption(data.production_area))
+function buildAreaGaugeOption(value) {
+  const max = Math.max(10, Math.ceil(value / 5) * 5)
+  const ratio = Math.min(value / max, 1)
+  return {
+    series: [
+      {
+        type: 'gauge',
+        startAngle: 200,
+        endAngle: -20,
+        center: ['50%', '72%'],
+        radius: '95%',
+        min: 0,
+        max,
+        splitNumber: 5,
+        axisLine: {
+          lineStyle: {
+            width: 12,
+            color: [
+              [ratio, '#e8940f'],
+              [1, 'rgba(4, 10, 26, 0.45)'],
+            ],
+          },
+        },
+        pointer: {
+          length: '45%',
+          width: 4,
+          offsetCenter: [0, '0%'],
+          itemStyle: { color: '#f5a623' },
+        },
+        axisTick: {
+          show: true,
+          length: 5,
+          distance: -14,
+          lineStyle: { color: 'rgba(245, 166, 35, 0.35)', width: 1 },
+        },
+        splitLine: {
+          show: true,
+          length: 8,
+          distance: -14,
+          lineStyle: { color: 'rgba(245, 166, 35, 0.2)', width: 1 },
+        },
+        axisLabel: { show: false },
+        detail: { show: false },
+        data: [{ value }],
+      },
+    ],
+  }
+}
 
-const statsTableData = computed(() => [data.stats])
+const achievementGaugeOption = computed(() =>
+  buildRateGaugeOption(data.achievement_rate),
+)
+
+const areaGaugeOption = computed(() =>
+  buildAreaGaugeOption(data.production_area),
+)
 
 const completionBarOption = computed(() => ({
   tooltip: {
@@ -210,7 +252,7 @@ const completionBarOption = computed(() => ({
     itemWidth: 14,
     itemHeight: 8,
   },
-  grid: { left: 56, right: 20, top: 40, bottom: 28 },
+  grid: { left: 56, right: 24, top: 36, bottom: 28 },
   xAxis: {
     type: 'category',
     data: data.completion_chart.map((p) => p.label),
@@ -234,7 +276,8 @@ const completionBarOption = computed(() => ({
     {
       name: 'LOT产出',
       type: 'bar',
-      barWidth: 18,
+      barWidth: 20,
+      barGap: '30%',
       data: data.completion_chart.map((p) => p.lot_output),
       itemStyle: {
         borderRadius: [3, 3, 0, 0],
@@ -254,7 +297,7 @@ const completionBarOption = computed(() => ({
     {
       name: '型号产出',
       type: 'bar',
-      barWidth: 18,
+      barWidth: 20,
       data: data.completion_chart.map((p) => p.model_output),
       itemStyle: {
         borderRadius: [3, 3, 0, 0],
@@ -279,10 +322,6 @@ function formatGaugeValue(val) {
   return val.toFixed(1)
 }
 
-function formatNumber(val) {
-  return Number(val).toLocaleString('zh-CN')
-}
-
 function formatArea(val) {
   return Number(val).toLocaleString('zh-CN', { maximumFractionDigits: 1 })
 }
@@ -291,7 +330,7 @@ function applyData(resp) {
   Object.assign(data, {
     achievement_rate: resp.achievement_rate,
     production_area: resp.production_area,
-    stats: resp.stats || { ...defaultStats },
+    stats_rows: resp.stats_rows || [],
     completion_chart: resp.completion_chart || [],
     detail_rows: resp.detail_rows || [],
   })
@@ -443,14 +482,26 @@ onUnmounted(() => {
 }
 
 .gauge-card {
+  min-height: 180px;
+  border-color: rgba(255, 153, 0, 0.35);
+}
+
+.gauge-rate {
   background: linear-gradient(
     180deg,
     rgba(255, 153, 0, 0.62) 0%,
     rgba(255, 153, 0, 0.28) 38%,
     rgba(10, 26, 58, 0.88) 100%
   );
-  min-height: 180px;
-  border-color: rgba(255, 153, 0, 0.35);
+}
+
+.gauge-area {
+  background: linear-gradient(
+    160deg,
+    rgba(232, 148, 15, 0.45) 0%,
+    rgba(245, 166, 35, 0.12) 45%,
+    rgba(10, 26, 58, 0.92) 100%
+  );
 }
 
 .gauge-body {
@@ -478,6 +529,11 @@ onUnmounted(() => {
   font-weight: 700;
   color: #ff9900;
   line-height: 1;
+}
+
+.gauge-value-area {
+  font-size: 34px;
+  color: #ffb84d;
 }
 
 .table-card,
