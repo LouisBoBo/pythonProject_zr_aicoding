@@ -43,7 +43,7 @@
                     <router-link
                       :to="child.path"
                       class="nav-item nav-child"
-                      :class="{ active: isActive(child.path) }"
+                      :class="{ active: isChildActive(child.path) }"
                     >
                       <el-icon class="nav-icon"><component :is="child.icon" /></el-icon>
                       <span class="nav-label">{{ child.title }}</span>
@@ -319,6 +319,15 @@ function isActive(path) {
     return route.path === '/home' || route.path === '/'
   }
   return route.path === path || route.path.startsWith(path + '/')
+}
+
+function isChildActive(path) {
+  if (route.path === path) return true
+  if (!route.path.startsWith(path + '/')) return false
+  if (path === '/equipment' && route.path.startsWith('/equipment/inspection')) {
+    return false
+  }
+  return true
 }
 
 function handleUserCommand(command) {
