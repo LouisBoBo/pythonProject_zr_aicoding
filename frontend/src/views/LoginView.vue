@@ -8,7 +8,7 @@
           <img class="zlpcb-logo" src="../assets/login/zlpcb-logo.svg" alt="ZLPCB" />
         </div>
         <div class="header-right">
-          <h2 class="left-company-title">江西中络电子有限公司</h2>
+          <h2 class="left-company-title">江西中软电子有限公司</h2>
           <nav class="top-nav">
             <span>开源定制</span>
             <span class="nav-sep">|</span>
@@ -71,7 +71,7 @@
             <div class="card-logos">
               <img class="card-zlpcb-img" src="../assets/login/zlpcb-logo.svg" alt="ZLPCB" />
             </div>
-            <h3 class="card-company">江西中络电子有限公司</h3>
+            <h3 class="card-company">江西中软电子有限公司</h3>
             <p class="card-company-sub">江西中软信息技术有限公司</p>
           </div>
 
@@ -170,8 +170,8 @@ const features = [
   '报表看板管理',
 ]
 
-const enterpriseOptions = ['江西中络电子有限公司']
-const enterpriseCode = ref('江西中络电子有限公司')
+const enterpriseOptions = ['江西中软电子有限公司']
+const enterpriseCode = ref('江西中软电子有限公司')
 const username = ref('')
 const password = ref('')
 const rememberPassword = ref(false)

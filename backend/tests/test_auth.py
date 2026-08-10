@@ -93,6 +93,21 @@ def test_login_success_with_test_enterprise(client, test_user):
     assert data["token_type"] == "bearer"
 
 
+def test_login_success_with_full_enterprise_name(client, test_user):
+    response = client.post(
+        "/api/auth/login",
+        json={
+            "username": "testuser",
+            "password": "password123",
+            "enterprise_code": "江西中软电子有限公司",
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "access_token" in data
+    assert data["token_type"] == "bearer"
+
+
 def test_login_wrong_password(client, test_user):
     response = client.post(
         "/api/auth/login",
@@ -103,7 +118,7 @@ def test_login_wrong_password(client, test_user):
         },
     )
     assert response.status_code == 401
-    assert response.json()["detail"] == "Incorrect username or password"
+    assert response.json()["detail"] == "账号或密码错误"
 
 
 def test_login_unknown_user(client):

@@ -4,8 +4,8 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, Field
 
-ENTERPRISE_CODES = ("江西中软", "前海中软", "测试企业")
-EnterpriseCode = Literal["江西中软", "前海中软", "测试企业"]
+ENTERPRISE_CODES = ("江西中软", "江西中软电子有限公司", "前海中软", "测试企业")
+EnterpriseCode = Literal["江西中软", "江西中软电子有限公司", "前海中软", "测试企业"]
 
 
 class Token(BaseModel):

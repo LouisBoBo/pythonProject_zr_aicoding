@@ -15,7 +15,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
+            detail="账号或密码错误",
             headers={"WWW-Authenticate": "Bearer"},
         )
     access_token = create_access_token(subject=user.username)

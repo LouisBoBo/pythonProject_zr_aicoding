@@ -12,6 +12,19 @@ export function clearToken() {
   localStorage.removeItem(TOKEN_KEY)
 }
 
+function parseApiErrorDetail(detail, fallback = '登录失败') {
+  if (!detail) return fallback
+  if (typeof detail === 'string') return detail
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => item?.msg || item?.message || '')
+      .filter(Boolean)
+      .join('；') || fallback
+  }
+  if (typeof detail === 'object' && detail.message) return detail.message
+  return fallback
+}
+
 export async function login(username, password, enterpriseCode) {
   const response = await fetch('/api/auth/login', {
     method: 'POST',
@@ -25,7 +38,7 @@ export async function login(username, password, enterpriseCode) {
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}))
-    throw new Error(error.detail || '登录失败')
+    throw new Error(parseApiErrorDetail(error.detail, '登录失败'))
   }
 
   const data = await response.json()
