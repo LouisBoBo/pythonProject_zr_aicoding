@@ -178,6 +178,9 @@ import {
   QuestionFilled,
   Document,
   Grid,
+  List,
+  EditPen,
+  Calendar,
 } from '@element-plus/icons-vue'
 import { clearToken, fetchCurrentUser } from '../api/auth'
 
@@ -197,6 +200,7 @@ const expandedGroups = reactive({
 const expandedSubmenus = reactive({
   production: true,
   kanban: true,
+  inspection: true,
 })
 
 const menuGroups = [
@@ -236,6 +240,17 @@ const menuGroups = [
         ],
       },
       { path: '/equipment', title: '设备管理', icon: Cpu },
+      {
+        key: 'inspection',
+        title: '设备点检',
+        icon: List,
+        children: [
+          { path: '/inspection/dashboard', title: '统计看板', icon: DataLine },
+          { path: '/inspection/records', title: '点检记录', icon: Document },
+          { path: '/inspection/execute', title: '执行点检', icon: EditPen },
+          { path: '/inspection/plans', title: '点检计划', icon: Calendar },
+        ],
+      },
       { path: '/warehouse', title: '仓储管理', icon: Box },
     ],
   },

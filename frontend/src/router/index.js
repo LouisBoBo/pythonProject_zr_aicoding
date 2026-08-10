@@ -16,6 +16,10 @@ import HelpIndex from '../views/help/Index.vue'
 import WorkOrdersView from '../views/WorkOrdersView.vue'
 import KanbanBoardsView from '../views/KanbanBoardsView.vue'
 import ProductionKanbanView from '../views/kanban/ProductionKanbanView.vue'
+import InspectionDashboard from '../views/inspection/DashboardView.vue'
+import InspectionRecords from '../views/inspection/RecordsView.vue'
+import InspectionExecute from '../views/inspection/ExecuteView.vue'
+import InspectionPlans from '../views/inspection/PlansView.vue'
 
 const authRequired = { requiresAuth: true }
 
@@ -46,6 +50,11 @@ const router = createRouter({
         { path: 'production-plan/:id?', name: 'production-plan', component: ProductionIndex, meta: { title: '生产概览', ...authRequired } },
         { path: 'equipment', name: 'equipment', component: EquipmentIndex, meta: { title: '设备管理', ...authRequired } },
         { path: 'equipment/:id', name: 'equipment-detail', component: EquipmentIndex, meta: { title: '设备管理', ...authRequired } },
+        { path: 'inspection/dashboard', name: 'inspection-dashboard', component: InspectionDashboard, meta: { title: '点检统计看板', ...authRequired } },
+        { path: 'inspection/records', name: 'inspection-records', component: InspectionRecords, meta: { title: '点检记录', ...authRequired } },
+        { path: 'inspection/execute', name: 'inspection-execute', component: InspectionExecute, meta: { title: '执行点检', ...authRequired } },
+        { path: 'inspection/plans', name: 'inspection-plans', component: InspectionPlans, meta: { title: '点检计划', ...authRequired } },
+        { path: 'inspection', redirect: '/inspection/dashboard' },
         { path: 'warehouse', name: 'warehouse', component: WarehouseIndex, meta: { title: '仓储管理', ...authRequired } },
         { path: 'warehouse/:id', name: 'warehouse-detail', component: WarehouseIndex, meta: { title: '仓储管理', ...authRequired } },
         { path: 'reports', name: 'reports', component: ReportsIndex, meta: { title: '报表中心', ...authRequired } },

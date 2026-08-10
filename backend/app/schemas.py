@@ -264,3 +264,201 @@ class ProductionOverviewResponse(BaseModel):
     stats: ProductionOverviewStats
     completion_chart: list[CompletionChartPoint]
     detail_rows: list[ProductionDetailRow]
+
+
+# --- Device ---
+
+class DeviceTypeResponse(BaseModel):
+    id: int
+    name: str
+    code: str
+
+    model_config = {"from_attributes": True}
+
+
+class DeviceResponse(BaseModel):
+    id: int
+    code: str
+    name: str
+    device_type_id: int
+    device_type_name: str | None = None
+    location: str | None
+    status: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class DeviceListResponse(BaseModel):
+    items: list[DeviceResponse]
+    total: int
+    page: int
+    page_size: int
+
+
+# --- Inspection ---
+
+InspectionFrequencyType = Literal["daily", "weekly", "monthly", "custom"]
+InspectionJudgeType = Literal["ok_ng", "numeric"]
+InspectionRecordStatus = Literal["normal", "abnormal", "draft", "incomplete"]
+
+
+class InspectionPlanItemCreate(BaseModel):
+    item_name: str = Field(min_length=1, max_length=100)
+    standard_value: str | None = Field(default=None, max_length=100)
+    judge_type: InspectionJudgeType = "ok_ng"
+    sort_order: int = 0
+
+
+class InspectionPlanItemResponse(BaseModel):
+    id: int
+    plan_id: int
+    item_name: str
+    standard_value: str | None
+    judge_type: str
+    sort_order: int
+
+    model_config = {"from_attributes": True}
+
+
+class InspectionPlanCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    device_type_id: int | None = None
+    device_id: int | None = None
+    frequency_type: InspectionFrequencyType = "daily"
+    frequency_value: int | None = None
+    cron_expr: str | None = Field(default=None, max_length=100)
+    is_active: bool = True
+    items: list[InspectionPlanItemCreate] = Field(default_factory=list)
+
+
+class InspectionPlanUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    device_type_id: int | None = None
+    device_id: int | None = None
+    frequency_type: InspectionFrequencyType | None = None
+    frequency_value: int | None = None
+    cron_expr: str | None = Field(default=None, max_length=100)
+    is_active: bool | None = None
+    items: list[InspectionPlanItemCreate] | None = None
+
+
+class InspectionPlanResponse(BaseModel):
+    id: int
+    name: str
+    device_type_id: int | None
+    device_id: int | None
+    device_type_name: str | None = None
+    device_name: str | None = None
+    frequency_type: str
+    frequency_value: int | None
+    cron_expr: str | None
+    is_active: bool
+    last_executed_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+    items: list[InspectionPlanItemResponse] = Field(default_factory=list)
+
+    model_config = {"from_attributes": True}
+
+
+class InspectionPlanListResponse(BaseModel):
+    items: list[InspectionPlanResponse]
+    total: int
+    page: int
+    page_size: int
+
+
+class InspectionRecordItemCreate(BaseModel):
+    item_name: str = Field(min_length=1, max_length=100)
+    standard_value: str | None = Field(default=None, max_length=100)
+    actual_value: str | None = Field(default=None, max_length=100)
+    result: str | None = Field(default=None, max_length=10)
+    remark: str | None = Field(default=None, max_length=500)
+
+
+class InspectionRecordItemResponse(BaseModel):
+    id: int
+    record_id: int
+    item_name: str
+    standard_value: str | None
+    actual_value: str | None
+    result: str | None
+    remark: str | None
+
+    model_config = {"from_attributes": True}
+
+
+class InspectionRecordCreate(BaseModel):
+    device_id: int
+    plan_id: int | None = None
+    inspector: str = Field(min_length=1, max_length=50)
+    inspect_date: date
+    status: InspectionRecordStatus = "draft"
+    remark: str | None = None
+    items: list[InspectionRecordItemCreate] = Field(default_factory=list)
+
+
+class InspectionRecordUpdate(BaseModel):
+    device_id: int | None = None
+    plan_id: int | None = None
+    inspector: str | None = Field(default=None, min_length=1, max_length=50)
+    inspect_date: date | None = None
+    status: InspectionRecordStatus | None = None
+    remark: str | None = None
+    items: list[InspectionRecordItemCreate] | None = None
+
+
+class InspectionRecordResponse(BaseModel):
+    id: int
+    device_id: int
+    device_code: str | None = None
+    device_name: str | None = None
+    plan_id: int | None
+    plan_name: str | None = None
+    inspector: str
+    inspect_date: date
+    status: str
+    remark: str | None
+    created_at: datetime
+    items: list[InspectionRecordItemResponse] = Field(default_factory=list)
+
+    model_config = {"from_attributes": True}
+
+
+class InspectionRecordListResponse(BaseModel):
+    items: list[InspectionRecordResponse]
+    total: int
+    page: int
+    page_size: int
+
+
+class InspectionTrendPoint(BaseModel):
+    date: str
+    rate: float
+
+
+class InspectionTypeRate(BaseModel):
+    device_type: str
+    rate: float
+    total: int
+    completed: int
+
+
+class InspectionAbnormalBrief(BaseModel):
+    id: int
+    device_code: str
+    device_name: str
+    inspect_date: date
+    inspector: str
+    remark: str | None
+
+
+class InspectionDashboardStats(BaseModel):
+    today_due: int
+    today_completed: int
+    today_abnormal: int
+    completion_rate: float
+    trend: list[InspectionTrendPoint]
+    type_rates: list[InspectionTypeRate]
+    recent_abnormals: list[InspectionAbnormalBrief]
