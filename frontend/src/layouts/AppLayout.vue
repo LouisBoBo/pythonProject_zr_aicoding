@@ -200,6 +200,7 @@ const expandedGroups = reactive({
 const expandedSubmenus = reactive({
   production: true,
   kanban: true,
+  equipment: true,
   inspection: true,
 })
 
@@ -239,7 +240,15 @@ const menuGroups = [
           { path: '/kanban/general', title: '综合看板', icon: DataLine },
         ],
       },
-      { path: '/equipment', title: '设备管理', icon: Cpu },
+      {
+        key: 'equipment',
+        title: '设备管理',
+        icon: Cpu,
+        children: [
+          { path: '/equipment', title: '设备台账', icon: Cpu },
+          { path: '/equipment/inspection', title: '设备点检', icon: List },
+        ],
+      },
       {
         key: 'inspection',
         title: '设备点检',

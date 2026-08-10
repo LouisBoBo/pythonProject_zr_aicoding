@@ -8,6 +8,7 @@ import WorkbenchIndex from '../views/workbench/Index.vue'
 import QualityIndex from '../views/quality/Index.vue'
 import ProductionIndex from '../views/production/Index.vue'
 import EquipmentIndex from '../views/equipment/Index.vue'
+import EquipmentInspection from '../views/equipment/InspectionView.vue'
 import WarehouseIndex from '../views/warehouse/Index.vue'
 import ReportsIndex from '../views/reports/Index.vue'
 import SettingsIndex from '../views/settings/Index.vue'
@@ -49,6 +50,7 @@ const router = createRouter({
         { path: 'production', name: 'production', component: ProductionIndex, meta: { title: '生产概览', ...authRequired } },
         { path: 'production-plan/:id?', name: 'production-plan', component: ProductionIndex, meta: { title: '生产概览', ...authRequired } },
         { path: 'equipment', name: 'equipment', component: EquipmentIndex, meta: { title: '设备管理', ...authRequired } },
+        { path: 'equipment/inspection', name: 'equipment-inspection', component: EquipmentInspection, meta: { title: '设备点检', ...authRequired } },
         { path: 'equipment/:id', name: 'equipment-detail', component: EquipmentIndex, meta: { title: '设备管理', ...authRequired } },
         { path: 'inspection/dashboard', name: 'inspection-dashboard', component: InspectionDashboard, meta: { title: '点检统计看板', ...authRequired } },
         { path: 'inspection/records', name: 'inspection-records', component: InspectionRecords, meta: { title: '点检记录', ...authRequired } },
