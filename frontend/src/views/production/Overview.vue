@@ -9,7 +9,6 @@
     </header>
 
     <div class="overview-grid">
-      <!-- 第一行：双仪表盘 -->
       <div class="grid-row gauge-row">
         <div class="overview-card gauge-card gauge-rate">
           <div class="card-title card-title--orange">产量达成率</div>
@@ -27,31 +26,39 @@
         </div>
       </div>
 
-      <!-- 第二行：双表格 -->
-      <div class="grid-row table-row">
-        <div class="overview-card table-card">
+      <div class="grid-row middle-row">
+        <div class="overview-card kpi-card">
           <div class="card-title">生产信息统计</div>
-          <div class="table-wrap">
-            <el-table
-              :data="data.stats_rows"
-              class="dark-table"
-              :show-header="true"
-              stripe
-            >
-              <el-table-column prop="time" label="时间" min-width="72" />
-              <el-table-column prop="today_completed" label="今日完成数" min-width="96" align="right" />
-              <el-table-column prop="today_area_output" label="今日面积产量" min-width="108" align="right">
-                <template #default="{ row }">
-                  {{ formatArea(row.today_area_output) }}
-                </template>
-              </el-table-column>
-              <el-table-column prop="today_defect_total" label="今日缺陷总数" min-width="96" align="right" />
-              <el-table-column prop="daily_defect_rate" label="日不良率" min-width="80" align="right" />
-              <el-table-column prop="today_incoming_boards" label="今日来板数" min-width="96" align="right" />
-            </el-table>
+          <div class="kpi-list">
+            <div v-for="item in kpiItems" :key="item.key" class="kpi-row">
+              <span class="kpi-label">{{ item.label }}</span>
+              <div class="kpi-right">
+                <span class="kpi-value">{{ item.displayValue }}</span>
+                <span
+                  v-if="item.trend"
+                  class="kpi-trend"
+                  :class="{
+                    'kpi-trend--up': item.trend.direction === 'up',
+                    'kpi-trend--down': item.trend.direction === 'down',
+                  }"
+                >
+                  <span class="kpi-arrow">{{ item.trend.direction === 'up' ? '↑' : '↓' }}</span>
+                  {{ item.trend.text }}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 
+        <div class="overview-card chart-card">
+          <div class="card-title">完成数统计图表</div>
+          <div class="chart-wrap">
+            <v-chart class="bar-chart" :option="completionBarOption" autoresize />
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-row detail-row">
         <div class="overview-card table-card">
           <div class="card-title">生产信息详细</div>
           <div class="table-wrap">
@@ -68,16 +75,6 @@
               <el-table-column prop="today_completed" label="今日完成数" min-width="95" align="right" />
               <el-table-column prop="total_completed" label="已完成总数" min-width="95" align="right" />
             </el-table>
-          </div>
-        </div>
-      </div>
-
-      <!-- 第三行：柱状图 -->
-      <div class="grid-row chart-row">
-        <div class="overview-card chart-card">
-          <div class="card-title">完成数统计图表</div>
-          <div class="chart-wrap">
-            <v-chart class="bar-chart" :option="completionBarOption" autoresize />
           </div>
         </div>
       </div>
@@ -114,10 +111,19 @@ const loadError = ref('')
 const displayTime = ref('')
 const weekday = ref('')
 
+const defaultStats = {
+  today_completed: 0,
+  today_area_output: 0,
+  today_defect_total: 0,
+  daily_defect_rate: '0%',
+  today_incoming_boards: 0,
+  trends: {},
+}
+
 const defaultData = {
   achievement_rate: 0,
   production_area: 0,
-  stats_rows: [],
+  stats: { ...defaultStats },
   completion_chart: [],
   detail_rows: [],
 }
@@ -127,6 +133,9 @@ const data = reactive({ ...defaultData })
 function buildRateGaugeOption(value) {
   const ratio = Math.min(Math.max(value / 100, 0), 1)
   return {
+    animation: true,
+    animationDuration: 1200,
+    animationEasing: 'cubicOut',
     series: [
       {
         type: 'gauge',
@@ -154,10 +163,7 @@ function buildRateGaugeOption(value) {
           itemStyle: {
             color: {
               type: 'linear',
-              x: 0,
-              y: 0,
-              x2: 1,
-              y2: 1,
+              x: 0, y: 0, x2: 1, y2: 1,
               colorStops: [
                 { offset: 0, color: '#ffb347' },
                 { offset: 1, color: '#ff6600' },
@@ -184,6 +190,9 @@ function buildAreaGaugeOption(value) {
   const max = Math.max(10, Math.ceil(value / 5) * 5)
   const ratio = Math.min(value / max, 1)
   return {
+    animation: true,
+    animationDuration: 1200,
+    animationEasing: 'cubicOut',
     series: [
       {
         type: 'gauge',
@@ -229,13 +238,45 @@ function buildAreaGaugeOption(value) {
   }
 }
 
-const achievementGaugeOption = computed(() =>
-  buildRateGaugeOption(data.achievement_rate),
-)
+const achievementGaugeOption = computed(() => buildRateGaugeOption(data.achievement_rate))
+const areaGaugeOption = computed(() => buildAreaGaugeOption(data.production_area))
 
-const areaGaugeOption = computed(() =>
-  buildAreaGaugeOption(data.production_area),
-)
+const kpiItems = computed(() => {
+  const s = data.stats
+  const t = s.trends || {}
+  return [
+    {
+      key: 'today_completed',
+      label: '今日完成数',
+      displayValue: formatNumber(s.today_completed),
+      trend: t.today_completed,
+    },
+    {
+      key: 'today_area_output',
+      label: '面积产量',
+      displayValue: formatArea(s.today_area_output),
+      trend: t.today_area_output,
+    },
+    {
+      key: 'today_defect_total',
+      label: '缺陷总数',
+      displayValue: formatNumber(s.today_defect_total),
+      trend: t.today_defect_total,
+    },
+    {
+      key: 'daily_defect_rate',
+      label: '不良率',
+      displayValue: s.daily_defect_rate,
+      trend: t.daily_defect_rate,
+    },
+    {
+      key: 'today_incoming_boards',
+      label: '来板数',
+      displayValue: formatNumber(s.today_incoming_boards),
+      trend: t.today_incoming_boards,
+    },
+  ]
+})
 
 const completionBarOption = computed(() => ({
   tooltip: {
@@ -283,10 +324,7 @@ const completionBarOption = computed(() => ({
         borderRadius: [3, 3, 0, 0],
         color: {
           type: 'linear',
-          x: 0,
-          y: 1,
-          x2: 0,
-          y2: 0,
+          x: 0, y: 1, x2: 0, y2: 0,
           colorStops: [
             { offset: 0, color: '#1e3a8a' },
             { offset: 1, color: '#3b82f6' },
@@ -303,10 +341,7 @@ const completionBarOption = computed(() => ({
         borderRadius: [3, 3, 0, 0],
         color: {
           type: 'linear',
-          x: 0,
-          y: 1,
-          x2: 0,
-          y2: 0,
+          x: 0, y: 1, x2: 0, y2: 0,
           colorStops: [
             { offset: 0, color: '#0e7490' },
             { offset: 1, color: '#22d3ee' },
@@ -322,6 +357,10 @@ function formatGaugeValue(val) {
   return val.toFixed(1)
 }
 
+function formatNumber(val) {
+  return Number(val).toLocaleString('zh-CN')
+}
+
 function formatArea(val) {
   return Number(val).toLocaleString('zh-CN', { maximumFractionDigits: 1 })
 }
@@ -330,7 +369,7 @@ function applyData(resp) {
   Object.assign(data, {
     achievement_rate: resp.achievement_rate,
     production_area: resp.production_area,
-    stats_rows: resp.stats_rows || [],
+    stats: resp.stats || { ...defaultStats },
     completion_chart: resp.completion_chart || [],
     detail_rows: resp.detail_rows || [],
   })
@@ -377,7 +416,7 @@ onUnmounted(() => {
   max-width: calc(100% + 40px);
   min-width: 0;
   min-height: 100%;
-  padding: 12px 16px 16px;
+  padding: 10px 14px 14px;
   background: #040a1a;
   color: #fff;
   box-sizing: border-box;
@@ -391,14 +430,14 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   position: relative;
-  margin-bottom: 12px;
-  padding: 4px 0 8px;
+  margin-bottom: 10px;
+  padding: 2px 0 6px;
   flex-shrink: 0;
 }
 
 .overview-title {
   margin: 0;
-  font-size: 28px;
+  font-size: 26px;
   font-weight: 600;
   color: #fff;
   letter-spacing: 4px;
@@ -416,20 +455,20 @@ onUnmounted(() => {
 }
 
 .datetime-text {
-  font-size: 14px;
+  font-size: 13px;
   color: rgba(255, 255, 255, 0.75);
   font-family: 'Courier New', monospace;
 }
 
 .weekday-text {
-  font-size: 13px;
+  font-size: 12px;
   color: rgba(255, 255, 255, 0.55);
 }
 
 .overview-grid {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   flex: 1;
   min-height: 0;
   width: 100%;
@@ -444,20 +483,22 @@ onUnmounted(() => {
 .gauge-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 12px;
+  gap: 10px;
   flex-shrink: 0;
 }
 
-.table-row {
+.middle-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 12px;
+  gap: 10px;
   flex: 1;
-  min-height: 180px;
+  min-height: 200px;
 }
 
-.chart-row {
+.detail-row {
   flex-shrink: 0;
+  min-height: 160px;
+  max-height: 220px;
 }
 
 .overview-card {
@@ -470,10 +511,10 @@ onUnmounted(() => {
 
 .card-title {
   text-align: center;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 500;
   color: rgba(255, 255, 255, 0.85);
-  padding: 10px 12px 6px;
+  padding: 8px 12px 4px;
   letter-spacing: 1px;
 }
 
@@ -483,7 +524,6 @@ onUnmounted(() => {
 
 .gauge-card {
   min-height: 180px;
-  border-color: rgba(255, 153, 0, 0.35);
 }
 
 .gauge-rate {
@@ -493,6 +533,7 @@ onUnmounted(() => {
     rgba(255, 153, 0, 0.28) 38%,
     rgba(10, 26, 58, 0.88) 100%
   );
+  border-color: rgba(255, 153, 0, 0.35);
 }
 
 .gauge-area {
@@ -502,11 +543,12 @@ onUnmounted(() => {
     rgba(245, 166, 35, 0.12) 45%,
     rgba(10, 26, 58, 0.92) 100%
   );
+  border-color: rgba(245, 166, 35, 0.28);
 }
 
 .gauge-body {
   position: relative;
-  height: 130px;
+  height: 120px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -516,16 +558,16 @@ onUnmounted(() => {
 
 .gauge-chart {
   width: 100%;
-  height: 110px;
+  height: 100px;
   min-width: 0;
 }
 
 .gauge-value {
   position: absolute;
-  bottom: 8px;
+  bottom: 6px;
   left: 50%;
   transform: translateX(-50%);
-  font-size: 36px;
+  font-size: 32px;
   font-weight: 700;
   color: #ff9900;
   line-height: 1;
@@ -536,16 +578,92 @@ onUnmounted(() => {
   color: #ffb84d;
 }
 
-.table-card,
-.chart-card {
+.kpi-card,
+.chart-card,
+.table-card {
   background: #0a1a3a;
   display: flex;
   flex-direction: column;
   min-height: 0;
 }
 
-.chart-card {
-  min-height: 240px;
+.kpi-list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-evenly;
+  padding: 4px 16px 12px;
+  gap: 2px;
+}
+
+.kpi-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.kpi-row:last-child {
+  border-bottom: none;
+}
+
+.kpi-label {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.55);
+  flex-shrink: 0;
+}
+
+.kpi-right {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.kpi-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.kpi-trend {
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.kpi-trend--up {
+  color: #ff9900;
+}
+
+.kpi-trend--down {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.kpi-arrow {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.chart-wrap {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 8px 10px;
+}
+
+.bar-chart {
+  width: 100%;
+  height: 100%;
+  min-height: 180px;
+  min-width: 0;
 }
 
 .table-wrap {
@@ -555,21 +673,6 @@ onUnmounted(() => {
   overflow-x: auto;
   overflow-y: auto;
   padding: 0 8px 8px;
-}
-
-.chart-wrap {
-  flex: 1;
-  min-height: 0;
-  min-width: 0;
-  overflow: hidden;
-  padding: 0 8px 12px;
-}
-
-.bar-chart {
-  width: 100%;
-  height: 100%;
-  min-height: 220px;
-  min-width: 0;
 }
 
 .dark-table {
@@ -592,17 +695,17 @@ onUnmounted(() => {
   background: rgba(6, 20, 48, 0.95) !important;
   color: rgba(255, 255, 255, 0.75) !important;
   font-weight: 500;
-  font-size: 13px;
+  font-size: 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
-  padding: 8px 0;
+  padding: 7px 0;
 }
 
 .dark-table :deep(td.el-table__cell) {
   background: transparent !important;
   color: rgba(255, 255, 255, 0.82) !important;
-  font-size: 13px;
+  font-size: 12px;
   border-bottom: none !important;
-  padding: 7px 0;
+  padding: 6px 0;
 }
 
 .dark-table :deep(.el-table__row--striped td.el-table__cell) {

@@ -6,7 +6,8 @@ from app.schemas import (
     CompletionChartPoint,
     ProductionDetailRow,
     ProductionOverviewResponse,
-    ProductionStatsRow,
+    ProductionOverviewStats,
+    ProductionStatTrend,
 )
 
 router = APIRouter(prefix="/api/production", tags=["production"])
@@ -16,32 +17,20 @@ def _mock_production_overview() -> ProductionOverviewResponse:
     return ProductionOverviewResponse(
         achievement_rate=4,
         production_area=4,
-        stats_rows=[
-            ProductionStatsRow(
-                time="08:00",
-                today_completed=1250,
-                today_area_output=3850.5,
-                today_defect_total=12,
-                daily_defect_rate="0.96%",
-                today_incoming_boards=1300,
-            ),
-            ProductionStatsRow(
-                time="09:00",
-                today_completed=2480,
-                today_area_output=7620.0,
-                today_defect_total=18,
-                daily_defect_rate="0.73%",
-                today_incoming_boards=2550,
-            ),
-            ProductionStatsRow(
-                time="10:00",
-                today_completed=3720,
-                today_area_output=11450.8,
-                today_defect_total=25,
-                daily_defect_rate="0.67%",
-                today_incoming_boards=3800,
-            ),
-        ],
+        stats=ProductionOverviewStats(
+            today_completed=3720,
+            today_area_output=11450.8,
+            today_defect_total=25,
+            daily_defect_rate="0.67%",
+            today_incoming_boards=3800,
+            trends={
+                "today_completed": ProductionStatTrend(direction="up", text="8.2%"),
+                "today_area_output": ProductionStatTrend(direction="up", text="5.6%"),
+                "today_defect_total": ProductionStatTrend(direction="down", text="12.0%"),
+                "daily_defect_rate": ProductionStatTrend(direction="down", text="0.15%"),
+                "today_incoming_boards": ProductionStatTrend(direction="up", text="3.1%"),
+            },
+        ),
         completion_chart=[
             CompletionChartPoint(label="08:00", lot_output=1200000, model_output=980000),
             CompletionChartPoint(label="10:00", lot_output=2800000, model_output=2100000),
