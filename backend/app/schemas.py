@@ -671,3 +671,77 @@ class EquipmentMaintenanceStatusResponse(BaseModel):
     active_plans: int
     pending_orders: int
     next_due_at: datetime | None = None
+
+
+class QualityKpiItem(BaseModel):
+    key: str
+    label: str
+    value: float
+    unit: str = "%"
+    change: float | None = None
+    change_direction: str | None = None
+
+
+class QualityKpiResponse(BaseModel):
+    period: str
+    items: list[QualityKpiItem]
+
+
+class QualityTrendPoint(BaseModel):
+    label: str
+    yield_rate: float
+    defect_rate: float
+
+
+class QualityTrendResponse(BaseModel):
+    granularity: str
+    points: list[QualityTrendPoint]
+
+
+class QualityProcessYieldItem(BaseModel):
+    process: str
+    yield_rate: float
+    total_inspected: int
+
+
+class QualityProcessYieldResponse(BaseModel):
+    items: list[QualityProcessYieldItem]
+
+
+class QualityDefectDistributionItem(BaseModel):
+    name: str
+    value: int
+
+
+class QualityDefectDistributionResponse(BaseModel):
+    by: str
+    items: list[QualityDefectDistributionItem]
+
+
+class QualityAnomalyItem(BaseModel):
+    id: int
+    production_line: str
+    process: str
+    defect_type: str
+    severity: str
+    status: str
+    discovered_at: datetime
+    handler: str | None = None
+
+
+class QualityAnomalyListResponse(BaseModel):
+    items: list[QualityAnomalyItem]
+    total: int
+
+
+class QualityTopDefectItem(BaseModel):
+    rank: int
+    defect_type: str
+    production_line: str
+    process: str
+    product_code: str
+    quantity: int
+
+
+class QualityTopDefectResponse(BaseModel):
+    items: list[QualityTopDefectItem]

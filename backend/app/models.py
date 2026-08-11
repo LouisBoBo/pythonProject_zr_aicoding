@@ -237,3 +237,47 @@ class InspectionRecordItem(Base):
     remark: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     record: Mapped["InspectionRecord"] = relationship(back_populates="items")
+
+
+class QualityMetrics(Base):
+    __tablename__ = "quality_metrics"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    record_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    production_line: Mapped[str] = mapped_column(String(50), nullable=False)
+    process: Mapped[str] = mapped_column(String(50), nullable=False)
+    good_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    defect_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    scrap_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    total_inspected: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class QualityAnomaly(Base):
+    __tablename__ = "quality_anomalies"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    production_line: Mapped[str] = mapped_column(String(50), nullable=False)
+    process: Mapped[str] = mapped_column(String(50), nullable=False)
+    defect_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    severity: Mapped[str] = mapped_column(String(20), nullable=False, default="minor")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="open")
+    discovered_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    handler: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
+    defect_details: Mapped[list["QualityDefectDetail"]] = relationship(
+        back_populates="anomaly", cascade="all, delete-orphan"
+    )
+
+
+class QualityDefectDetail(Base):
+    __tablename__ = "quality_defect_details"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    anomaly_id: Mapped[int | None] = mapped_column(ForeignKey("quality_anomalies.id"), nullable=True)
+    defect_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    product_code: Mapped[str] = mapped_column(String(50), nullable=False)
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    production_line: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    process: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
+    anomaly: Mapped["QualityAnomaly | None"] = relationship(back_populates="defect_details")

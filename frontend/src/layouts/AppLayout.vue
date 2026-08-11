@@ -233,7 +233,7 @@ const menuGroups = [
         icon: Grid,
         children: [
           { path: '/kanban/production', title: '生产看板', icon: SetUp },
-          { path: '/kanban/quality', title: '品质看板', icon: DataAnalysis },
+          { path: '/quality/dashboard', title: '品质看板', icon: DataAnalysis },
           { path: '/kanban/equipment', title: '设备看板', icon: Cpu },
           { path: '/kanban/warehouse', title: '仓储看板', icon: Box },
           { path: '/kanban/general', title: '综合看板', icon: DataLine },

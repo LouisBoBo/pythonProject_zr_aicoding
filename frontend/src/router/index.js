@@ -6,6 +6,7 @@ import HomeIndex from '../views/home/Index.vue'
 import FavoritesIndex from '../views/favorites/Index.vue'
 import WorkbenchIndex from '../views/workbench/Index.vue'
 import QualityIndex from '../views/quality/Index.vue'
+import QualityDashboardView from '../views/quality/DashboardView.vue'
 import ProductionIndex from '../views/production/Index.vue'
 import EquipmentInspection from '../views/equipment/InspectionView.vue'
 import EquipmentLedgerView from '../views/equipment/EquipmentLedgerView.vue'
@@ -44,6 +45,7 @@ const router = createRouter({
         { path: 'favorites', name: 'favorites', component: FavoritesIndex, meta: { title: '收藏夹', ...authRequired } },
         { path: 'workbench', name: 'workbench', component: WorkbenchIndex, meta: { title: '工作台', ...authRequired } },
         { path: 'quality', name: 'quality', component: QualityIndex, meta: { title: '品质分析', ...authRequired } },
+        { path: 'quality/dashboard', name: 'quality-dashboard', component: QualityDashboardView, meta: { title: '品质看板', ...authRequired } },
         { path: 'quality/:id', name: 'quality-detail', component: QualityIndex, meta: { title: '品质分析', ...authRequired } },
         { path: 'production', name: 'production', component: ProductionIndex, meta: { title: '生产概览', ...authRequired } },
         { path: 'production-plan/:id?', name: 'production-plan', component: ProductionIndex, meta: { title: '生产概览', ...authRequired } },
@@ -105,7 +107,7 @@ const router = createRouter({
         ...kanbanRoutes.map(({ path, title, category }) => ({
           path: `kanban/${path}`,
           name: `kanban-${path}`,
-          component: path === 'production' ? ProductionKanbanView : KanbanBoardsView,
+          component: path === 'production' ? ProductionKanbanView : path === 'quality' ? QualityDashboardView : KanbanBoardsView,
           meta: { title, category, ...authRequired },
         })),
         {

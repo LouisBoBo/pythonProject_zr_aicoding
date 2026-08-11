@@ -17,9 +17,12 @@ from app.models import (
     InspectionPlanItem,
     InspectionRecord,
     InspectionRecordItem,
+    QualityAnomaly,
+    QualityDefectDetail,
+    QualityMetrics,
     User,
 )
-from app.routers import auth, dashboard, devices, equipment, equipment_maintenance, inspection, kanban_boards, kanban_production, production, work_orders
+from app.routers import auth, dashboard, devices, equipment, equipment_maintenance, inspection, kanban_boards, kanban_production, production, quality, work_orders
 
 
 def seed_default_user():
@@ -267,6 +270,114 @@ def seed_equipment_maintenance_data():
         db.close()
 
 
+def seed_quality_data():
+    db = SessionLocal()
+    try:
+        if db.query(QualityMetrics).first():
+            return
+
+        lines = ["SMT-1线", "SMT-2线", "DIP线", "组装线", "测试线"]
+        processes = ["贴片", "焊接", "AOI检测", "功能测试", "包装"]
+        defect_types = ["虚焊", "短路", "元件偏移", "漏件", "外观不良", "功能异常", "尺寸偏差"]
+        product_codes = ["PCB-A100", "PCB-A200", "PCB-B300", "PCB-C400", "PCB-D500"]
+        today = date.today()
+
+        metrics = []
+        for day_offset in range(30):
+            record_date = today - timedelta(days=29 - day_offset)
+            for line in lines:
+                for process in processes:
+                    total = 800 + (day_offset * 3) + hash(f"{line}{process}") % 120
+                    defect = int(total * (0.015 + (hash(record_date.isoformat() + line) % 8) / 1000))
+                    scrap = int(total * (0.003 + (hash(process) % 5) / 2000))
+                    good = total - defect - scrap
+                    metrics.append(
+                        QualityMetrics(
+                            record_date=record_date,
+                            production_line=line,
+                            process=process,
+                            good_count=max(good, 0),
+                            defect_count=defect,
+                            scrap_count=scrap,
+                            total_inspected=total,
+                        )
+                    )
+        db.add_all(metrics)
+
+        anomalies = [
+            QualityAnomaly(
+                production_line="SMT-1线",
+                process="焊接",
+                defect_type="虚焊",
+                severity="critical",
+                status="open",
+                discovered_at=datetime.utcnow() - timedelta(hours=2),
+            ),
+            QualityAnomaly(
+                production_line="SMT-2线",
+                process="AOI检测",
+                defect_type="短路",
+                severity="major",
+                status="open",
+                discovered_at=datetime.utcnow() - timedelta(hours=5),
+            ),
+            QualityAnomaly(
+                production_line="DIP线",
+                process="功能测试",
+                defect_type="功能异常",
+                severity="major",
+                status="open",
+                discovered_at=datetime.utcnow() - timedelta(hours=8),
+            ),
+            QualityAnomaly(
+                production_line="组装线",
+                process="包装",
+                defect_type="外观不良",
+                severity="minor",
+                status="open",
+                discovered_at=datetime.utcnow() - timedelta(hours=12),
+            ),
+            QualityAnomaly(
+                production_line="测试线",
+                process="功能测试",
+                defect_type="尺寸偏差",
+                severity="minor",
+                status="processing",
+                discovered_at=datetime.utcnow() - timedelta(days=1),
+                handler="张工",
+            ),
+            QualityAnomaly(
+                production_line="SMT-1线",
+                process="贴片",
+                defect_type="元件偏移",
+                severity="major",
+                status="closed",
+                discovered_at=datetime.utcnow() - timedelta(days=2),
+                handler="李工",
+            ),
+        ]
+        db.add_all(anomalies)
+        db.flush()
+
+        defect_details = []
+        for idx, dtype in enumerate(defect_types):
+            for j in range(3):
+                defect_details.append(
+                    QualityDefectDetail(
+                        anomaly_id=anomalies[idx % len(anomalies)].id if idx < 4 else None,
+                        defect_type=dtype,
+                        product_code=product_codes[(idx + j) % len(product_codes)],
+                        quantity=120 - idx * 8 + j * 15,
+                        production_line=lines[(idx + j) % len(lines)],
+                        process=processes[(idx + j) % len(processes)],
+                    )
+                )
+        db.add_all(defect_details)
+        db.commit()
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
@@ -274,6 +385,7 @@ async def lifespan(app: FastAPI):
     seed_inspection_data()
     seed_equipment_data()
     seed_equipment_maintenance_data()
+    seed_quality_data()
     yield
 
 
@@ -297,6 +409,7 @@ app.include_router(devices.router)
 app.include_router(inspection.router)
 app.include_router(equipment.router)
 app.include_router(equipment_maintenance.router)
+app.include_router(quality.router)
 
 
 @app.get("/api/health")
