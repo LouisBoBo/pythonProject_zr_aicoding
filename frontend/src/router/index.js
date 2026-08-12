@@ -13,6 +13,8 @@ import EquipmentLedgerView from '../views/equipment/EquipmentLedgerView.vue'
 import EquipmentDetailView from '../views/equipment/EquipmentDetailView.vue'
 import MaintenancePlansView from '../views/equipment/MaintenancePlansView.vue'
 import MaintenanceOrdersView from '../views/equipment/MaintenanceOrdersView.vue'
+import RepairManagement from '../views/equipment/RepairManagement.vue'
+import RepairDetail from '../views/equipment/RepairDetail.vue'
 import WarehouseIndex from '../views/warehouse/Index.vue'
 import ReportsIndex from '../views/reports/Index.vue'
 import SettingsIndex from '../views/settings/Index.vue'
@@ -21,6 +23,8 @@ import HelpIndex from '../views/help/Index.vue'
 import WorkOrdersView from '../views/WorkOrdersView.vue'
 import KanbanBoardsView from '../views/KanbanBoardsView.vue'
 import ProductionKanbanView from '../views/kanban/ProductionKanbanView.vue'
+import DeviceDashboard from '../views/board/DeviceDashboard.vue'
+import WarehouseDashboard from '../views/board/WarehouseDashboard.vue'
 const authRequired = { requiresAuth: true }
 
 const kanbanRoutes = [
@@ -75,6 +79,18 @@ const router = createRouter({
           component: MaintenanceOrdersView,
           meta: { title: '保养工单', ...authRequired },
         },
+        {
+          path: 'equipment/repairs',
+          name: 'equipment-repairs',
+          component: RepairManagement,
+          meta: { title: '维修管理', ...authRequired },
+        },
+        {
+          path: 'equipment/repairs/:id',
+          name: 'equipment-repair-detail',
+          component: RepairDetail,
+          meta: { title: '维修详情', ...authRequired },
+        },
         { path: 'inspection/dashboard', redirect: { path: '/equipment/inspection', query: { tab: 'dashboard' } } },
         { path: 'inspection/records', redirect: (to) => ({ path: '/equipment/inspection', query: { tab: 'records', ...to.query } }) },
         { path: 'inspection/execute', redirect: { path: '/equipment/inspection', query: { tab: 'execute' } } },
@@ -107,7 +123,12 @@ const router = createRouter({
         ...kanbanRoutes.map(({ path, title, category }) => ({
           path: `kanban/${path}`,
           name: `kanban-${path}`,
-          component: path === 'production' ? ProductionKanbanView : path === 'quality' ? QualityDashboardView : KanbanBoardsView,
+          component:
+            path === 'production' ? ProductionKanbanView
+            : path === 'quality' ? QualityDashboardView
+            : path === 'equipment' ? DeviceDashboard
+            : path === 'warehouse' ? WarehouseDashboard
+            : KanbanBoardsView,
           meta: { title, category, ...authRequired },
         })),
         {

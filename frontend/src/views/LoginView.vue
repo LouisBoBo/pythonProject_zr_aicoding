@@ -332,6 +332,9 @@ onMounted(() => {
   height: 100vh;
   overflow: hidden;
   font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  background:
+    radial-gradient(ellipse 80% 60% at 30% 20%, rgba(20, 60, 120, 0.45) 0%, transparent 70%),
+    linear-gradient(160deg, #0a1a3a 0%, #123068 38%, #0d2555 68%, #0a1a3a 100%);
 }
 
 /* ===== 左侧 60% ===== */
@@ -339,9 +342,6 @@ onMounted(() => {
   flex: 0 0 60%;
   display: flex;
   flex-direction: column;
-  background:
-    radial-gradient(ellipse 80% 60% at 30% 20%, rgba(20, 60, 120, 0.45) 0%, transparent 70%),
-    linear-gradient(160deg, #0a1a3a 0%, #123068 38%, #0d2555 68%, #0a1a3a 100%);
   color: #fff;
   position: relative;
   overflow: hidden;
@@ -510,7 +510,6 @@ onMounted(() => {
   flex: 0 0 40%;
   display: flex;
   flex-direction: column;
-  background: #ffffff;
   min-height: 100vh;
 }
 
@@ -539,13 +538,10 @@ onMounted(() => {
 .login-card {
   width: 100%;
   max-width: 400px;
-  background: #fff;
-  border-radius: 6px;
-  padding: 32px 36px 36px;
-  box-shadow:
-    0 2px 8px rgba(10, 26, 58, 0.06),
-    0 8px 32px rgba(10, 26, 58, 0.12);
-  border: 1px solid rgba(10, 26, 58, 0.06);
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 36px 36px 40px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.35), 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .card-brand {
@@ -567,14 +563,14 @@ onMounted(() => {
 .card-company {
   font-size: 20px;
   font-weight: 700;
-  color: #0a1a3a;
+  color: #1a1a2e;
   margin: 0 0 6px;
   letter-spacing: 0.5px;
 }
 
 .card-company-sub {
   font-size: 13px;
-  color: #999;
+  color: #666;
   margin: 0;
 }
 
@@ -592,13 +588,14 @@ onMounted(() => {
   align-items: center;
   gap: 6px;
   font-size: 13px;
-  color: #666;
+  color: #333;
   margin-bottom: 8px;
+  font-weight: 500;
 }
 
 .field-icon {
   font-size: 15px;
-  color: #aaa;
+  color: #888;
 }
 
 .field-control {
@@ -607,20 +604,36 @@ onMounted(() => {
 
 .field-control :deep(.el-input__wrapper),
 .field-control :deep(.el-select__wrapper) {
-  border-radius: 4px;
-  box-shadow: 0 0 0 1px #dcdfe6 inset;
+  border-radius: 6px;
+  box-shadow: 0 0 0 1px #d9d9d9 inset;
+  background: #fafafa;
   padding: 4px 12px;
   min-height: 40px;
 }
 
 .field-control :deep(.el-input__wrapper:hover),
 .field-control :deep(.el-select__wrapper:hover) {
-  box-shadow: 0 0 0 1px #b0b8c4 inset;
+  box-shadow: 0 0 0 1px #b3b3b3 inset;
 }
 
 .field-control :deep(.el-input__wrapper.is-focus),
 .field-control :deep(.el-select__wrapper.is-focused) {
-  box-shadow: 0 0 0 1px #0a1a3a inset;
+  box-shadow: 0 0 0 1px #1677ff inset;
+  background: #fff;
+}
+
+.field-control :deep(.el-input__inner),
+.field-control :deep(.el-select .el-input__inner) {
+  color: #333;
+}
+
+.field-control :deep(.el-input__inner::placeholder),
+.field-control :deep(.el-select .el-input__inner::placeholder) {
+  color: #bbb;
+}
+
+.field-control :deep(.el-select .el-select__caret) {
+  color: #999;
 }
 
 .checkbox-row {
@@ -633,11 +646,16 @@ onMounted(() => {
 
 .checkbox-row :deep(.el-checkbox__label) {
   font-size: 13px;
-  color: #666;
+  color: #555;
+}
+
+.checkbox-row :deep(.el-checkbox__inner) {
+  background: #fafafa;
+  border-color: #d9d9d9;
 }
 
 .error-msg {
-  color: #e53e3e;
+  color: #ff4d4f;
   font-size: 13px;
   text-align: center;
   margin: -8px 0 12px;
@@ -648,16 +666,18 @@ onMounted(() => {
   height: 44px;
   font-size: 16px;
   font-weight: 600;
-  border-radius: 4px;
-  background: #0a1a3a;
-  border-color: #0a1a3a;
+  border-radius: 6px;
+  background: #1677ff;
+  border-color: #1677ff;
+  color: #fff;
   letter-spacing: 6px;
 }
 
 .login-btn:hover,
 .login-btn:focus {
-  background: #0d2555;
-  border-color: #0d2555;
+  background: #4096ff;
+  border-color: #4096ff;
+  color: #fff;
 }
 
 /* ===== 响应式 ===== */
@@ -674,6 +694,10 @@ onMounted(() => {
   .title-sub {
     font-size: 24px;
   }
+
+  .login-card {
+    padding: 28px 24px 32px;
+  }
 }
 
 @media (max-width: 960px) {
@@ -689,6 +713,10 @@ onMounted(() => {
   }
 
   .login-left {
+    min-height: auto;
+  }
+
+  .login-right {
     min-height: auto;
   }
 
@@ -729,6 +757,33 @@ onMounted(() => {
 
   .charts-row {
     display: none;
+  }
+
+  .login-card-wrap {
+    padding: 24px 16px 32px;
+  }
+
+  .login-card {
+    padding: 24px 20px 28px;
+  }
+}
+
+@media (max-width: 480px) {
+  .login-card-wrap {
+    padding: 16px 12px 24px;
+  }
+
+  .login-card {
+    padding: 20px 16px 24px;
+    border-radius: 10px;
+  }
+
+  .card-company {
+    font-size: 18px;
+  }
+
+  .checkbox-row {
+    gap: 12px;
   }
 }
 </style>

@@ -248,6 +248,7 @@ const menuGroups = [
           { path: '/equipment/inspection', title: '设备点检', icon: List },
           { path: '/equipment/maintenance-plans', title: '保养计划', icon: Calendar },
           { path: '/equipment/maintenance-orders', title: '保养工单', icon: Tools },
+          { path: '/equipment/repairs', title: '维修管理', icon: SetUp },
         ],
       },
       { path: '/warehouse', title: '仓储管理', icon: Box },
@@ -332,6 +333,9 @@ function isChildActive(path) {
     return false
   }
   if (path === '/equipment/ledger' && route.path.startsWith('/equipment/maintenance-')) {
+    return false
+  }
+  if (path === '/equipment/ledger' && route.path.startsWith('/equipment/repairs')) {
     return false
   }
   if (path === '/equipment/ledger' && route.path.startsWith('/equipment/ledger/')) {

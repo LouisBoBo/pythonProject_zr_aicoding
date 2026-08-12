@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -171,6 +171,9 @@ class Equipment(Base):
     maintenance_orders: Mapped[list["EquipmentMaintenanceOrder"]] = relationship(
         back_populates="equipment"
     )
+    repairs: Mapped[list["EquipmentRepair"]] = relationship(
+        back_populates="equipment"
+    )
 
 
 class EquipmentMaintenancePlan(Base):
@@ -223,6 +226,51 @@ class EquipmentMaintenanceOrder(Base):
 
     plan: Mapped["EquipmentMaintenancePlan | None"] = relationship(back_populates="orders")
     equipment: Mapped["Equipment"] = relationship(back_populates="maintenance_orders")
+
+
+class EquipmentRepair(Base):
+    """设备维修工单"""
+    __tablename__ = "equipment_repairs"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    repair_no: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
+    equipment_id: Mapped[int] = mapped_column(ForeignKey("equipment.id"), nullable=False)
+    fault_category: Mapped[str] = mapped_column(String(50), nullable=False, default="机械故障")
+    fault_description: Mapped[str] = mapped_column(Text, nullable=False)
+    urgency: Mapped[str] = mapped_column(String(20), nullable=False, default="normal")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    reporter: Mapped[str] = mapped_column(String(50), nullable=False)
+    repair_person: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    start_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    completion_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    repair_description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    images: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    equipment: Mapped["Equipment"] = relationship(back_populates="repairs")
+    parts: Mapped[list["EquipmentRepairPart"]] = relationship(
+        back_populates="repair", cascade="all, delete-orphan"
+    )
+
+
+class EquipmentRepairPart(Base):
+    """维修更换配件"""
+    __tablename__ = "equipment_repair_parts"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    repair_id: Mapped[int] = mapped_column(ForeignKey("equipment_repairs.id"), nullable=False)
+    part_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    part_spec: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    unit: Mapped[str] = mapped_column(String(20), nullable=False, default="个")
+    unit_price: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False, default=0)
+
+    repair: Mapped["EquipmentRepair"] = relationship(back_populates="parts")
 
 
 class InspectionRecordItem(Base):

@@ -673,6 +673,107 @@ class EquipmentMaintenanceStatusResponse(BaseModel):
     next_due_at: datetime | None = None
 
 
+# --- Equipment Repair ---
+
+RepairUrgency = Literal["low", "normal", "high", "urgent"]
+RepairStatus = Literal["pending", "in_progress", "completed", "closed"]
+
+FAULT_CATEGORIES = [
+    "机械故障", "电气故障", "液压故障", "气动故障",
+    "控制系统故障", "传动故障", "润滑故障", "其他",
+]
+
+
+class EquipmentRepairPartCreate(BaseModel):
+    part_name: str = Field(min_length=1, max_length=100)
+    part_spec: str | None = Field(default=None, max_length=100)
+    quantity: int = Field(default=1, ge=1)
+    unit: str = Field(default="个", max_length=20)
+    unit_price: float = Field(default=0, ge=0)
+
+
+class EquipmentRepairPartResponse(BaseModel):
+    id: int
+    repair_id: int
+    part_name: str
+    part_spec: str | None
+    quantity: int
+    unit: str
+    unit_price: float
+
+    model_config = {"from_attributes": True}
+
+
+class EquipmentRepairCreate(BaseModel):
+    equipment_id: int
+    fault_category: str = Field(default="机械故障", max_length=50)
+    fault_description: str = Field(min_length=1, max_length=2000)
+    urgency: RepairUrgency = "normal"
+    reporter: str = Field(min_length=1, max_length=50)
+    images: list[str] | None = Field(default=None)
+
+
+class EquipmentRepairUpdate(BaseModel):
+    equipment_id: int | None = None
+    fault_category: str | None = Field(default=None, max_length=50)
+    fault_description: str | None = Field(default=None, min_length=1, max_length=2000)
+    urgency: RepairUrgency | None = None
+    status: RepairStatus | None = None
+    reporter: str | None = Field(default=None, min_length=1, max_length=50)
+    repair_person: str | None = Field(default=None, max_length=50)
+    repair_description: str | None = Field(default=None, max_length=2000)
+    images: list[str] | None = None
+    parts: list[EquipmentRepairPartCreate] | None = None
+
+
+class EquipmentRepairListItem(BaseModel):
+    id: int
+    repair_no: str
+    equipment_id: int
+    equipment_code: str | None = None
+    equipment_name: str | None = None
+    fault_category: str
+    fault_description: str
+    urgency: str
+    status: str
+    reporter: str
+    repair_person: str | None
+    completion_time: datetime | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class EquipmentRepairListResponse(BaseModel):
+    items: list[EquipmentRepairListItem]
+    total: int
+    page: int
+    page_size: int
+
+
+class EquipmentRepairDetail(BaseModel):
+    id: int
+    repair_no: str
+    equipment_id: int
+    equipment_code: str | None = None
+    equipment_name: str | None = None
+    fault_category: str
+    fault_description: str
+    urgency: str
+    status: str
+    reporter: str
+    repair_person: str | None
+    start_time: datetime | None
+    completion_time: datetime | None
+    repair_description: str | None
+    images: list[str] | None
+    parts: list[EquipmentRepairPartResponse] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class QualityKpiItem(BaseModel):
     key: str
     label: str
@@ -745,3 +846,74 @@ class QualityTopDefectItem(BaseModel):
 
 class QualityTopDefectResponse(BaseModel):
     items: list[QualityTopDefectItem]
+
+
+# ============================================================
+#  Device Dashboard (设备看板)
+# ============================================================
+
+class DeviceStatusSummaryItem(BaseModel):
+    status: str
+    count: int
+    percent: float
+    color: str
+
+
+class DeviceStatusSummaryResponse(BaseModel):
+    items: list[DeviceStatusSummaryItem]
+    total: int
+
+
+class DeviceOEEResponse(BaseModel):
+    availability: float
+    performance: float
+    quality: float
+    oee: float
+
+
+class DeviceDashboardListItem(BaseModel):
+    code: str
+    name: str
+    status: str
+    runtime_hours: float
+    last_alarm: str | None = None
+
+
+class DeviceDashboardListResponse(BaseModel):
+    items: list[DeviceDashboardListItem]
+    total: int
+    page: int
+    page_size: int
+
+
+class DeviceUtilizationPoint(BaseModel):
+    label: str
+    value: float
+
+
+class DeviceUtilizationResponse(BaseModel):
+    period: str
+    labels: list[str]
+    values: list[float]
+
+
+class DeviceAlarmTypeItem(BaseModel):
+    name: str
+    value: int
+
+
+class DeviceAlarmTrendResponse(BaseModel):
+    labels: list[str]
+    values: list[int]
+    type_distribution: list[DeviceAlarmTypeItem]
+
+
+class DeviceOutputItem(BaseModel):
+    code: str
+    name: str
+    today_output: int
+    week_output: int
+
+
+class DeviceOutputResponse(BaseModel):
+    items: list[DeviceOutputItem]

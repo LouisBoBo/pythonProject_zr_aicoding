@@ -13,6 +13,8 @@ from app.models import (
     Equipment,
     EquipmentMaintenanceOrder,
     EquipmentMaintenancePlan,
+    EquipmentRepair,
+    EquipmentRepairPart,
     InspectionPlan,
     InspectionPlanItem,
     InspectionRecord,
@@ -22,7 +24,21 @@ from app.models import (
     QualityMetrics,
     User,
 )
-from app.routers import auth, dashboard, devices, equipment, equipment_maintenance, inspection, kanban_boards, kanban_production, production, quality, work_orders
+from app.routers import (
+    auth,
+    dashboard,
+    device_dashboard,
+    devices,
+    equipment,
+    equipment_maintenance,
+    equipment_repair,
+    inspection,
+    kanban_boards,
+    kanban_production,
+    production,
+    quality,
+    work_orders,
+)
 
 
 def seed_default_user():
@@ -140,8 +156,6 @@ def seed_equipment_data():
     try:
         if db.query(Equipment).first():
             return
-
-        from datetime import date
 
         samples = [
             Equipment(
@@ -270,6 +284,84 @@ def seed_equipment_maintenance_data():
         db.close()
 
 
+def seed_equipment_repair_data():
+    db = SessionLocal()
+    try:
+        if db.query(EquipmentRepair).first():
+            return
+
+        equipment_list = db.query(Equipment).all()
+        if not equipment_list:
+            return
+
+        now = datetime.utcnow()
+
+        # Repair 1: completed
+        repair1 = EquipmentRepair(
+            repair_no=f"RE-{now.strftime('%Y%m%d')}-0001",
+            equipment_id=equipment_list[2].id,  # 1号注塑机 (停机)
+            fault_category="液压故障",
+            fault_description="注塑机液压系统压力不稳定，合模时出现异响，生产效率下降约30%",
+            urgency="high",
+            status="completed",
+            reporter="李四",
+            repair_person="王师傅",
+            start_time=now - timedelta(days=3),
+            completion_time=now - timedelta(days=1),
+            repair_description="更换液压泵密封圈，清洗液压阀组，重新校准系统压力至100bar",
+            images=[],
+        )
+        repair1_parts = [
+            EquipmentRepairPart(repair_id=None, part_name="液压泵密封圈", part_spec="Φ80×5.7", quantity=2, unit="套", unit_price=185.00),
+            EquipmentRepairPart(repair_id=None, part_name="液压油滤芯", part_spec="HY-10-25", quantity=1, unit="个", unit_price=420.00),
+            EquipmentRepairPart(repair_id=None, part_name="O型密封圈组", part_spec="NBR-90", quantity=4, unit="个", unit_price=25.00),
+        ]
+        repair1.parts = repair1_parts
+
+        # Repair 2: in_progress
+        repair2 = EquipmentRepair(
+            repair_no=f"RE-{now.strftime('%Y%m%d')}-0002",
+            equipment_id=equipment_list[3].id,  # 自动包装线 (维修)
+            fault_category="传动故障",
+            fault_description="包装线传送带跑偏严重，电机驱动辊筒磨损异响",
+            urgency="urgent",
+            status="in_progress",
+            reporter="赵六",
+            repair_person="张工",
+            start_time=now - timedelta(hours=6),
+            completion_time=None,
+            repair_description=None,
+            images=[],
+        )
+        repair2_parts = [
+            EquipmentRepairPart(repair_id=None, part_name="传送带", part_spec="PVC-1200×3", quantity=1, unit="条", unit_price=2800.00),
+            EquipmentRepairPart(repair_id=None, part_name="驱动辊筒", part_spec="Φ89×1200", quantity=1, unit="根", unit_price=1560.00),
+        ]
+        repair2.parts = repair2_parts
+
+        # Repair 3: pending
+        repair3 = EquipmentRepair(
+            repair_no=f"RE-{now.strftime('%Y%m%d')}-0003",
+            equipment_id=equipment_list[0].id,  # 1号CNC加工中心 (运行)
+            fault_category="控制系统故障",
+            fault_description="CNC控制系统偶尔出现黑屏重启，怀疑主板供电模块异常",
+            urgency="normal",
+            status="pending",
+            reporter="张三",
+            repair_person=None,
+            start_time=None,
+            completion_time=None,
+            repair_description=None,
+            images=[],
+        )
+        repair3_parts = []
+
+        db.add_all([repair1, repair2, repair3])
+        db.commit()
+    finally:
+        db.close()
+
+
 def seed_quality_data():
     db = SessionLocal()
     try:
@@ -385,6 +477,7 @@ async def lifespan(app: FastAPI):
     seed_inspection_data()
     seed_equipment_data()
     seed_equipment_maintenance_data()
+    seed_equipment_repair_data()
     seed_quality_data()
     yield
 
@@ -409,6 +502,8 @@ app.include_router(devices.router)
 app.include_router(inspection.router)
 app.include_router(equipment.router)
 app.include_router(equipment_maintenance.router)
+app.include_router(equipment_repair.router)
+app.include_router(device_dashboard.router)
 app.include_router(quality.router)
 
 
