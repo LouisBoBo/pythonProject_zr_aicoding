@@ -917,3 +917,108 @@ class DeviceOutputItem(BaseModel):
 
 class DeviceOutputResponse(BaseModel):
     items: list[DeviceOutputItem]
+
+
+# ============================================================
+#  Comprehensive Kanban (综合看板)
+# ============================================================
+
+class CompKanbanLineStatus(BaseModel):
+    line_name: str
+    in_production: int
+    completed: int
+    pending: int
+
+
+class CompKanbanTrendPoint(BaseModel):
+    label: str
+    value: float
+
+
+class CompKanbanProductionProgress(BaseModel):
+    active_orders: int
+    completion_rate: float
+    schedule_achievement_trend: list[CompKanbanTrendPoint]
+    line_status: list[CompKanbanLineStatus]
+
+
+class CompKanbanDefectItem(BaseModel):
+    name: str
+    value: int
+
+
+class CompKanbanQualityOverview(BaseModel):
+    yield_trend: list[CompKanbanTrendPoint]
+    yield_target: float
+    first_pass_rate: float
+    defect_distribution: list[CompKanbanDefectItem]
+
+
+class CompKanbanDeviceCard(BaseModel):
+    code: str
+    name: str
+    utilization: float
+    status: str
+
+
+class CompKanbanStatusPie(BaseModel):
+    name: str
+    value: int
+    color: str
+
+
+class CompKanbanDeviceAlert(BaseModel):
+    id: int
+    device_code: str
+    device_name: str
+    alert_type: str
+    severity: str
+    time: str
+    description: str
+
+
+class CompKanbanDeviceMonitor(BaseModel):
+    devices: list[CompKanbanDeviceCard]
+    status_distribution: list[CompKanbanStatusPie]
+    alerts: list[CompKanbanDeviceAlert]
+
+
+class CompKanbanOverdueOrder(BaseModel):
+    order_no: str
+    customer: str
+    overdue_days: int
+    status: str
+
+
+class CompKanbanShipmentStats(BaseModel):
+    this_week: int
+    this_month: int
+
+
+class CompKanbanOrderDelivery(BaseModel):
+    delivery_rate: float
+    monthly_trend: list[CompKanbanTrendPoint]
+    overdue_orders: list[CompKanbanOverdueOrder]
+    shipment_stats: CompKanbanShipmentStats
+
+
+class CompKanbanMaterialItem(BaseModel):
+    name: str
+    current_stock: float
+    safety_line: float
+    max_stock: float
+    status: str  # normal / warning / shortage
+
+
+class CompKanbanMaterialInventory(BaseModel):
+    critical_materials: list[CompKanbanMaterialItem]
+    shortage_alerts: list[str]
+    turnover_days_trend: list[CompKanbanTrendPoint]
+
+
+class ComprehensiveKanbanResponse(BaseModel):
+    production_progress: CompKanbanProductionProgress
+    quality_overview: CompKanbanQualityOverview
+    device_monitor: CompKanbanDeviceMonitor
+    order_delivery: CompKanbanOrderDelivery
+    material_inventory: CompKanbanMaterialInventory

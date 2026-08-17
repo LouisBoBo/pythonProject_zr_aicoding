@@ -34,6 +34,7 @@ from app.routers import (
     equipment_repair,
     inspection,
     kanban_boards,
+    kanban_general,
     kanban_production,
     production,
     quality,
@@ -497,6 +498,7 @@ app.include_router(dashboard.router)
 app.include_router(work_orders.router)
 app.include_router(kanban_boards.router)
 app.include_router(kanban_production.router)
+app.include_router(kanban_general.router)
 app.include_router(production.router)
 app.include_router(devices.router)
 app.include_router(inspection.router)

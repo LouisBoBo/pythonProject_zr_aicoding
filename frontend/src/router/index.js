@@ -23,6 +23,7 @@ import HelpIndex from '../views/help/Index.vue'
 import WorkOrdersView from '../views/WorkOrdersView.vue'
 import KanbanBoardsView from '../views/KanbanBoardsView.vue'
 import ProductionKanbanView from '../views/kanban/ProductionKanbanView.vue'
+import ComprehensiveKanbanView from '../views/kanban/ComprehensiveKanbanView.vue'
 import DeviceDashboard from '../views/board/DeviceDashboard.vue'
 import WarehouseDashboard from '../views/board/WarehouseDashboard.vue'
 const authRequired = { requiresAuth: true }
@@ -110,8 +111,7 @@ const router = createRouter({
           path: 'work-orders/:id?',
           name: 'work-orders',
           component: WorkOrdersView,
-          meta: { title: '生产工单', ...authRequired },
-        },
+          meta: { title: '生产工单', ...authRequired } },
         {
           path: 'kanban-boards/new',
           redirect: { path: '/kanban/production', query: { create: '1' } },
@@ -128,6 +128,7 @@ const router = createRouter({
             : path === 'quality' ? QualityDashboardView
             : path === 'equipment' ? DeviceDashboard
             : path === 'warehouse' ? WarehouseDashboard
+            : path === 'general' ? ComprehensiveKanbanView
             : KanbanBoardsView,
           meta: { title, category, ...authRequired },
         })),

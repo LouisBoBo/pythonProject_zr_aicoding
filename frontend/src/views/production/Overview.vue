@@ -1,120 +1,136 @@
 <template>
-  <div v-loading="loading" class="production-overview">
-    <div class="kpi-banner">
-      <div
-        v-for="tile in topKpiTiles"
-        :key="tile.key"
-        class="kpi-tile"
-        :class="`kpi-tile--${tile.accent}`"
-      >
-        <div class="kpi-tile-label">{{ tile.label }}</div>
-        <div class="kpi-tile-main">
-          <span class="kpi-tile-value">{{ tile.displayValue }}</span>
-          <span
-            v-if="tile.trend"
-            class="kpi-tile-trend"
-            :class="tile.trendClass"
-          >
-            {{ tile.trend.direction === 'up' ? '↑' : '↓' }} {{ tile.trend.text }}
-          </span>
-          <span
-            v-if="tile.statusTag"
-            class="kpi-status-tag"
-            :class="tile.statusTag.class"
-          >
-            {{ tile.statusTag.label }}
-          </span>
-        </div>
-        <div v-if="tile.subLine" class="kpi-tile-sub">{{ tile.subLine }}</div>
-        <div v-if="tile.barPercent != null" class="kpi-tile-bar">
-          <div class="kpi-tile-bar-fill" :style="{ width: `${tile.barPercent}%` }" />
-        </div>
+  <div class="production-overview">
+    <header class="overview-hero">
+      <div class="hero-main">
+        <div class="hero-eyebrow">生产管理 · PRODUCTION CONTROL</div>
+        <h2 class="hero-title">生产概览</h2>
+        <p class="hero-desc">聚焦产出完成、产线负荷、工单结构与在制品分布，一眼掌握生产运行状态</p>
       </div>
+
+      <div class="hero-side">
+        <span class="hero-updated">数据更新于 {{ data.updated_at || '--' }}</span>
+        <el-button
+          class="hero-refresh"
+          :icon="Refresh"
+          circle
+          :loading="loading"
+          @click="loadData"
+        />
+      </div>
+
+      <div class="hero-filters">
+        <div class="period-tabs" aria-label="时间范围">
+          <button
+            v-for="item in periodOptions"
+            :key="item.value"
+            type="button"
+            class="period-chip"
+            :class="{ active: filters.period === item.value }"
+            @click="setPeriod(item.value)"
+          >
+            {{ item.label }}
+          </button>
+        </div>
+
+        <div class="line-filter">
+          <span class="filter-label">产线</span>
+          <el-select
+            v-model="filters.line"
+            class="hero-line-select"
+            placeholder="请选择产线"
+            @change="onFilterChange"
+          >
+            <el-option v-for="line in lineOptions" :key="line" :label="line" :value="line" />
+          </el-select>
+        </div>
+
+        <span class="filter-hint">筛选变更后，各图表与指标自动刷新</span>
+      </div>
+    </header>
+
+    <div v-if="loadError" class="notice">
+      <el-alert
+        :title="`数据接口暂不可用，已切换至演示数据（${loadError}）`"
+        type="warning"
+        show-icon
+        :closable="false"
+      />
     </div>
 
-    <div class="main-body">
-      <div class="panel panel-timeline">
-        <div class="panel-head">
-          <span class="panel-title">生产进度时间线</span>
-          <span class="panel-meta">最近 {{ timelineItems.length }} 条</span>
-        </div>
-        <div class="timeline-wrap">
-          <div
-            v-for="(item, idx) in timelineItems"
-            :key="item.process_card_no + idx"
-            class="timeline-item"
-          >
-            <div class="timeline-axis">
-              <span class="timeline-dot" :class="`timeline-dot--${item.status.type}`" />
-              <span v-if="idx < timelineItems.length - 1" class="timeline-line" />
-            </div>
-            <div class="timeline-content">
-              <div class="timeline-top">
-                <span class="timeline-time">{{ item.time }}</span>
-                <span class="timeline-status" :class="`timeline-status--${item.status.type}`">
-                  {{ item.status.label }}
-                </span>
-              </div>
-              <div class="timeline-card-no">{{ item.process_card_no }}</div>
-              <div class="timeline-meta">
-                <span>{{ item.product_model }}</span>
-                <span class="timeline-qty">× {{ formatNumber(item.quantity) }}</span>
-              </div>
-            </div>
+    <div v-loading="loading" class="overview-body">
+      <section class="metric-band">
+        <article
+          v-for="metric in metrics"
+          :key="metric.key"
+          class="metric-tile"
+          :class="`metric-tile--${metric.tone}`"
+        >
+          <div class="metric-tile__top">
+            <span class="metric-tile__label">{{ metric.label }}</span>
+            <span class="metric-tile__trend">{{ metric.trend }}</span>
           </div>
-        </div>
-      </div>
+          <div class="metric-tile__value-row">
+            <span class="metric-tile__value">{{ metric.value }}</span>
+            <span class="metric-tile__unit">{{ metric.unit }}</span>
+          </div>
+          <div class="metric-tile__bar">
+            <span class="metric-tile__bar-fill" :style="{ width: metric.progress + '%' }" />
+          </div>
+          <div class="metric-tile__sub">{{ metric.sub }}</div>
+        </article>
+      </section>
 
-      <div class="panel panel-defect">
-        <div class="panel-head">
-          <span class="panel-title">不良率分析</span>
-          <span class="panel-meta">缺陷 {{ formatNumber(data.stats.today_defect_total) }}</span>
-        </div>
-        <div class="donut-wrap">
-          <v-chart class="donut-chart" :option="defectDonutOption" autoresize />
-        </div>
-        <div class="defect-table-wrap">
-          <table class="defect-table">
-            <thead>
-              <tr>
-                <th>缺陷类型</th>
-                <th>数量</th>
-                <th>占比</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="row in defectBreakdown" :key="row.type">
-                <td>{{ row.type }}</td>
-                <td>{{ formatNumber(row.count) }}</td>
-                <td>{{ row.ratio }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <section class="chart-grid chart-grid--top">
+        <ProductionChartPanel
+          class="panel-trend"
+          title="产量 / 完成趋势"
+          :subtitle="trendSubtitle"
+          :empty="trendEmpty"
+        >
+          <v-chart class="chart" :option="trendOption" autoresize />
+        </ProductionChartPanel>
+
+        <ProductionChartPanel
+          class="panel-achievement"
+          title="计划 vs 实际达成"
+          :subtitle="achievementSubtitle"
+          :empty="achievementEmpty"
+        >
+          <v-chart class="chart" :option="achievementOption" autoresize />
+        </ProductionChartPanel>
+      </section>
+
+      <section class="chart-grid chart-grid--middle">
+        <ProductionChartPanel
+          class="panel-order"
+          title="工单状态分布"
+          subtitle="待开工 / 进行中 / 完成"
+          :empty="orderStatusEmpty"
+        >
+          <v-chart class="chart" :option="orderStatusOption" autoresize />
+        </ProductionChartPanel>
+
+        <ProductionChartPanel
+          class="panel-load"
+          title="产线负荷 / 产能利用率"
+          :subtitle="lineLoadSubtitle"
+          :empty="lineLoadEmpty"
+        >
+          <v-chart class="chart" :option="lineLoadOption" autoresize />
+        </ProductionChartPanel>
+      </section>
+
+      <section class="chart-grid chart-grid--wip">
+        <ProductionChartPanel
+          class="panel-wip"
+          title="在制品 WIP 概览"
+          subtitle="按产线 / 状态分布的横向堆叠分布"
+          :empty="wipEmpty"
+        >
+          <v-chart class="chart" :option="wipOption" autoresize />
+        </ProductionChartPanel>
+      </section>
     </div>
-
-    <el-collapse v-model="collapseActive" class="detail-collapse">
-      <el-collapse-item name="detail" title="生产明细">
-        <div class="table-wrap">
-          <el-table
-            :data="data.detail_rows"
-            class="compact-table"
-            :show-header="true"
-            :row-class-name="tableRowClass"
-          >
-            <el-table-column prop="time" label="时间" min-width="88" />
-            <el-table-column prop="process_card_no" label="流程卡号" min-width="128" />
-            <el-table-column prop="product_model" label="产品型号" min-width="88" />
-            <el-table-column prop="quantity" label="数量" min-width="64" align="right" />
-            <el-table-column prop="today_completed" label="今日完成数" min-width="92" align="right" />
-            <el-table-column prop="total_completed" label="已完成总数" min-width="92" align="right" />
-          </el-table>
-        </div>
-      </el-collapse-item>
-    </el-collapse>
-
-    <div v-if="loadError" class="load-error">{{ loadError }}</div>
   </div>
 </template>
 
@@ -122,142 +138,361 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
-import { PieChart } from 'echarts/charts'
-import { TooltipComponent, GraphicComponent } from 'echarts/components'
+import { BarChart, LineChart, PieChart } from 'echarts/charts'
+import {
+  GridComponent,
+  TooltipComponent,
+  LegendComponent,
+  GraphicComponent,
+} from 'echarts/components'
 import VChart from 'vue-echarts'
-import { fetchProductionOverview } from '../../api/productionOverview'
+import { Refresh } from '@element-plus/icons-vue'
+import ProductionChartPanel from '../../components/production/ProductionChartPanel.vue'
+import { fetchProductionOverviewDashboard } from '../../api/productionOverview'
+import { buildProductionOverviewMock, PRODUCTION_LINES } from '../../api/productionOverviewMock'
 
-use([CanvasRenderer, PieChart, TooltipComponent, GraphicComponent])
+use([
+  CanvasRenderer,
+  BarChart,
+  LineChart,
+  PieChart,
+  GridComponent,
+  TooltipComponent,
+  LegendComponent,
+  GraphicComponent,
+])
+
+const COLORS = {
+  primary: '#2f6bff',
+  primaryDeep: '#1d4ed8',
+  green: '#10b981',
+  amber: '#f59e0b',
+  violet: '#7c3aed',
+  cyan: '#06b6d4',
+  gray: '#94a3b8',
+  text: '#64748b',
+  axis: '#e8edf5',
+  ink: '#0f172a',
+}
 
 const loading = ref(true)
 const loadError = ref('')
-const collapseActive = ref([])
+const filters = reactive({ period: 'day', line: '全部' })
+const lineOptions = ['全部', ...PRODUCTION_LINES]
+const periodOptions = [
+  { value: 'day', label: '日' },
+  { value: 'week', label: '周' },
+  { value: 'month', label: '月' },
+]
 
-const defaultStats = {
-  today_completed: 0,
-  today_area_output: 0,
-  today_defect_total: 0,
-  daily_defect_rate: '0%',
-  today_incoming_boards: 0,
-  trends: {},
+function emptyData() {
+  return {
+    period: 'day',
+    production_line: '全部',
+    updated_at: '',
+    lines: PRODUCTION_LINES,
+    kpi: {
+      completion_rate: 0,
+      completion_rate_trend: '',
+      wip_total: 0,
+      wip_total_trend: '',
+      avg_line_load: 0,
+      avg_line_load_trend: '',
+      plan_achievement_rate: 0,
+      plan_achievement_rate_trend: '',
+      plan_quantity: 0,
+      actual_quantity: 0,
+      achievement_diff: 0,
+    },
+    achievement_comparison: [],
+    output_trend: { labels: [], plan: [], actual: [] },
+    work_order_status: [],
+    line_load: [],
+    wip_overview: { statuses: [], rows: [] },
+  }
 }
 
-const defaultData = {
-  achievement_rate: 0,
-  production_area: 0,
-  kpi_trends: {},
-  stats: { ...defaultStats },
-  completion_chart: [],
-  detail_rows: [],
+const data = reactive(emptyData())
+
+const axisLabel = { color: COLORS.text, fontSize: 11 }
+const axisLine = { lineStyle: { color: COLORS.axis } }
+const legendStyle = { color: COLORS.text, fontSize: 12 }
+
+const trendSums = computed(() => ({
+  plan: data.output_trend.plan.reduce((sum, value) => sum + Number(value || 0), 0),
+  actual: data.output_trend.actual.reduce((sum, value) => sum + Number(value || 0), 0),
+}))
+
+const lineLoadBounds = computed(() => {
+  const rates = data.line_load.map((item) => Number(item.load_rate || 0))
+  if (!rates.length) return { max: 0, min: 0 }
+  return { max: Math.max(...rates), min: Math.min(...rates) }
+})
+
+function shareOfWip(status) {
+  const idx = data.wip_overview.statuses.indexOf(status)
+  const total = Number(data.kpi.wip_total || 0)
+  if (idx < 0 || !total) return 0
+  const count = data.wip_overview.rows.reduce(
+    (sum, row) => sum + Number(row.values?.[idx] || 0),
+    0,
+  )
+  return Math.round((count / total) * 100)
 }
 
-const data = reactive({ ...defaultData })
+const wipInProcessShare = computed(() => shareOfWip('在制'))
 
-const topKpiTiles = computed(() => {
-  const kpiTrends = data.kpi_trends || {}
-  const statsTrends = data.stats.trends || {}
-  const s = data.stats
-  const defectTrend = statsTrends.daily_defect_rate
-  const defectIsGood = defectTrend?.direction === 'down'
-
+const metrics = computed(() => {
+  const kpi = data.kpi
+  const { plan, actual } = trendSums.value
+  const bounds = lineLoadBounds.value
   return [
     {
-      key: 'achievement_rate',
-      label: '产量达成率',
-      displayValue: `${formatGaugeValue(data.achievement_rate)}%`,
-      trend: kpiTrends.achievement_rate || statsTrends.achievement_rate,
-      trendClass: trendClass(kpiTrends.achievement_rate || statsTrends.achievement_rate, true),
-      subLine: `产量面积 ${formatGaugeValue(data.production_area)}`,
-      barPercent: Math.min(Math.max(data.achievement_rate, 0), 100),
-      accent: 'blue',
+      key: 'completion',
+      label: '产量完成率',
+      value: formatRate(kpi.completion_rate),
+      unit: '%',
+      tone: 'primary',
+      trend: kpi.completion_rate_trend || '—',
+      progress: clampRate(kpi.completion_rate),
+      sub: `实际 ${formatNumber(actual)} / 计划 ${formatNumber(plan)} 件`,
     },
     {
-      key: 'today_completed',
-      label: '今日完成数',
-      displayValue: formatNumber(s.today_completed),
-      trend: statsTrends.today_completed,
-      trendClass: trendClass(statsTrends.today_completed, true),
-      subLine: `今日面积产量 ${formatGaugeValue(s.today_area_output)}`,
-      accent: 'green',
+      key: 'wip',
+      label: '在制品 WIP 总量',
+      value: formatNumber(kpi.wip_total),
+      unit: '件',
+      tone: 'amber',
+      trend: kpi.wip_total_trend || '—',
+      progress: wipInProcessShare.value,
+      sub: `在制占比 ${wipInProcessShare.value}% · 待检 ${shareOfWip('待检验')}%`,
     },
     {
-      key: 'daily_defect_rate',
-      label: '日不良率',
-      displayValue: s.daily_defect_rate,
-      statusTag: {
-        label: defectIsGood ? '正常' : '偏高',
-        class: defectIsGood ? 'kpi-status-tag--good' : 'kpi-status-tag--bad',
-      },
-      accent: 'orange',
+      key: 'load',
+      label: '平均产线负荷',
+      value: formatRate(kpi.avg_line_load),
+      unit: '%',
+      tone: 'cyan',
+      trend: kpi.avg_line_load_trend || '—',
+      progress: clampRate(kpi.avg_line_load),
+      sub: `最高 ${formatRate(bounds.max)}% · 最低 ${formatRate(bounds.min)}%`,
     },
     {
-      key: 'today_incoming_boards',
-      label: '今日来板数',
-      displayValue: formatNumber(s.today_incoming_boards),
-      trend: statsTrends.today_incoming_boards,
-      trendClass: trendClass(statsTrends.today_incoming_boards, true),
-      accent: 'purple',
+      key: 'achievement',
+      label: '计划达成率',
+      value: formatRate(kpi.plan_achievement_rate),
+      unit: '%',
+      tone: 'violet',
+      trend: kpi.plan_achievement_rate_trend || '—',
+      progress: clampRate(kpi.plan_achievement_rate),
+      sub: `达成缺口 ${formatNumber(kpi.achievement_diff || 0)} 件`,
     },
   ]
 })
 
-const timelineItems = computed(() =>
-  data.detail_rows.slice(0, 8).map((row) => ({
-    ...row,
-    status: resolveRowStatus(row),
-  })),
+const trendSubtitle = computed(() =>
+  data.production_line === '全部' ? '时间维度下计划与实际产出' : `时间维度下计划与实际产出 · ${data.production_line}`,
 )
 
-const defectBreakdown = computed(() => {
-  const total = data.stats.today_defect_total || 0
-  if (total === 0) return []
-  const weights = [
-    { type: '表面划痕', weight: 0.28 },
-    { type: '尺寸偏差', weight: 0.22 },
-    { type: '色差', weight: 0.18 },
-    { type: '气泡', weight: 0.17 },
-    { type: '其他', weight: 0.15 },
-  ]
-  return weights.map(({ type, weight }) => ({
-    type,
-    count: Math.round(total * weight),
-    ratio: `${(weight * 100).toFixed(1)}%`,
-  }))
+const achievementSubtitle = computed(() =>
+  data.production_line === '全部' ? '柱状对比计划 / 实际，折线标注达成率' : `按产品对比 · ${data.production_line}`,
+)
+
+const lineLoadSubtitle = computed(() =>
+  data.production_line === '全部' ? '按产线展示负荷与产能利用' : `按设备展示 · ${data.production_line}`,
+)
+
+const trendEmpty = computed(() => !data.output_trend.labels?.length)
+const achievementEmpty = computed(() => !data.achievement_comparison?.length)
+const orderStatusEmpty = computed(() => !data.work_order_status?.length)
+const lineLoadEmpty = computed(() => !data.line_load?.length)
+const wipEmpty = computed(() => !data.wip_overview?.rows?.length)
+
+const trendOption = computed(() => {
+  const trend = data.output_trend
+  return {
+    color: [COLORS.gray, COLORS.primary],
+    tooltip: {
+      trigger: 'axis',
+      valueFormatter: (value) => `${formatNumber(value)} 件`,
+    },
+    legend: {
+      data: ['计划产量', '实际产量'],
+      right: 0,
+      top: 0,
+      itemWidth: 10,
+      itemHeight: 10,
+      textStyle: legendStyle,
+    },
+    grid: { left: 8, right: 18, top: 40, bottom: 8, containLabel: true },
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
+      data: trend.labels,
+      axisLine: axisLine,
+      axisTick: { show: false },
+      axisLabel: axisLabel,
+    },
+    yAxis: {
+      type: 'value',
+      axisLine: { show: false },
+      axisTick: { show: false },
+      splitLine: { lineStyle: { color: COLORS.axis } },
+      axisLabel: axisLabel,
+    },
+    series: [
+      {
+        name: '计划产量',
+        type: 'line',
+        data: trend.plan,
+        smooth: true,
+        symbol: 'none',
+        lineStyle: { color: COLORS.gray, type: 'dashed', width: 2 },
+      },
+      {
+        name: '实际产量',
+        type: 'line',
+        data: trend.actual,
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 6,
+        lineStyle: { color: COLORS.primary, width: 3 },
+        itemStyle: { color: COLORS.primary },
+        areaStyle: {
+          color: {
+            type: 'linear',
+            x: 0,
+            y: 0,
+            x2: 0,
+            y2: 1,
+            colorStops: [
+              { offset: 0, color: 'rgba(47, 107, 255, 0.18)' },
+              { offset: 1, color: 'rgba(47, 107, 255, 0)' },
+            ],
+          },
+        },
+      },
+    ],
+  }
 })
 
-const defectDonutOption = computed(() => {
-  const rateStr = data.stats.daily_defect_rate || '0%'
-  const defectRate = parseFloat(String(rateStr).replace('%', '')) || 0
-  const goodRate = Math.max(100 - defectRate, 0)
+const achievementOption = computed(() => {
+  const rows = data.achievement_comparison
+  return {
+    color: [COLORS.gray, COLORS.primary, COLORS.violet],
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+    },
+    legend: {
+      data: ['计划数量', '实际数量', '达成率'],
+      right: 0,
+      top: 0,
+      itemWidth: 10,
+      itemHeight: 10,
+      textStyle: legendStyle,
+    },
+    grid: { left: 8, right: 8, top: 42, bottom: 8, containLabel: true },
+    xAxis: {
+      type: 'category',
+      data: rows.map((item) => item.name),
+      axisLine: axisLine,
+      axisTick: { show: false },
+      axisLabel: axisLabel,
+    },
+    yAxis: [
+      {
+        type: 'value',
+        name: '件',
+        axisLine: { show: false },
+        axisTick: { show: false },
+        splitLine: { lineStyle: { color: COLORS.axis } },
+        axisLabel: axisLabel,
+      },
+      {
+        type: 'value',
+        name: '%',
+        min: 0,
+        max: 100,
+        position: 'right',
+        splitLine: { show: false },
+        axisLabel: { ...axisLabel, formatter: '{value}%' },
+      },
+    ],
+    series: [
+      {
+        name: '计划数量',
+        type: 'bar',
+        barWidth: 14,
+        data: rows.map((item) => item.plan_quantity),
+        itemStyle: { color: COLORS.gray, borderRadius: [4, 4, 0, 0] },
+      },
+      {
+        name: '实际数量',
+        type: 'bar',
+        barWidth: 14,
+        data: rows.map((item) => item.actual_quantity),
+        itemStyle: { color: COLORS.primary, borderRadius: [4, 4, 0, 0] },
+      },
+      {
+        name: '达成率',
+        type: 'line',
+        yAxisIndex: 1,
+        data: rows.map((item) => item.achievement_rate),
+        smooth: false,
+        symbol: 'circle',
+        symbolSize: 7,
+        lineStyle: { color: COLORS.violet, width: 2.5 },
+        itemStyle: { color: COLORS.violet },
+        label: {
+          show: true,
+          position: 'top',
+          color: COLORS.violet,
+          fontSize: 10,
+          formatter: '{c}%',
+        },
+      },
+    ],
+  }
+})
 
+const orderStatusOption = computed(() => {
+  const rows = data.work_order_status
+  const total = rows.reduce((sum, item) => sum + Number(item.count || 0), 0)
+  const colorMap = { 待开工: COLORS.gray, 进行中: COLORS.primary, 完成: COLORS.green }
   return {
     tooltip: {
       trigger: 'item',
-      backgroundColor: 'rgba(48, 49, 51, 0.92)',
-      borderColor: 'rgba(91, 127, 165, 0.4)',
-      textStyle: { color: '#ecf0f1', fontSize: 12 },
-      formatter: '{b}: {c}%',
+      formatter: '{b}: {c} 单 ({d}%)',
+    },
+    legend: {
+      orient: 'vertical',
+      right: 4,
+      top: 'middle',
+      itemWidth: 10,
+      itemHeight: 10,
+      textStyle: legendStyle,
     },
     graphic: [
       {
         type: 'text',
-        left: 'center',
-        top: '42%',
+        left: '30%',
+        top: '41%',
         style: {
-          text: rateStr,
-          fill: '#303133',
-          fontSize: 22,
+          text: String(total),
+          fill: COLORS.ink,
+          fontSize: 24,
           fontWeight: 700,
           textAlign: 'center',
         },
       },
       {
         type: 'text',
-        left: 'center',
-        top: '54%',
+        left: '30%',
+        top: '56%',
         style: {
-          text: '日不良率',
-          fill: '#909399',
+          text: '工单总数',
+          fill: COLORS.gray,
           fontSize: 11,
           textAlign: 'center',
         },
@@ -266,69 +501,202 @@ const defectDonutOption = computed(() => {
     series: [
       {
         type: 'pie',
-        radius: ['52%', '72%'],
-        center: ['50%', '50%'],
+        radius: ['50%', '70%'],
+        center: ['34%', '50%'],
         avoidLabelOverlap: false,
-        label: { show: false },
-        labelLine: { show: false },
-        data: [
-          { value: goodRate, name: '良品率', itemStyle: { color: '#e4e7ed' } },
-          { value: defectRate, name: '不良率', itemStyle: { color: '#5b7fa5' } },
-        ],
+        label: {
+          show: true,
+          position: 'outside',
+          formatter: '{d}%',
+          color: COLORS.text,
+          fontSize: 11,
+        },
+        labelLine: { length: 10, length2: 6 },
+        data: rows.map((item) => ({
+          name: item.status,
+          value: item.count,
+          itemStyle: { color: colorMap[item.status] || COLORS.gray },
+        })),
       },
     ],
   }
 })
 
-function trendClass(trend, upIsGood = false) {
-  if (!trend) return ''
-  const isUp = trend.direction === 'up'
-  const positive = upIsGood ? isUp : !isUp
-  return positive ? 'kpi-tile-trend--up' : 'kpi-tile-trend--down'
-}
-
-function resolveRowStatus(row) {
-  if (row.today_completed >= row.quantity) {
-    return { label: '已完成', type: 'done' }
+const lineLoadOption = computed(() => {
+  const rows = data.line_load
+  return {
+    color: [COLORS.primary, COLORS.green],
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      valueFormatter: (value) => `${value}%`,
+    },
+    legend: {
+      data: ['产线负荷', '产能利用率'],
+      right: 0,
+      top: 0,
+      itemWidth: 10,
+      itemHeight: 10,
+      textStyle: legendStyle,
+    },
+    grid: { left: 8, right: 8, top: 42, bottom: 8, containLabel: true },
+    xAxis: {
+      type: 'category',
+      data: rows.map((item) => item.name),
+      axisLine: axisLine,
+      axisTick: { show: false },
+      axisLabel: axisLabel,
+    },
+    yAxis: {
+      type: 'value',
+      min: 0,
+      max: 100,
+      axisLine: { show: false },
+      axisTick: { show: false },
+      splitLine: { lineStyle: { color: COLORS.axis } },
+      axisLabel: { ...axisLabel, formatter: '{value}%' },
+    },
+    series: [
+      {
+        name: '产线负荷',
+        type: 'bar',
+        barWidth: 14,
+        data: rows.map((item) => item.load_rate),
+        itemStyle: { color: COLORS.primary, borderRadius: [4, 4, 0, 0] },
+        label: {
+          show: true,
+          position: 'top',
+          color: COLORS.primary,
+          fontSize: 10,
+          formatter: '{c}%',
+        },
+      },
+      {
+        name: '产能利用率',
+        type: 'bar',
+        barWidth: 14,
+        data: rows.map((item) => item.capacity_utilization),
+        itemStyle: { color: COLORS.green, borderRadius: [4, 4, 0, 0] },
+        label: {
+          show: true,
+          position: 'top',
+          color: COLORS.green,
+          fontSize: 10,
+          formatter: '{c}%',
+        },
+      },
+    ],
   }
-  if (row.today_completed > 0) {
-    return { label: '进行中', type: 'active' }
+})
+
+const wipOption = computed(() => {
+  const wip = data.wip_overview
+  const statuses = wip.statuses || []
+  const rows = wip.rows || []
+  const wipColors = [COLORS.gray, COLORS.primary, COLORS.amber, COLORS.green]
+  return {
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      valueFormatter: (value) => `${formatNumber(value)} 件`,
+    },
+    legend: {
+      data: statuses,
+      top: 0,
+      left: 'center',
+      itemWidth: 10,
+      itemHeight: 10,
+      textStyle: legendStyle,
+    },
+    grid: { left: 8, right: 20, top: 40, bottom: 8, containLabel: true },
+    xAxis: {
+      type: 'value',
+      axisLine: { show: false },
+      axisTick: { show: false },
+      splitLine: { lineStyle: { color: COLORS.axis } },
+      axisLabel: axisLabel,
+    },
+    yAxis: {
+      type: 'category',
+      data: rows.map((item) => item.name),
+      axisLine: axisLine,
+      axisTick: { show: false },
+      axisLabel: axisLabel,
+    },
+    series: statuses.map((status, si) => ({
+      name: status,
+      type: 'bar',
+      stack: 'wip',
+      barWidth: 16,
+      data: rows.map((row) => Number(row.values?.[si] || 0)),
+      itemStyle: {
+        color: wipColors[si % wipColors.length],
+        borderRadius: si === statuses.length - 1 ? [0, 6, 6, 0] : 0,
+      },
+      label: {
+        show: true,
+        position: 'inside',
+        color: '#fff',
+        fontSize: 10,
+        formatter: ({ value }) => (value > 0 ? value : ''),
+      },
+      emphasis: { focus: 'series' },
+    })),
   }
-  return { label: '待开始', type: 'pending' }
+})
+
+function formatNumber(value) {
+  return Number(value || 0).toLocaleString('zh-CN')
 }
 
-function formatGaugeValue(val) {
-  if (Number.isInteger(val)) return String(val)
-  return val.toFixed(1)
+function formatRate(value) {
+  return Number(value || 0).toFixed(1)
 }
 
-function formatNumber(val) {
-  return Number(val).toLocaleString('zh-CN')
-}
-
-function tableRowClass() {
-  return 'compact-row'
+function clampRate(value) {
+  return Math.max(0, Math.min(100, Number(value || 0)))
 }
 
 function applyData(resp) {
-  Object.assign(data, {
-    achievement_rate: resp.achievement_rate,
-    production_area: resp.production_area,
-    kpi_trends: resp.kpi_trends || {},
-    stats: resp.stats || { ...defaultStats },
-    completion_chart: resp.completion_chart || [],
-    detail_rows: resp.detail_rows || [],
-  })
+  data.period = resp.period || filters.period
+  data.production_line = resp.production_line || filters.line
+  data.updated_at = resp.updated_at || ''
+  data.lines = resp.lines?.length ? resp.lines : PRODUCTION_LINES
+  data.kpi = { ...emptyData().kpi, ...(resp.kpi || {}) }
+  data.achievement_comparison = resp.achievement_comparison || []
+  data.output_trend = resp.output_trend || { labels: [], plan: [], actual: [] }
+  data.work_order_status = resp.work_order_status || []
+  data.line_load = resp.line_load || []
+  data.wip_overview = resp.wip_overview || { statuses: [], rows: [] }
+}
+
+function setPeriod(period) {
+  if (filters.period === period) return
+  filters.period = period
+  loadData()
+}
+
+function onFilterChange() {
+  loadData()
 }
 
 async function loadData() {
   loading.value = true
   loadError.value = ''
   try {
-    const resp = await fetchProductionOverview()
+    const resp = await fetchProductionOverviewDashboard({
+      period: filters.period,
+      line: filters.line,
+    })
     applyData(resp)
   } catch (err) {
-    loadError.value = err.message || '加载失败'
+    loadError.value = err.message || '接口暂不可用'
+    applyData(
+      buildProductionOverviewMock({
+        period: filters.period,
+        line: filters.line,
+      }),
+    )
   } finally {
     loading.value = false
   }
@@ -341,394 +709,345 @@ onMounted(() => {
 
 <style scoped>
 .production-overview {
-  margin: -16px -20px;
-  width: calc(100% + 40px);
-  max-width: calc(100% + 40px);
-  min-width: 0;
   min-height: 100%;
-  padding: 14px 16px 16px;
-  background: #f0f2f5;
-  color: #303133;
-  box-sizing: border-box;
-  overflow-x: hidden;
   display: flex;
   flex-direction: column;
+  gap: 14px;
+  color: #1f2937;
+}
+
+.overview-hero {
+  position: relative;
+  border-radius: 16px;
+  padding: 20px 22px 16px;
+  background:
+    radial-gradient(circle at 85% 12%, rgba(96, 165, 250, 0.35), transparent 32%),
+    linear-gradient(120deg, #0f172a 0%, #1e3a8a 55%, #2563eb 100%);
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.18);
+  color: #fff;
+  overflow: hidden;
+}
+
+.overview-hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.06), transparent 40%);
+  pointer-events: none;
+}
+
+.hero-main {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.hero-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.6px;
+  color: rgba(255, 255, 255, 0.58);
+}
+
+.hero-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: #fff;
+}
+
+.hero-desc {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.hero-side {
+  position: absolute;
+  right: 22px;
+  top: 20px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
   gap: 12px;
 }
 
-.kpi-banner {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  flex-shrink: 0;
-}
-
-.kpi-tile {
-  background: #ffffff;
-  border: 1px solid #e4e7ed;
-  border-left-width: 4px;
-  border-radius: 4px;
-  padding: 12px 14px 10px;
-  min-width: 0;
-}
-
-.kpi-tile--blue { border-left-color: #409eff; }
-.kpi-tile--green { border-left-color: #67c23a; }
-.kpi-tile--orange { border-left-color: #e6a23c; }
-.kpi-tile--purple { border-left-color: #9b59b6; }
-
-.kpi-tile-label {
+.hero-updated {
   font-size: 12px;
-  color: #909399;
-  margin-bottom: 6px;
+  color: rgba(255, 255, 255, 0.68);
+  white-space: nowrap;
 }
 
-.kpi-tile-main {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  flex-wrap: wrap;
+.hero-refresh {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.12);
 }
 
-.kpi-tile-value {
-  font-size: 28px;
-  font-weight: 700;
-  color: #303133;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
+.hero-refresh:hover {
+  background: rgba(255, 255, 255, 0.22);
+  border-color: rgba(255, 255, 255, 0.55);
 }
 
-.kpi-tile-sub {
-  margin-top: 4px;
-  font-size: 11px;
-  color: #909399;
-}
-
-.kpi-tile-trend {
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.kpi-tile-trend--up { color: #67c23a; }
-.kpi-tile-trend--down { color: #f56c6c; }
-
-.kpi-status-tag {
-  font-size: 11px;
-  padding: 1px 6px;
-  border-radius: 3px;
-  font-weight: 500;
-}
-
-.kpi-status-tag--good {
-  color: #67c23a;
-  background: rgba(103, 194, 58, 0.1);
-}
-
-.kpi-status-tag--bad {
-  color: #f56c6c;
-  background: rgba(245, 108, 108, 0.1);
-}
-
-.kpi-tile-bar {
-  margin-top: 8px;
-  height: 3px;
-  background: #ebeef5;
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.kpi-tile-bar-fill {
-  height: 100%;
-  background: #409eff;
-  border-radius: 2px;
-  transition: width 0.6s ease;
-}
-
-.main-body {
-  display: grid;
-  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
-  gap: 10px;
-  flex: 1;
-  min-height: 0;
-  min-width: 0;
-}
-
-.panel {
-  background: #ffffff;
-  border: 1px solid #e4e7ed;
-  border-radius: 4px;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.panel-head {
+.hero-filters {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 10px 14px 8px;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.period-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.period-chip {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 6px 16px;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.72);
   font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.period-chip:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+
+.period-chip.active {
+  background: #fff;
+  color: #1e3a8a;
   font-weight: 600;
-  color: #303133;
-  border-bottom: 1px solid #ebeef5;
+}
+
+.line-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filter-label {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.hero-line-select {
+  width: 168px;
+}
+
+.hero-line-select :deep(.el-select__wrapper) {
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: none;
+  border-radius: 8px;
+}
+
+.hero-line-select :deep(.el-select__selected-item),
+.hero-line-select :deep(.el-select__placeholder) {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.hero-line-select :deep(.el-select__caret) {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.filter-hint {
+  margin-left: auto;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.notice {
   flex-shrink: 0;
 }
 
-.panel-meta {
-  font-size: 11px;
-  font-weight: 400;
-  color: #909399;
-}
-
-.panel-timeline {
+.overview-body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
   min-height: 320px;
 }
 
-.timeline-wrap {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding: 8px 14px 12px;
+.metric-band {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
 }
 
-.timeline-item {
-  display: flex;
-  gap: 10px;
+.metric-tile {
+  position: relative;
   min-width: 0;
+  border-radius: 14px;
+  padding: 16px 18px 14px;
+  color: #fff;
+  box-shadow: 0 12px 26px rgba(15, 23, 42, 0.14);
+  overflow: hidden;
 }
 
-.timeline-axis {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  flex-shrink: 0;
-  width: 12px;
-  padding-top: 4px;
+.metric-tile::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 88% 10%, rgba(255, 255, 255, 0.28), transparent 38%);
+  pointer-events: none;
 }
 
-.timeline-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
+.metric-tile--primary {
+  background: linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%);
 }
 
-.timeline-dot--done { background: #67c23a; }
-.timeline-dot--active { background: #409eff; }
-.timeline-dot--pending { background: #c0c4cc; }
-
-.timeline-line {
-  flex: 1;
-  width: 1px;
-  min-height: 24px;
-  background: #e4e7ed;
-  margin: 4px 0;
+.metric-tile--amber {
+  background: linear-gradient(135deg, #b45309 0%, #f59e0b 100%);
 }
 
-.timeline-content {
-  flex: 1;
-  min-width: 0;
-  padding-bottom: 14px;
+.metric-tile--cyan {
+  background: linear-gradient(135deg, #0e7490 0%, #06b6d4 100%);
 }
 
-.timeline-top {
+.metric-tile--violet {
+  background: linear-gradient(135deg, #5b21b6 0%, #8b5cf6 100%);
+}
+
+.metric-tile__top {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 2px;
+  margin-bottom: 10px;
 }
 
-.timeline-time {
+.metric-tile__label {
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.metric-tile__trend {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
   font-size: 11px;
-  color: #909399;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.metric-tile__value-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.metric-tile__value {
+  font-size: 30px;
+  line-height: 1;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 
-.timeline-status {
-  font-size: 10px;
-  padding: 1px 6px;
-  border-radius: 3px;
-  flex-shrink: 0;
+.metric-tile__unit {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.72);
 }
 
-.timeline-status--done {
-  color: #67c23a;
-  background: rgba(103, 194, 58, 0.1);
+.metric-tile__bar {
+  height: 6px;
+  margin-top: 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+  overflow: hidden;
 }
 
-.timeline-status--active {
-  color: #409eff;
-  background: rgba(64, 158, 255, 0.1);
+.metric-tile__bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  transition: width 0.6s ease;
 }
 
-.timeline-status--pending {
-  color: #909399;
-  background: #f4f4f5;
-}
-
-.timeline-card-no {
-  font-size: 13px;
-  font-weight: 600;
-  color: #303133;
+.metric-tile__sub {
+  margin-top: 10px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.78);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.timeline-meta {
-  margin-top: 2px;
-  font-size: 11px;
-  color: #606266;
-  display: flex;
-  gap: 6px;
-  align-items: center;
+.chart-grid {
+  display: grid;
+  gap: 14px;
 }
 
-.timeline-qty {
-  color: #909399;
+.chart-grid--top {
+  grid-template-columns: 7fr 5fr;
 }
 
-.panel-defect {
-  min-height: 320px;
+.chart-grid--middle {
+  grid-template-columns: 5fr 7fr;
 }
 
-.donut-wrap {
-  flex-shrink: 0;
-  height: 180px;
-  min-width: 0;
-  padding: 4px 8px 0;
+.chart-grid--wip {
+  grid-template-columns: 1fr;
 }
 
-.donut-chart {
+.chart {
   width: 100%;
   height: 100%;
   min-width: 0;
 }
 
-.defect-table-wrap {
-  flex: 1;
-  min-height: 0;
-  overflow-x: auto;
-  overflow-y: auto;
-  padding: 0 14px 12px;
+.panel-trend :deep(.chart-panel__body),
+.panel-achievement :deep(.chart-panel__body),
+.panel-order :deep(.chart-panel__body),
+.panel-load :deep(.chart-panel__body) {
+  height: 300px;
 }
 
-.defect-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 11px;
-  min-width: 200px;
+.panel-wip :deep(.chart-panel__body) {
+  height: 268px;
 }
 
-.defect-table th {
-  text-align: left;
-  color: #909399;
-  font-weight: 600;
-  padding: 4px 6px;
-  border-bottom: 1px solid #ebeef5;
-}
-
-.defect-table td {
-  color: #606266;
-  padding: 5px 6px;
-  border-bottom: 1px solid #f2f3f5;
-}
-
-.defect-table td:nth-child(2),
-.defect-table td:nth-child(3),
-.defect-table th:nth-child(2),
-.defect-table th:nth-child(3) {
-  text-align: right;
-}
-
-.detail-collapse {
-  flex-shrink: 0;
-  border: 1px solid #e4e7ed;
-  border-radius: 4px;
-  overflow: hidden;
-  background: #ffffff;
-}
-
-.detail-collapse :deep(.el-collapse-item__header) {
-  padding: 0 14px;
-  height: 40px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #303133;
-  background: #ffffff;
-  border-bottom: none;
-}
-
-.detail-collapse :deep(.el-collapse-item__wrap) {
-  border-top: 1px solid #ebeef5;
-}
-
-.detail-collapse :deep(.el-collapse-item__content) {
-  padding: 0;
-}
-
-.table-wrap {
-  overflow-x: auto;
-  overflow-y: auto;
-  max-height: 280px;
-  padding: 0 6px 6px;
-  min-width: 0;
-}
-
-.compact-table {
-  width: 100%;
-  --el-table-bg-color: transparent;
-  --el-table-tr-bg-color: transparent;
-  --el-table-header-bg-color: #fafafa;
-  --el-table-row-hover-bg-color: #f5f7fa;
-  --el-table-border-color: #ebeef5;
-  --el-table-text-color: #606266;
-  --el-table-header-text-color: #909399;
-}
-
-.compact-table :deep(.el-table__inner-wrapper)::before {
-  display: none;
-}
-
-.compact-table :deep(th.el-table__cell) {
-  background: #fafafa !important;
-  color: #909399 !important;
-  font-weight: 600;
-  font-size: 11px;
-  padding: 6px 0;
-  border-bottom: 1px solid #ebeef5 !important;
-}
-
-.compact-table :deep(td.el-table__cell) {
-  background: transparent !important;
-  color: #606266 !important;
-  font-size: 11px;
-  padding: 5px 0;
-  border-bottom: 1px solid #f2f3f5 !important;
-}
-
-.compact-table :deep(.compact-row:hover > td.el-table__cell) {
-  background: #f5f7fa !important;
-}
-
-.load-error {
-  text-align: center;
-  color: #f56c6c;
-  padding: 10px;
-  font-size: 13px;
-}
-
-@media (max-width: 1100px) {
-  .kpi-banner {
+@media (max-width: 1180px) {
+  .metric-band {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .main-body {
+  .chart-grid--top,
+  .chart-grid--middle {
     grid-template-columns: 1fr;
+  }
+
+  .hero-side {
+    position: static;
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 720px) {
+  .metric-band {
+    grid-template-columns: 1fr;
+  }
+
+  .filter-hint {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .hero-filters {
+    gap: 12px;
   }
 }
 </style>
