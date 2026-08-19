@@ -147,7 +147,12 @@ def update_work_order(
     return work_order
 
 
-@router.patch("/{work_order_id}/status", response_model=WorkOrderResponse)
+@router.patch(
+    "/{work_order_id}/status",
+    response_model=WorkOrderResponse,
+    summary="更新工单状态",
+    description="待开工→进行中时若尚未有实际开始时间，则写入当前时间；进行中→已完成时若尚未有实际结束时间，则写入当前时间。",
+)
 def update_work_order_status(
     work_order_id: int,
     payload: WorkOrderStatusUpdate,
@@ -159,6 +164,10 @@ def update_work_order_status(
     if payload.status not in allowed:
         raise HTTPException(status_code=400, detail=f"无法从 {work_order.status} 流转到 {payload.status}")
 
+    if payload.status == "in_progress" and work_order.actual_start_time is None:
+        work_order.actual_start_time = datetime.utcnow()
+    if payload.status == "completed" and work_order.actual_end_time is None:
+        work_order.actual_end_time = datetime.utcnow()
     work_order.status = payload.status
     work_order.updated_at = datetime.utcnow()
     db.commit()

@@ -43,7 +43,7 @@
           <el-descriptions-item label="报修时间">{{ formatDateTime(detail.created_at) }}</el-descriptions-item>
           <el-descriptions-item label="维修人员">{{ detail.repair_person || '待分配' }}</el-descriptions-item>
           <el-descriptions-item label="开始时间">{{ formatDateTime(detail.start_time) }}</el-descriptions-item>
-          <el-descriptions-item label="完成时间">{{ formatDateTime(detail.completion_time) }}</el-descriptions-item>
+          <el-descriptions-item label="维修完成时间">{{ formatDateTime(detail.repair_completed_at, true) }}</el-descriptions-item>
           <el-descriptions-item label="故障描述" :span="3">
             <p class="desc-text">{{ detail.fault_description }}</p>
           </el-descriptions-item>
@@ -93,7 +93,7 @@
             <div class="tl-dot" :class="detail.status === 'completed' || detail.status === 'closed' ? 'done' : 'pending'" />
             <div class="tl-content">
               <div class="tl-title">维修完成</div>
-              <div class="tl-meta">{{ formatDateTime(detail.completion_time) }}</div>
+              <div class="tl-meta">{{ formatDateTime(detail.repair_completed_at, true) }}</div>
               <div class="tl-desc">{{ detail.status === 'completed' || detail.status === 'closed' ? '工单已完成' : '待完成' }}</div>
             </div>
           </div>
@@ -231,7 +231,7 @@ const detail = ref({
   reporter: '',
   repair_person: null,
   start_time: null,
-  completion_time: null,
+  repair_completed_at: null,
   repair_description: null,
   parts: [],
   created_at: null,
@@ -274,8 +274,8 @@ function statusLabel(s) {
   return m[s] || s
 }
 
-function formatDateTime(val) {
-  if (!val) return '-'
+function formatDateTime(val, emptyDash = false) {
+  if (!val) return emptyDash ? '—' : '-'
   const d = new Date(val)
   if (Number.isNaN(d.getTime())) return val
   return d.toLocaleString('zh-CN', { hour12: false })

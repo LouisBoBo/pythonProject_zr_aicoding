@@ -85,6 +85,9 @@
         <el-table-column label="报修时间" width="160">
           <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
         </el-table-column>
+        <el-table-column label="维修完成时间" width="160">
+          <template #default="{ row }">{{ formatDateTime(row.repair_completed_at, true) }}</template>
+        </el-table-column>
         <el-table-column label="操作" width="120" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click.stop="openEditDrawer(row)">编辑</el-button>
@@ -321,8 +324,8 @@ function statusLabel(s) {
   return m[s] || s
 }
 
-function formatDateTime(val) {
-  if (!val) return '-'
+function formatDateTime(val, emptyDash = false) {
+  if (!val) return emptyDash ? '—' : '-'
   const d = new Date(val)
   if (Number.isNaN(d.getTime())) return val
   return d.toLocaleString('zh-CN', { hour12: false })

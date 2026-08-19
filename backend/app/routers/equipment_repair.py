@@ -70,7 +70,7 @@ def _repair_to_list_item(repair: EquipmentRepair) -> EquipmentRepairListItem:
         status=repair.status,
         reporter=repair.reporter,
         repair_person=repair.repair_person,
-        completion_time=repair.completion_time,
+        repair_completed_at=repair.repair_completed_at,
         created_at=repair.created_at,
     )
 
@@ -102,7 +102,7 @@ def _repair_to_detail(repair: EquipmentRepair) -> EquipmentRepairDetail:
         reporter=repair.reporter,
         repair_person=repair.repair_person,
         start_time=repair.start_time,
-        completion_time=repair.completion_time,
+        repair_completed_at=repair.repair_completed_at,
         repair_description=repair.repair_description,
         images=repair.images,
         parts=parts,
@@ -235,9 +235,11 @@ def update_repair(
     # auto-set start_time when moving to in_progress
     if data.get("status") == "in_progress" and repair.status == "pending":
         data["start_time"] = datetime.utcnow()
-    # auto-set completion_time when moving to completed
-    if data.get("status") == "completed":
-        data["completion_time"] = datetime.utcnow()
+    # auto-set repair_completed_at when moving to completed/closed
+    new_status = data.get("status")
+    if new_status in ("completed", "closed") and new_status != repair.status:
+        if repair.repair_completed_at is None and data.get("repair_completed_at") is None:
+            data["repair_completed_at"] = datetime.utcnow()
 
     for field, value in data.items():
         setattr(repair, field, value)

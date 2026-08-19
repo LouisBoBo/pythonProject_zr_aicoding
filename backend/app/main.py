@@ -4,9 +4,12 @@ from datetime import date, datetime, timedelta
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
+from sqlalchemy import inspect, text
 
 from app.auth import hash_password
 from app.database import Base, SessionLocal, engine
+from app.openapi_zh import OPENAPI_TAGS, apply_chinese_openapi
 from app.models import (
     Device,
     DeviceType,
@@ -38,8 +41,10 @@ from app.routers import (
     kanban_production,
     production,
     quality,
+    warehouse,
     work_orders,
 )
+from app.seed_analytics import backfill_recent_operational_data, seed_analytics_data
 
 
 def seed_default_user():
@@ -56,6 +61,114 @@ def seed_default_user():
             db.commit()
     finally:
         db.close()
+
+
+def ensure_work_orders_actual_start_time():
+    """为已有数据库的 work_orders 表补齐 actual_start_time 列，并回填已开工/已完成且为空的演示数据。"""
+    inspector = inspect(engine)
+    columns = [column["name"] for column in inspector.get_columns("work_orders")]
+    if "actual_start_time" not in columns:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE work_orders ADD COLUMN actual_start_time DATETIME"))
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                UPDATE work_orders
+                SET actual_start_time = datetime(start_date || ' 08:00:00')
+                WHERE actual_start_time IS NULL
+                  AND start_date IS NOT NULL
+                  AND status IN ('in_progress', 'completed', 'closed')
+                """
+            )
+        )
+
+
+def ensure_maintenance_orders_plan_complete_date():
+    """为已有数据库的 equipment_maintenance_orders 表补齐 plan_complete_date 列，并回填已开工/已完成存量工单。"""
+    inspector = inspect(engine)
+    if not inspector.has_table("equipment_maintenance_orders"):
+        return
+    columns = [column["name"] for column in inspector.get_columns("equipment_maintenance_orders")]
+    if "plan_complete_date" not in columns:
+        with engine.begin() as conn:
+            conn.execute(
+                text("ALTER TABLE equipment_maintenance_orders ADD COLUMN plan_complete_date DATE")
+            )
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                UPDATE equipment_maintenance_orders
+                SET plan_complete_date = (
+                    SELECT date(next_due_at)
+                    FROM equipment_maintenance_plans
+                    WHERE equipment_maintenance_plans.id = equipment_maintenance_orders.plan_id
+                )
+                WHERE plan_complete_date IS NULL
+                  AND plan_id IS NOT NULL
+                  AND status IN ('in_progress', 'completed')
+                """
+            )
+        )
+
+
+def ensure_work_orders_actual_end_time():
+    """为已有数据库的 work_orders 表补齐 actual_end_time 列，并回填已完成/已关闭且为空的演示数据。"""
+    inspector = inspect(engine)
+    columns = [column["name"] for column in inspector.get_columns("work_orders")]
+    if "actual_end_time" not in columns:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE work_orders ADD COLUMN actual_end_time DATETIME"))
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                UPDATE work_orders
+                SET actual_end_time = datetime(end_date || ' 18:00:00')
+                WHERE actual_end_time IS NULL
+                  AND end_date IS NOT NULL
+                  AND status IN ('completed', 'closed')
+                """
+            )
+        )
+
+
+def ensure_equipment_repairs_repair_completed_at():
+    """为已有数据库的 equipment_repairs 表补齐 repair_completed_at 列，并回填已完成/已关闭存量工单。"""
+    inspector = inspect(engine)
+    if not inspector.has_table("equipment_repairs"):
+        return
+    columns = [column["name"] for column in inspector.get_columns("equipment_repairs")]
+    if "repair_completed_at" not in columns:
+        with engine.begin() as conn:
+            conn.execute(
+                text("ALTER TABLE equipment_repairs ADD COLUMN repair_completed_at DATETIME")
+            )
+        columns.append("repair_completed_at")
+    if "completion_time" in columns:
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    """
+                    UPDATE equipment_repairs
+                    SET repair_completed_at = completion_time
+                    WHERE repair_completed_at IS NULL
+                      AND completion_time IS NOT NULL
+                    """
+                )
+            )
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                UPDATE equipment_repairs
+                SET repair_completed_at = updated_at
+                WHERE repair_completed_at IS NULL
+                  AND status IN ('completed', 'closed')
+                """
+            )
+        )
 
 
 def seed_inspection_data():
@@ -233,9 +346,13 @@ def seed_equipment_maintenance_data():
         if not equipment_list:
             return
 
+        def _equipment_id(preferred: int) -> int:
+            idx = preferred if preferred < len(equipment_list) else 0
+            return equipment_list[idx].id
+
         now = datetime.utcnow()
         plan1 = EquipmentMaintenancePlan(
-            equipment_id=equipment_list[0].id,
+            equipment_id=_equipment_id(0),
             name="CNC月度保养",
             cycle_type="month",
             cycle_value=1,
@@ -255,7 +372,7 @@ def seed_equipment_maintenance_data():
             next_due_at=now + timedelta(days=2),
         )
         plan2 = EquipmentMaintenancePlan(
-            equipment_id=equipment_list[1].id,
+            equipment_id=_equipment_id(1),
             name="CNC周保养",
             cycle_type="week",
             cycle_value=1,
@@ -274,7 +391,7 @@ def seed_equipment_maintenance_data():
 
         order1 = EquipmentMaintenanceOrder(
             plan_id=plan2.id,
-            equipment_id=equipment_list[1].id,
+            equipment_id=_equipment_id(1),
             order_no=f"MO-{now.strftime('%Y%m%d')}-0001",
             status="pending",
             planned_start_at=now - timedelta(days=1),
@@ -295,12 +412,17 @@ def seed_equipment_repair_data():
         if not equipment_list:
             return
 
+        def _equipment_id(preferred: int) -> int:
+            """台账不足时回退到已有设备，避免启动种子 IndexError 导致后端起不来。"""
+            idx = preferred if preferred < len(equipment_list) else 0
+            return equipment_list[idx].id
+
         now = datetime.utcnow()
 
         # Repair 1: completed
         repair1 = EquipmentRepair(
             repair_no=f"RE-{now.strftime('%Y%m%d')}-0001",
-            equipment_id=equipment_list[2].id,  # 1号注塑机 (停机)
+            equipment_id=_equipment_id(2),  # 优先 1号注塑机 (停机)
             fault_category="液压故障",
             fault_description="注塑机液压系统压力不稳定，合模时出现异响，生产效率下降约30%",
             urgency="high",
@@ -308,7 +430,7 @@ def seed_equipment_repair_data():
             reporter="李四",
             repair_person="王师傅",
             start_time=now - timedelta(days=3),
-            completion_time=now - timedelta(days=1),
+            repair_completed_at=now - timedelta(days=1),
             repair_description="更换液压泵密封圈，清洗液压阀组，重新校准系统压力至100bar",
             images=[],
         )
@@ -322,7 +444,7 @@ def seed_equipment_repair_data():
         # Repair 2: in_progress
         repair2 = EquipmentRepair(
             repair_no=f"RE-{now.strftime('%Y%m%d')}-0002",
-            equipment_id=equipment_list[3].id,  # 自动包装线 (维修)
+            equipment_id=_equipment_id(3),  # 优先 自动包装线 (维修)
             fault_category="传动故障",
             fault_description="包装线传送带跑偏严重，电机驱动辊筒磨损异响",
             urgency="urgent",
@@ -330,7 +452,7 @@ def seed_equipment_repair_data():
             reporter="赵六",
             repair_person="张工",
             start_time=now - timedelta(hours=6),
-            completion_time=None,
+            repair_completed_at=None,
             repair_description=None,
             images=[],
         )
@@ -343,7 +465,7 @@ def seed_equipment_repair_data():
         # Repair 3: pending
         repair3 = EquipmentRepair(
             repair_no=f"RE-{now.strftime('%Y%m%d')}-0003",
-            equipment_id=equipment_list[0].id,  # 1号CNC加工中心 (运行)
+            equipment_id=_equipment_id(0),  # 优先 1号CNC加工中心 (运行)
             fault_category="控制系统故障",
             fault_description="CNC控制系统偶尔出现黑屏重启，怀疑主板供电模块异常",
             urgency="normal",
@@ -351,7 +473,7 @@ def seed_equipment_repair_data():
             reporter="张三",
             repair_person=None,
             start_time=None,
-            completion_time=None,
+            repair_completed_at=None,
             repair_description=None,
             images=[],
         )
@@ -474,16 +596,50 @@ def seed_quality_data():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    ensure_work_orders_actual_start_time()
+    ensure_work_orders_actual_end_time()
+    ensure_maintenance_orders_plan_complete_date()
+    ensure_equipment_repairs_repair_completed_at()
     seed_default_user()
     seed_inspection_data()
     seed_equipment_data()
     seed_equipment_maintenance_data()
     seed_equipment_repair_data()
     seed_quality_data()
+    seed_analytics_data()
+    backfill_recent_operational_data()
     yield
 
 
-app = FastAPI(title="ERP System API", lifespan=lifespan)
+app = FastAPI(
+    title="ERP 制造执行系统 API",
+    description=(
+        "江西中软 ERP / MES 后端接口文档。\n\n"
+        "- 业务数据均从 SQLite 数据库查询/写入（见 `docs/DATABASE_SCHEMA.md`）\n"
+        "- 除登录与健康检查外，接口需携带 JWT：`Authorization: Bearer <token>`\n"
+        "- 在线调试：`/docs`（Swagger）或 `/redoc`"
+    ),
+    version="1.0.0",
+    lifespan=lifespan,
+    openapi_tags=OPENAPI_TAGS,
+)
+
+
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+        tags=OPENAPI_TAGS,
+    )
+    app.openapi_schema = apply_chinese_openapi(schema)
+    return app.openapi_schema
+
+
+app.openapi = custom_openapi
 
 app.add_middleware(
     CORSMiddleware,
@@ -507,8 +663,10 @@ app.include_router(equipment_maintenance.router)
 app.include_router(equipment_repair.router)
 app.include_router(device_dashboard.router)
 app.include_router(quality.router)
+app.include_router(warehouse.router)
 
 
-@app.get("/api/health")
+@app.get("/api/health", tags=["系统"])
 def health():
+    """健康检查：确认服务可用。"""
     return {"status": "ok"}

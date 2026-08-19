@@ -50,8 +50,8 @@
 
     <div v-if="loadError" class="notice">
       <el-alert
-        :title="`数据接口暂不可用，已切换至演示数据（${loadError}）`"
-        type="warning"
+        :title="`数据加载失败：${loadError}`"
+        type="error"
         show-icon
         :closable="false"
       />
@@ -149,7 +149,6 @@ import VChart from 'vue-echarts'
 import { Refresh } from '@element-plus/icons-vue'
 import ProductionChartPanel from '../../components/production/ProductionChartPanel.vue'
 import { fetchProductionOverviewDashboard } from '../../api/productionOverview'
-import { buildProductionOverviewMock, PRODUCTION_LINES } from '../../api/productionOverviewMock'
 
 use([
   CanvasRenderer,
@@ -178,7 +177,6 @@ const COLORS = {
 const loading = ref(true)
 const loadError = ref('')
 const filters = reactive({ period: 'day', line: '全部' })
-const lineOptions = ['全部', ...PRODUCTION_LINES]
 const periodOptions = [
   { value: 'day', label: '日' },
   { value: 'week', label: '周' },
@@ -190,7 +188,7 @@ function emptyData() {
     period: 'day',
     production_line: '全部',
     updated_at: '',
-    lines: PRODUCTION_LINES,
+    lines: [],
     kpi: {
       completion_rate: 0,
       completion_rate_trend: '',
@@ -213,6 +211,7 @@ function emptyData() {
 }
 
 const data = reactive(emptyData())
+const lineOptions = computed(() => ['全部', ...(data.lines || [])])
 
 const axisLabel = { color: COLORS.text, fontSize: 11 }
 const axisLine = { lineStyle: { color: COLORS.axis } }
@@ -661,7 +660,7 @@ function applyData(resp) {
   data.period = resp.period || filters.period
   data.production_line = resp.production_line || filters.line
   data.updated_at = resp.updated_at || ''
-  data.lines = resp.lines?.length ? resp.lines : PRODUCTION_LINES
+  data.lines = resp.lines?.length ? resp.lines : []
   data.kpi = { ...emptyData().kpi, ...(resp.kpi || {}) }
   data.achievement_comparison = resp.achievement_comparison || []
   data.output_trend = resp.output_trend || { labels: [], plan: [], actual: [] }
@@ -691,12 +690,7 @@ async function loadData() {
     applyData(resp)
   } catch (err) {
     loadError.value = err.message || '接口暂不可用'
-    applyData(
-      buildProductionOverviewMock({
-        period: filters.period,
-        line: filters.line,
-      }),
-    )
+    applyData(emptyData())
   } finally {
     loading.value = false
   }

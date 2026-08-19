@@ -1,5 +1,13 @@
 <template>
   <div v-loading="loading" class="dashboard-home">
+    <el-alert
+      v-if="loadError"
+      class="home-error"
+      :title="`数据加载失败：${loadError}`"
+      type="error"
+      show-icon
+      :closable="false"
+    />
     <div class="dashboard-top">
       <!-- 月产量 -->
       <div class="dash-card card-white">
@@ -162,38 +170,33 @@ use([
 const loading = ref(true)
 const loadError = ref('')
 
-const defaultManufacturing = {
-  display_date: '2022.12.30',
-  monthly_output: 3535,
-  last_month_output: 4590,
-  daily_current: 1810,
-  daily_target: 2500,
-  efficiency_count: 197,
-  efficiency_rate: 85,
-  efficiency_trend: [420, 480, 520, 610, 580, 640, 720, 680, 750, 800, 760, 790],
-  anomaly_percent: 81,
-  anomaly_segments: [
-    { name: '10', value: 10 },
-    { name: '20', value: 20 },
-    { name: '30', value: 30 },
-    { name: '40', value: 40 },
-  ],
-  production_trend_value: 4316.0,
-  production_trend: [3200, 3450, 3680, 3900, 4050, 4180, 4250, 4316],
-  hourly_avg: 20.45,
-  hourly_bars: [18, 22, 15, 12, 10, 12, 8, 5, 6, 10, 18, 25],
-  hourly_output_trend: [150, 375, 420, 500, 160, 140],
+const emptyManufacturing = {
+  display_date: '',
+  monthly_output: 0,
+  last_month_output: 0,
+  daily_current: 0,
+  daily_target: 0,
+  efficiency_count: 0,
+  efficiency_rate: 0,
+  efficiency_trend: [],
+  anomaly_percent: 0,
+  anomaly_segments: [],
+  production_trend_value: 0,
+  production_trend: [],
+  hourly_avg: 0,
+  hourly_bars: [],
+  hourly_output_trend: [],
   hourly_stats: {
-    production_time: '7:08',
-    daily_output: 525,
-    daily_avg: 354,
+    production_time: '--',
+    daily_output: 0,
+    daily_avg: 0,
   },
 }
 
-const data = reactive({ ...defaultManufacturing })
+const data = reactive({ ...emptyManufacturing })
 
 const dailyPercent = computed(() =>
-  Math.round((data.daily_current / data.daily_target) * 100),
+  data.daily_target ? Math.round((data.daily_current / data.daily_target) * 100) : 0,
 )
 
 const monthlyGaugeOption = computed(() => ({
@@ -416,6 +419,10 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.home-error {
+  margin-bottom: 4px;
 }
 
 .dashboard-top {

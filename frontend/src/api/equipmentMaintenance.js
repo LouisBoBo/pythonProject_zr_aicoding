@@ -129,6 +129,14 @@ export async function executeMaintenanceOrder(id, data) {
   })
 }
 
+export async function updateMaintenanceOrder(id, data) {
+  return authFetch(`/api/equipment-maintenance/orders/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+}
+
 export async function deleteMaintenanceOrder(id) {
   return authFetch(`/api/equipment-maintenance/orders/${id}`, { method: 'DELETE' })
 }

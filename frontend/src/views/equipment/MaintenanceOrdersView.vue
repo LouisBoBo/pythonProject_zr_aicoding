@@ -67,6 +67,9 @@
         <el-table-column label="计划开始" width="110">
           <template #default="{ row }">{{ formatDate(row.planned_start_at) }}</template>
         </el-table-column>
+        <el-table-column label="计划完成时间" width="120">
+          <template #default="{ row }">{{ formatPlanCompleteDate(row.plan_complete_date) }}</template>
+        </el-table-column>
         <el-table-column label="指派人" width="90">
           <template #default="{ row }">{{ row.assignee || '-' }}</template>
         </el-table-column>
@@ -77,8 +80,11 @@
             </span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="240" fixed="right">
+        <el-table-column label="操作" width="280" fixed="right">
           <template #default="{ row }">
+            <el-button link type="primary" size="small" @click="openDetail(row)">
+              详情
+            </el-button>
             <el-button
               v-if="row.status === 'pending'"
               link
@@ -132,6 +138,57 @@
       </div>
     </div>
 
+    <!-- 详情/编辑弹窗 -->
+    <el-dialog
+      v-model="detailVisible"
+      title="保养工单详情"
+      width="520px"
+      destroy-on-close
+      @closed="resetDetailForm"
+    >
+      <el-form
+        v-if="detailForm.id"
+        :model="detailForm"
+        label-width="110px"
+      >
+        <el-form-item label="工单号">
+          <span>{{ detailForm.order_no }}</span>
+        </el-form-item>
+        <el-form-item label="设备">
+          <span>{{ detailForm.equipment_code }} · {{ detailForm.equipment_name }}</span>
+        </el-form-item>
+        <el-form-item label="关联计划">
+          <span>{{ detailForm.plan_name || '手动创建' }}</span>
+        </el-form-item>
+        <el-form-item label="状态">
+          <span>{{ statusLabel(detailForm.status) }}</span>
+        </el-form-item>
+        <el-form-item label="计划开始">
+          <span>{{ formatDate(detailForm.planned_start_at) }}</span>
+        </el-form-item>
+        <el-form-item label="计划完成时间">
+          <el-date-picker
+            v-model="detailForm.plan_complete_date"
+            type="date"
+            value-format="YYYY-MM-DD"
+            placeholder="选择日期"
+            clearable
+            style="width: 100%"
+          />
+        </el-form-item>
+        <el-form-item label="指派人">
+          <span>{{ detailForm.assignee || '-' }}</span>
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="detailForm.remark" type="textarea" :rows="2" maxlength="500" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="detailVisible = false">关闭</el-button>
+        <el-button type="primary" :loading="submitting" @click="handleDetailSave">保存</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 派工弹窗 -->
     <el-dialog v-model="dispatchVisible" title="派工" width="480px" destroy-on-close>
       <el-form ref="dispatchRef" :model="dispatchForm" :rules="dispatchRules" label-width="90px">
@@ -164,6 +221,7 @@
       <div v-if="currentOrder" class="execute-header">
         <span>{{ currentOrder.order_no }}</span>
         <span>{{ currentOrder.equipment_name }}</span>
+        <span>计划完成：{{ formatPlanCompleteDate(currentOrder.plan_complete_date) }}</span>
       </div>
       <el-form ref="executeRef" :model="executeForm" :rules="executeRules" label-width="80px">
         <el-form-item label="执行人" prop="executor">
@@ -214,6 +272,7 @@ import {
   fetchMaintenancePlan,
   fetchMaintenanceOrders,
   startMaintenanceOrder,
+  updateMaintenanceOrder,
 } from '../../api/equipmentMaintenance'
 
 const loading = ref(false)
@@ -241,10 +300,24 @@ const pipelineSteps = computed(() => [
 ])
 
 const dispatchVisible = ref(false)
+const detailVisible = ref(false)
 const executeVisible = ref(false)
 const currentOrder = ref(null)
 const dispatchRef = ref(null)
 const executeRef = ref(null)
+
+const detailForm = reactive({
+  id: null,
+  order_no: '',
+  equipment_code: '',
+  equipment_name: '',
+  plan_name: '',
+  status: '',
+  planned_start_at: null,
+  plan_complete_date: null,
+  assignee: '',
+  remark: '',
+})
 
 const dispatchForm = reactive({ assignee: '', planned_start_at: null })
 const dispatchRules = {
@@ -275,6 +348,15 @@ function formatDate(val) {
   const d = new Date(val)
   if (Number.isNaN(d.getTime())) return val
   return d.toLocaleDateString('zh-CN')
+}
+
+function formatPlanCompleteDate(val) {
+  if (!val) return '-'
+  if (/^\d{4}-\d{2}-\d{2}$/.test(val)) {
+    const [y, m, d] = val.split('-')
+    return `${y}/${Number(m)}/${Number(d)}`
+  }
+  return formatDate(val)
 }
 
 function rowClassName({ row }) {
@@ -330,6 +412,56 @@ function filterByStatus(key) {
   statusFilter.value = key
   filters.status = key
   handleSearch()
+}
+
+async function openDetail(row) {
+  try {
+    const detail = await fetchMaintenanceOrder(row.id)
+    detailForm.id = detail.id
+    detailForm.order_no = detail.order_no
+    detailForm.equipment_code = detail.equipment_code || ''
+    detailForm.equipment_name = detail.equipment_name || ''
+    detailForm.plan_name = detail.plan_name || ''
+    detailForm.status = detail.status
+    detailForm.planned_start_at = detail.planned_start_at
+    detailForm.plan_complete_date = detail.plan_complete_date || null
+    detailForm.assignee = detail.assignee || ''
+    detailForm.remark = detail.remark || ''
+    detailVisible.value = true
+  } catch (err) {
+    ElMessage.error(err.message || '加载失败')
+  }
+}
+
+function resetDetailForm() {
+  detailForm.id = null
+  detailForm.order_no = ''
+  detailForm.equipment_code = ''
+  detailForm.equipment_name = ''
+  detailForm.plan_name = ''
+  detailForm.status = ''
+  detailForm.planned_start_at = null
+  detailForm.plan_complete_date = null
+  detailForm.assignee = ''
+  detailForm.remark = ''
+}
+
+async function handleDetailSave() {
+  if (!detailForm.id) return
+  submitting.value = true
+  try {
+    await updateMaintenanceOrder(detailForm.id, {
+      plan_complete_date: detailForm.plan_complete_date || null,
+      remark: detailForm.remark || null,
+    })
+    ElMessage.success('保存成功')
+    detailVisible.value = false
+    loadOrders()
+  } catch (err) {
+    ElMessage.error(err.message || '保存失败')
+  } finally {
+    submitting.value = false
+  }
 }
 
 function openDispatch(row) {
@@ -397,6 +529,7 @@ async function openExecute(row) {
     executeForm.executor = detail.executor || detail.assignee || ''
     executeForm.results = items
     executeForm.remark = detail.remark || ''
+    currentOrder.value = { ...row, plan_complete_date: detail.plan_complete_date }
     executeVisible.value = true
   } catch (err) {
     ElMessage.error(err.message || '加载失败')

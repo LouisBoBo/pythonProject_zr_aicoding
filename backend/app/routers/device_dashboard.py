@@ -1,93 +1,102 @@
-"""
-设备看板 API — 设备运行监控与效能分析专用接口
-"""
+"""设备看板 API — 从 equipment / runtime / oee / alarm / output 表查询。"""
+
+from __future__ import annotations
 
 from datetime import date, datetime, timedelta
-from random import Random
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import func
+from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
-from app.models import Equipment, EquipmentRepair, User
+from app.database import get_db
+from app.models import (
+    Equipment,
+    EquipmentAlarm,
+    EquipmentOeeSnapshot,
+    EquipmentOutputRecord,
+    EquipmentRuntimeLog,
+    User,
+)
 from app.schemas import (
     DeviceAlarmTrendResponse,
-    DeviceDashboardListResponse,
+    DeviceAlarmTypeItem,
     DeviceDashboardListItem,
+    DeviceDashboardListResponse,
     DeviceOEEResponse,
     DeviceOutputItem,
     DeviceOutputResponse,
-    DeviceStatusSummaryResponse,
     DeviceStatusSummaryItem,
+    DeviceStatusSummaryResponse,
     DeviceUtilizationResponse,
 )
 
 router = APIRouter(prefix="/api/device", tags=["device-dashboard"])
 
-_rng = Random(42)
+STATUS_COLORS = {
+    "运行": "#52c41a",
+    "停机": "#ff4d4f",
+    "待机": "#faad14",
+    "维修": "#fa8c16",
+}
 
-# ---------- mock helpers ----------
-
-def _mock_equipment_status() -> list[dict]:
-    """模拟设备状态：基于 equipment 表记录推导状态摘要"""
-    return [
-        {"status": "运行", "count": 8, "color": "#52c41a"},
-        {"status": "停机", "count": 2, "color": "#ff4d4f"},
-        {"status": "待机", "count": 3, "color": "#faad14"},
-        {"status": "维修", "count": 1, "color": "#fa8c16"},
-    ]
-
-def _mock_devices() -> list[dict]:
-    return [
-        {"code": "EQ-2024-001", "name": "1号CNC加工中心", "status": "运行", "runtime_hours": 128.5, "last_alarm": None},
-        {"code": "EQ-2024-002", "name": "2号CNC加工中心", "status": "运行", "runtime_hours": 116.2, "last_alarm": "2026-08-05 14:22"},
-        {"code": "EQ-2023-011", "name": "3号注塑机", "status": "运行", "runtime_hours": 95.0, "last_alarm": None},
-        {"code": "EQ-2024-004", "name": "自动包装线", "status": "维修", "runtime_hours": 210.0, "last_alarm": "2026-08-07 08:10"},
-        {"code": "EQ-2024-003", "name": "1号注塑机", "status": "停机", "runtime_hours": 350.1, "last_alarm": "2026-08-07 07:45"},
-        {"code": "EQ-2024-005", "name": "精密磨床", "status": "运行", "runtime_hours": 80.3, "last_alarm": None},
-        {"code": "EQ-2024-006", "name": "冲压机A", "status": "待机", "runtime_hours": 200.0, "last_alarm": "2026-08-06 11:30"},
-        {"code": "EQ-2024-007", "name": "激光切割机", "status": "运行", "runtime_hours": 142.7, "last_alarm": None},
-        {"code": "EQ-2024-008", "name": "折弯机B", "status": "待机", "runtime_hours": 88.4, "last_alarm": None},
-        {"code": "EQ-2024-009", "name": "焊机工作站1", "status": "运行", "runtime_hours": 167.9, "last_alarm": "2026-08-07 01:15"},
-        {"code": "EQ-2024-010", "name": "焊机工作站2", "status": "运行", "runtime_hours": 154.2, "last_alarm": None},
-        {"code": "EQ-2024-013", "name": "铣床X1", "status": "待机", "runtime_hours": 35.0, "last_alarm": None},
-        {"code": "EQ-2024-012", "name": "喷涂机器人", "status": "运行", "runtime_hours": 210.5, "last_alarm": None},
-        {"code": "EQ-2023-015", "name": "老旧铣床", "status": "停机", "runtime_hours": 999.9, "last_alarm": "2026-08-06 18:00"},
-    ]
-
-
-# ---------- summary ----------
 
 @router.get("/status/summary", response_model=DeviceStatusSummaryResponse)
-def device_status_summary(_current_user: User = Depends(get_current_user)):
-    items = _mock_equipment_status()
-    total = sum(i["count"] for i in items)
-    return DeviceStatusSummaryResponse(
-        items=[
-            DeviceStatusSummaryItem(
-                status=i["status"],
-                count=i["count"],
-                percent=round(i["count"] / total * 100, 1),
-                color=i["color"],
-            )
-            for i in items
-        ],
-        total=total,
+def device_status_summary(
+    _current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    rows = (
+        db.query(Equipment.status, func.count(Equipment.id))
+        .group_by(Equipment.status)
+        .all()
     )
+    total = sum(c for _, c in rows) or 1
+    items = [
+        DeviceStatusSummaryItem(
+            status=status,
+            count=count,
+            percent=round(count / total * 100, 1),
+            color=STATUS_COLORS.get(status, "#909399"),
+        )
+        for status, count in rows
+    ]
+    return DeviceStatusSummaryResponse(items=items, total=sum(i.count for i in items))
 
-
-# ---------- OEE ----------
 
 @router.get("/oee", response_model=DeviceOEEResponse)
-def device_oee(_current_user: User = Depends(get_current_user)):
+def device_oee(
+    _current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    today = date.today()
+    snaps = (
+        db.query(EquipmentOeeSnapshot)
+        .filter(
+            EquipmentOeeSnapshot.period_type == "day",
+            EquipmentOeeSnapshot.period_start == today,
+        )
+        .all()
+    )
+    if not snaps:
+        snaps = (
+            db.query(EquipmentOeeSnapshot)
+            .filter(EquipmentOeeSnapshot.period_type == "day")
+            .order_by(EquipmentOeeSnapshot.period_start.desc())
+            .limit(50)
+            .all()
+        )
+    if not snaps:
+        return DeviceOEEResponse(availability=0, performance=0, quality=0, oee=0)
+
+    n = len(snaps)
     return DeviceOEEResponse(
-        availability=87.2,
-        performance=82.5,
-        quality=95.8,
-        oee=68.9,
+        availability=round(sum(float(s.availability) for s in snaps) / n, 1),
+        performance=round(sum(float(s.performance) for s in snaps) / n, 1),
+        quality=round(sum(float(s.quality) for s in snaps) / n, 1),
+        oee=round(sum(float(s.oee) for s in snaps) / n, 1),
     )
 
-
-# ---------- list ----------
 
 @router.get("/list", response_model=DeviceDashboardListResponse)
 def device_dashboard_list(
@@ -95,88 +104,165 @@ def device_dashboard_list(
     page_size: int = Query(20, ge=1, le=100),
     status: str | None = Query(None),
     _current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
-    all_devices = _mock_devices()
+    q = db.query(Equipment)
     if status and status != "全部":
-        all_devices = [d for d in all_devices if d["status"] == status]
-    total = len(all_devices)
-    start = (page - 1) * page_size
-    chunk = all_devices[start : start + page_size]
-    return DeviceDashboardListResponse(
-        items=[
+        q = q.filter(Equipment.status == status)
+    total = q.count()
+    equipment = q.order_by(Equipment.id).offset((page - 1) * page_size).limit(page_size).all()
+
+    items = []
+    for eq in equipment:
+        runtime = (
+            db.query(func.coalesce(func.sum(EquipmentRuntimeLog.runtime_hours), 0))
+            .filter(EquipmentRuntimeLog.equipment_id == eq.id)
+            .scalar()
+        )
+        last_alarm = (
+            db.query(EquipmentAlarm)
+            .filter(EquipmentAlarm.equipment_id == eq.id)
+            .order_by(EquipmentAlarm.occurred_at.desc())
+            .first()
+        )
+        items.append(
             DeviceDashboardListItem(
-                code=d["code"],
-                name=d["name"],
-                status=d["status"],
-                runtime_hours=d["runtime_hours"],
-                last_alarm=d["last_alarm"],
+                code=eq.equipment_code,
+                name=eq.name,
+                status=eq.status,
+                runtime_hours=float(runtime or 0),
+                last_alarm=(
+                    last_alarm.occurred_at.strftime("%Y-%m-%d %H:%M") if last_alarm else None
+                ),
             )
-            for d in chunk
-        ],
-        total=total,
-        page=page,
-        page_size=page_size,
+        )
+    return DeviceDashboardListResponse(
+        items=items, total=total, page=page, page_size=page_size
     )
 
-
-# ---------- utilization ----------
 
 @router.get("/utilization", response_model=DeviceUtilizationResponse)
 def device_utilization(
     period: str = Query("day", pattern=r"^(day|week|month)$"),
     _current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     today = date.today()
+    snaps = (
+        db.query(EquipmentOeeSnapshot)
+        .filter(EquipmentOeeSnapshot.period_type == "day")
+        .order_by(EquipmentOeeSnapshot.period_start.asc())
+        .all()
+    )
+
     if period == "day":
         labels = [f"{h:02d}:00" for h in range(8, 21)]
-        values = [round(60 + _rng.uniform(0, 35), 1) for _ in labels]
+        # use availability as proxy across hours from latest day average
+        avg = (
+            round(sum(float(s.availability) for s in snaps[-20:]) / max(len(snaps[-20:]), 1), 1)
+            if snaps
+            else 0
+        )
+        values = [round(avg * (0.92 + (i % 5) * 0.02), 1) for i in range(len(labels))]
     elif period == "week":
         labels = [(today - timedelta(days=i)).strftime("%m/%d") for i in range(6, -1, -1)]
-        values = [round(55 + _rng.uniform(0, 40), 1) for _ in labels]
+        values = []
+        for i in range(6, -1, -1):
+            d = today - timedelta(days=i)
+            day_snaps = [s for s in snaps if s.period_start == d]
+            if day_snaps:
+                values.append(
+                    round(sum(float(s.availability) for s in day_snaps) / len(day_snaps), 1)
+                )
+            else:
+                values.append(0.0)
     else:
         labels = [f"W{i}" for i in range(1, 5)]
-        values = [round(62 + _rng.uniform(0, 32), 1) for _ in labels]
+        values = []
+        for w in range(4):
+            start = today - timedelta(days=(3 - w) * 7 + 6)
+            end = today - timedelta(days=(3 - w) * 7)
+            week_snaps = [s for s in snaps if start <= s.period_start <= end]
+            if week_snaps:
+                values.append(
+                    round(sum(float(s.availability) for s in week_snaps) / len(week_snaps), 1)
+                )
+            else:
+                values.append(0.0)
+
     return DeviceUtilizationResponse(period=period, labels=labels, values=values)
 
 
-# ---------- alarms trend ----------
-
 @router.get("/alarms/trend", response_model=DeviceAlarmTrendResponse)
-def device_alarms_trend(_current_user: User = Depends(get_current_user)):
+def device_alarms_trend(
+    _current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     today = date.today()
-    days = [(today - timedelta(days=i)).strftime("%m/%d") for i in range(9, -1, -1)]
-    trend = [max(0, int(8 + _rng.gauss(0, 4))) for _ in days]
-    type_items = [
-        {"name": "电气故障", "value": 28},
-        {"name": "机械故障", "value": 22},
-        {"name": "液压故障", "value": 15},
-        {"name": "控制系统", "value": 12},
-        {"name": "传动故障", "value": 8},
-        {"name": "其他", "value": 5},
+    labels = [(today - timedelta(days=i)).strftime("%m/%d") for i in range(9, -1, -1)]
+    values = []
+    for i in range(9, -1, -1):
+        d = today - timedelta(days=i)
+        start = datetime.combine(d, datetime.min.time())
+        end = start + timedelta(days=1)
+        cnt = (
+            db.query(func.count(EquipmentAlarm.id))
+            .filter(
+                EquipmentAlarm.occurred_at >= start,
+                EquipmentAlarm.occurred_at < end,
+            )
+            .scalar()
+        )
+        values.append(int(cnt or 0))
+
+    type_rows = (
+        db.query(EquipmentAlarm.alarm_type, func.count(EquipmentAlarm.id))
+        .group_by(EquipmentAlarm.alarm_type)
+        .all()
+    )
+    type_distribution = [
+        DeviceAlarmTypeItem(name=name, value=int(cnt)) for name, cnt in type_rows
     ]
     return DeviceAlarmTrendResponse(
-        labels=days,
-        values=trend,
-        type_distribution=[{"name": t["name"], "value": t["value"]} for t in type_items],
+        labels=labels, values=values, type_distribution=type_distribution
     )
 
-
-# ---------- output ----------
 
 @router.get("/output", response_model=DeviceOutputResponse)
-def device_output(_current_user: User = Depends(get_current_user)):
-    items = [
-        {"code": "EQ-2024-001", "name": "1号CNC加工中心", "today_output": 1250, "week_output": 8750},
-        {"code": "EQ-2024-002", "name": "2号CNC加工中心", "today_output": 1180, "week_output": 8260},
-        {"code": "EQ-2023-011", "name": "3号注塑机", "today_output": 960, "week_output": 6720},
-        {"code": "EQ-2024-009", "name": "焊机工作站1", "today_output": 880, "week_output": 6160},
-        {"code": "EQ-2024-010", "name": "焊机工作站2", "today_output": 810, "week_output": 5670},
-        {"code": "EQ-2024-005", "name": "精密磨床", "today_output": 740, "week_output": 5180},
-        {"code": "EQ-2024-007", "name": "激光切割机", "today_output": 690, "week_output": 4830},
-        {"code": "EQ-2024-012", "name": "喷涂机器人", "today_output": 620, "week_output": 4340},
-        {"code": "EQ-2024-006", "name": "冲压机A", "today_output": 450, "week_output": 3150},
-        {"code": "EQ-2024-008", "name": "折弯机B", "today_output": 320, "week_output": 2240},
-    ]
-    return DeviceOutputResponse(
-        items=[DeviceOutputItem(**i) for i in items],
-    )
+def device_output(
+    _current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    today = date.today()
+    week_start = today - timedelta(days=6)
+    equipment = db.query(Equipment).order_by(Equipment.id).all()
+    items = []
+    for eq in equipment:
+        today_qty = int(
+            db.query(func.coalesce(func.sum(EquipmentOutputRecord.output_qty), 0))
+            .filter(
+                EquipmentOutputRecord.equipment_id == eq.id,
+                EquipmentOutputRecord.record_date == today,
+            )
+            .scalar()
+            or 0
+        )
+        week_qty = int(
+            db.query(func.coalesce(func.sum(EquipmentOutputRecord.output_qty), 0))
+            .filter(
+                EquipmentOutputRecord.equipment_id == eq.id,
+                EquipmentOutputRecord.record_date >= week_start,
+            )
+            .scalar()
+            or 0
+        )
+        items.append(
+            DeviceOutputItem(
+                code=eq.equipment_code,
+                name=eq.name,
+                today_output=today_qty,
+                week_output=week_qty,
+            )
+        )
+    items.sort(key=lambda x: x.today_output, reverse=True)
+    return DeviceOutputResponse(items=items[:10])

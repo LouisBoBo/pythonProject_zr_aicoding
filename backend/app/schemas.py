@@ -139,6 +139,8 @@ class WorkOrderResponse(BaseModel):
     priority: str
     assignee: str | None
     start_date: date | None
+    actual_start_time: datetime | None
+    actual_end_time: datetime | None = Field(default=None, description="实际结束时间")
     end_date: date | None
     remark: str | None
     created_at: datetime
@@ -594,6 +596,7 @@ class EquipmentMaintenanceOrderCreate(BaseModel):
     plan_id: int | None = None
     equipment_id: int
     planned_start_at: datetime
+    plan_complete_date: date | None = Field(default=None, description="计划完成时间（仅日期）")
     assignee: str | None = Field(default=None, max_length=50)
     remark: str | None = Field(default=None, max_length=500)
 
@@ -602,6 +605,7 @@ class EquipmentMaintenanceOrderUpdate(BaseModel):
     plan_id: int | None = None
     equipment_id: int | None = None
     planned_start_at: datetime | None = None
+    plan_complete_date: date | None = Field(default=None, description="计划完成时间（仅日期）")
     assignee: str | None = Field(default=None, max_length=50)
     remark: str | None = Field(default=None, max_length=500)
     status: MaintenanceOrderStatus | None = None
@@ -629,6 +633,7 @@ class EquipmentMaintenanceOrderResponse(BaseModel):
     status: str
     assignee: str | None
     planned_start_at: datetime
+    plan_complete_date: date | None = Field(default=None, description="计划完成时间（仅日期）")
     actual_start_at: datetime | None
     actual_end_at: datetime | None
     executor: str | None
@@ -722,6 +727,7 @@ class EquipmentRepairUpdate(BaseModel):
     reporter: str | None = Field(default=None, min_length=1, max_length=50)
     repair_person: str | None = Field(default=None, max_length=50)
     repair_description: str | None = Field(default=None, max_length=2000)
+    repair_completed_at: datetime | None = Field(default=None, description="维修完成时间")
     images: list[str] | None = None
     parts: list[EquipmentRepairPartCreate] | None = None
 
@@ -738,7 +744,7 @@ class EquipmentRepairListItem(BaseModel):
     status: str
     reporter: str
     repair_person: str | None
-    completion_time: datetime | None
+    repair_completed_at: datetime | None = Field(default=None, description="维修完成时间")
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -764,7 +770,7 @@ class EquipmentRepairDetail(BaseModel):
     reporter: str
     repair_person: str | None
     start_time: datetime | None
-    completion_time: datetime | None
+    repair_completed_at: datetime | None = Field(default=None, description="维修完成时间")
     repair_description: str | None
     images: list[str] | None
     parts: list[EquipmentRepairPartResponse] = Field(default_factory=list)
@@ -1022,3 +1028,70 @@ class ComprehensiveKanbanResponse(BaseModel):
     device_monitor: CompKanbanDeviceMonitor
     order_delivery: CompKanbanOrderDelivery
     material_inventory: CompKanbanMaterialInventory
+
+
+# ============================================================
+#  Warehouse Dashboard (仓储看板)
+# ============================================================
+
+
+class WarehouseKpiCard(BaseModel):
+    key: str
+    label: str
+    value: str
+    unit: str
+    sub: str
+    color: str
+
+
+class WarehouseTrendSeries(BaseModel):
+    labels: list[str]
+    values: list[int]
+    summary: int
+
+
+class WarehouseTrendBundle(BaseModel):
+    today: WarehouseTrendSeries
+    week: WarehouseTrendSeries
+    month: WarehouseTrendSeries
+
+
+class WarehouseAlertItem(BaseModel):
+    level: str
+    text: str
+
+
+class WarehouseLocationSlice(BaseModel):
+    name: str
+    value: int
+    color: str
+
+
+class WarehouseActivityItem(BaseModel):
+    time: str
+    type: str
+    typeLabel: str
+    text: str
+
+
+class WarehouseMaterialRow(BaseModel):
+    material_code: str
+    material_name: str
+    category: str
+    spec: str | None = None
+    unit: str
+    stock_qty: int
+    safety_stock: int
+    location_code: str | None = None
+    last_update: str
+
+
+class WarehouseDashboardResponse(BaseModel):
+    kpi_cards: list[WarehouseKpiCard]
+    inbound: WarehouseTrendBundle
+    outbound: WarehouseTrendBundle
+    alerts: list[WarehouseAlertItem]
+    location_distribution: list[WarehouseLocationSlice]
+    activities: list[WarehouseActivityItem]
+    materials: list[WarehouseMaterialRow]
+    categories: list[str]

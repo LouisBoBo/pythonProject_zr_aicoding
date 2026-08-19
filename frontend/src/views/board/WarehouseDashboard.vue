@@ -1,5 +1,13 @@
 <template>
   <div v-loading="loading" class="warehouse-dashboard">
+    <el-alert
+      v-if="loadError"
+      style="margin-bottom: 12px"
+      :title="`数据加载失败：${loadError}`"
+      type="error"
+      show-icon
+      :closable="false"
+    />
     <!-- ===== 顶部 KPI 卡片行 ===== -->
     <div class="kpi-row">
       <div
@@ -191,7 +199,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import * as echarts from 'echarts'
 import {
   Box,
@@ -199,110 +207,66 @@ import {
   Location,
   RefreshRight,
 } from '@element-plus/icons-vue'
+import { fetchWarehouseDashboard } from '../../api/warehouse'
 
-// ==================== Mock 数据 ====================
+const KPI_ICONS = {
+  total_stock: Box,
+  sku_count: Grid,
+  location_usage: Location,
+  turnover: RefreshRight,
+}
 
 const loading = ref(false)
+const loadError = ref('')
+const kpiCards = ref([])
+const inboundData = ref({
+  today: { labels: [], values: [], summary: 0 },
+  week: { labels: [], values: [], summary: 0 },
+  month: { labels: [], values: [], summary: 0 },
+})
+const outboundData = ref({
+  today: { labels: [], values: [], summary: 0 },
+  week: { labels: [], values: [], summary: 0 },
+  month: { labels: [], values: [], summary: 0 },
+})
+const alerts = ref([])
+const locationData = ref([])
+const activities = ref([])
+const materials = ref([])
+const categories = ref([])
 
-const kpiCards = [
-  { key: 'total_stock', label: '总库存量', value: '1,285,630', unit: '件', sub: '较昨日 +2.3%', color: '#409eff', icon: Box },
-  { key: 'sku_count', label: 'SKU 数', value: '4,872', unit: '个', sub: '较上月 +56', color: '#67c23a', icon: Grid },
-  { key: 'location_usage', label: '库位使用率', value: '78.5', unit: '%', sub: '空闲 21.5%', color: '#e6a23c', icon: Location },
-  { key: 'turnover', label: '周转率', value: '5.8', unit: '次/月', sub: '同比 +0.3', color: '#f56c6c', icon: RefreshRight },
-]
-
-// 入库趋势 Mock
 const periods = [
   { label: '今日', value: 'today' },
   { label: '本周', value: 'week' },
   { label: '本月', value: 'month' },
 ]
 
-const inboundData = {
-  today: {
-    labels: ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00'],
-    values: [45, 52, 38, 60, 55, 48, 72, 65, 58, 50],
-    summary: 543,
-  },
-  week: {
-    labels: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'],
-    values: [320, 410, 380, 450, 520, 280, 180],
-    summary: 2540,
-  },
-  month: {
-    labels: ['第1周', '第2周', '第3周', '第4周'],
-    values: [1820, 2100, 1950, 2340],
-    summary: 8210,
-  },
+async function loadDashboard() {
+  loading.value = true
+  loadError.value = ''
+  try {
+    const resp = await fetchWarehouseDashboard()
+    kpiCards.value = (resp.kpi_cards || []).map((card) => ({
+      ...card,
+      icon: KPI_ICONS[card.key] || Box,
+    }))
+    inboundData.value = resp.inbound
+    outboundData.value = resp.outbound
+    alerts.value = resp.alerts || []
+    locationData.value = resp.location_distribution || []
+    activities.value = resp.activities || []
+    materials.value = resp.materials || []
+    categories.value = resp.categories || []
+    await nextTick()
+    renderInboundChart()
+    renderOutboundChart()
+    renderLocationPie()
+  } catch (err) {
+    loadError.value = err.message || '加载失败'
+  } finally {
+    loading.value = false
+  }
 }
-
-const outboundData = {
-  today: {
-    labels: ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00'],
-    values: [38, 45, 32, 55, 48, 42, 68, 60, 52, 44],
-    summary: 484,
-  },
-  week: {
-    labels: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'],
-    values: [290, 380, 350, 420, 480, 250, 160],
-    summary: 2330,
-  },
-  month: {
-    labels: ['第1周', '第2周', '第3周', '第4周'],
-    values: [1650, 1920, 1780, 2150],
-    summary: 7500,
-  },
-}
-
-// 预警
-const alerts = [
-  { level: 'danger', text: '物料「PCB-2024-A」库存低于安全库存（当前 120，安全 200）' },
-  { level: 'warning', text: '物料「电阻-0805-10K」已滞库 90 天，请及时处理' },
-  { level: 'warning', text: '物料「电容-0603-1uF」临近保质期（剩余 15 天）' },
-]
-
-// 库位分布
-const locationData = [
-  { name: '已占用', value: 235, color: '#409eff' },
-  { name: '空闲', value: 65, color: '#67c23a' },
-  { name: '异常', value: 12, color: '#f56c6c' },
-]
-
-// 实时动态
-const activities = [
-  { time: '17:32:15', type: 'in', typeLabel: '入库', text: '物料「铝基板-2024」入库 200 件 → A-03-12' },
-  { time: '17:28:40', type: 'out', typeLabel: '出库', text: '物料「连接器-USB-C」出库 50 件 ← B-02-05' },
-  { time: '17:15:22', type: 'in', typeLabel: '入库', text: '物料「散热片-40x40」入库 500 件 → C-01-08' },
-  { time: '17:10:08', type: 'out', typeLabel: '出库', text: '物料「PCB-2024-A」出库 30 件 ← A-01-03' },
-  { time: '16:52:33', type: 'move', typeLabel: '移库', text: '物料「电阻-0805-10K」A-02-06 → B-05-11' },
-  { time: '16:38:19', type: 'in', typeLabel: '入库', text: '物料「电容-0603-1uF」入库 1000 件 → B-03-02' },
-  { time: '16:22:45', type: 'out', typeLabel: '出库', text: '物料「连接器-USB-C」出库 80 件 ← C-02-09' },
-  { time: '16:05:11', type: 'check', typeLabel: '盘点', text: '库位 A-03-12 盘点完成，账实相符' },
-  { time: '15:48:30', type: 'in', typeLabel: '入库', text: '物料「排针-2.54mm」入库 2000 件 → A-04-07' },
-  { time: '15:32:07', type: 'out', typeLabel: '出库', text: '物料「铝基板-2024」出库 120 件 ← B-01-10' },
-]
-
-// 物料明细 Mock
-const materials = [
-  { material_code: 'PCB-2024-A', material_name: '铝基板 PCB', category: '电子元件', spec: '100x160mm', unit: '片', stock_qty: 120, safety_stock: 200, location_code: 'A-01-03', last_update: '2025-01-15 17:30' },
-  { material_code: 'RES-0805-10K', material_name: '贴片电阻 10KΩ', category: '电子元件', spec: '0805 ±1%', unit: '个', stock_qty: 8500, safety_stock: 2000, location_code: 'A-02-06', last_update: '2025-01-15 16:50' },
-  { material_code: 'CAP-0603-1UF', material_name: '贴片电容 1μF', category: '电子元件', spec: '0603 16V', unit: '个', stock_qty: 3200, safety_stock: 3000, location_code: 'B-03-02', last_update: '2025-01-15 16:38' },
-  { material_code: 'CONN-USB-C', material_name: 'USB-C 连接器', category: '连接器', spec: '16P SMT', unit: '个', stock_qty: 180, safety_stock: 500, location_code: 'B-02-05', last_update: '2025-01-15 17:28' },
-  { material_code: 'HEATSINK-40', material_name: '铝散热片', category: '散热材料', spec: '40x40x10mm', unit: '片', stock_qty: 2100, safety_stock: 800, location_code: 'C-01-08', last_update: '2025-01-15 17:15' },
-  { material_code: 'HEADER-254', material_name: '排针 2.54mm', category: '连接器', spec: '1x40P 直插', unit: '个', stock_qty: 5600, safety_stock: 1500, location_code: 'A-04-07', last_update: '2025-01-15 15:48' },
-  { material_code: 'IC-STM32F407', material_name: 'STM32F407VET6', category: '芯片', spec: 'LQFP-100', unit: '片', stock_qty: 320, safety_stock: 100, location_code: 'D-01-01', last_update: '2025-01-14 10:20' },
-  { material_code: 'LED-5050-W', material_name: '白光 LED 5050', category: '光电器件', spec: '5050 6000K', unit: '个', stock_qty: 0, safety_stock: 500, location_code: 'D-02-03', last_update: '2025-01-13 14:00' },
-  { material_code: 'DIODE-1N4148', material_name: '开关二极管 1N4148', category: '电子元件', spec: 'SOD-123', unit: '个', stock_qty: 4200, safety_stock: 2000, location_code: 'A-05-02', last_update: '2025-01-15 09:12' },
-  { material_code: 'IND-4R7', material_name: '功率电感 4.7μH', category: '电子元件', spec: '5x5mm SMD', unit: '个', stock_qty: 1800, safety_stock: 1000, location_code: 'B-04-08', last_update: '2025-01-14 16:30' },
-  { material_code: 'XTAL-8M', material_name: '晶振 8MHz', category: '电子元件', spec: '3225 SMD', unit: '个', stock_qty: 650, safety_stock: 300, location_code: 'D-01-05', last_update: '2025-01-13 11:00' },
-  { material_code: 'FUSE-2A', material_name: '保险丝 2A', category: '保护器件', spec: '1206 SMD', unit: '个', stock_qty: 3100, safety_stock: 1000, location_code: 'C-03-01', last_update: '2025-01-15 08:45' },
-  { material_code: 'MOSFET-N', material_name: 'N沟道 MOSFET', category: '芯片', spec: 'SOT-23 30V/3A', unit: '片', stock_qty: 890, safety_stock: 500, location_code: 'D-01-08', last_update: '2025-01-14 13:20' },
-  { material_code: 'SOLDER-PB', material_name: '含铅锡膏', category: '焊接材料', spec: 'Sn63Pb37 500g', unit: '瓶', stock_qty: 45, safety_stock: 20, location_code: 'E-01-01', last_update: '2025-01-15 10:00' },
-  { material_code: 'FLUX-100', material_name: '助焊剂', category: '焊接材料', spec: '100ml', unit: '瓶', stock_qty: 28, safety_stock: 15, location_code: 'E-01-02', last_update: '2025-01-12 09:30' },
-  { material_code: 'WIRE-AWG22', material_name: '电子线 AWG22', category: '线材', spec: '红 100m/卷', unit: '卷', stock_qty: 12, safety_stock: 10, location_code: 'E-02-03', last_update: '2025-01-11 15:00' },
-]
-
-const categories = ['电子元件', '连接器', '芯片', '散热材料', '光电器件', '保护器件', '焊接材料', '线材']
 
 // ==================== 图表相关 ====================
 
@@ -323,7 +287,7 @@ const pageSize = ref(10)
 const sortInfo = ref({ prop: 'stock_qty', order: 'descending' })
 
 const filteredMaterials = computed(() => {
-  let list = [...materials]
+  let list = [...materials.value]
   if (searchKeyword.value) {
     const kw = searchKeyword.value.toLowerCase()
     list = list.filter(
@@ -403,7 +367,8 @@ function makeLineOption(data, colorStart, colorEnd) {
 
 function renderInboundChart() {
   if (!inboundChart || !inboundChartRef.value) return
-  const data = inboundData[inboundPeriod.value]
+  const data = inboundData.value[inboundPeriod.value]
+  if (!data) return
   inboundChart.setOption(
     makeLineOption(
       data,
@@ -421,7 +386,8 @@ function switchInboundPeriod(p) {
 
 function renderOutboundChart() {
   if (!outboundChart || !outboundChartRef.value) return
-  const data = outboundData[outboundPeriod.value]
+  const data = outboundData.value[outboundPeriod.value]
+  if (!data) return
   outboundChart.setOption(
     makeLineOption(
       data,
@@ -469,7 +435,7 @@ function renderLocationPie() {
         emphasis: {
           label: { show: true, fontSize: 14, fontWeight: 'bold' },
         },
-        data: locationData.map((d) => ({
+        data: locationData.value.map((d) => ({
           name: d.name,
           value: d.value,
           itemStyle: { color: d.color },
@@ -484,23 +450,23 @@ function renderLocationPie() {
 let resizeHandler = null
 
 onMounted(() => {
-  nextTick(() => {
+  nextTick(async () => {
     if (inboundChartRef.value) {
       inboundChart = echarts.init(inboundChartRef.value)
-      renderInboundChart()
     }
     if (outboundChartRef.value) {
       outboundChart = echarts.init(outboundChartRef.value)
-      renderOutboundChart()
     }
     if (locationPieRef.value) {
       locationPieChart = echarts.init(locationPieRef.value)
-      renderLocationPie()
     }
+    await loadDashboard()
   })
 
   resizeHandler = () => {
-    [inboundChart, outboundChart, locationPieChart].forEach((c) => c?.resize?.())
+    inboundChart?.resize()
+    outboundChart?.resize()
+    locationPieChart?.resize()
   }
   window.addEventListener('resize', resizeHandler)
 })

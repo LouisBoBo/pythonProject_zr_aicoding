@@ -252,6 +252,7 @@ def test_work_order_status_transitions(client, test_user):
     )
     assert start_response.status_code == 200
     assert start_response.json()["status"] == "in_progress"
+    assert start_response.json()["actual_start_time"]
 
     complete_response = client.patch(
         f"/api/work-orders/{work_order_id}/status",
@@ -260,6 +261,7 @@ def test_work_order_status_transitions(client, test_user):
     )
     assert complete_response.status_code == 200
     assert complete_response.json()["status"] == "completed"
+    assert complete_response.json()["actual_end_time"]
 
     invalid_response = client.patch(
         f"/api/work-orders/{work_order_id}/status",

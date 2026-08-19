@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.exc import IntegrityError
@@ -59,6 +59,22 @@ def _alert_level_for_due(due_at: datetime | None, *, active: bool = True) -> str
     if due_at.date() <= (now + timedelta(days=DUE_SOON_DAYS)).date():
         return "due_soon"
     return "normal"
+
+
+def _plan_complete_date_from_plan(plan: EquipmentMaintenancePlan | None) -> date | None:
+    if plan and plan.next_due_at:
+        return plan.next_due_at.date()
+    return None
+
+
+def _resolve_plan_complete_date(
+    *,
+    explicit: date | None,
+    plan: EquipmentMaintenancePlan | None,
+) -> date | None:
+    if explicit is not None:
+        return explicit
+    return _plan_complete_date_from_plan(plan)
 
 
 def _generate_order_no(db: Session) -> str:
@@ -138,6 +154,7 @@ def _order_to_response(order: EquipmentMaintenanceOrder) -> EquipmentMaintenance
         status=order.status,
         assignee=order.assignee,
         planned_start_at=order.planned_start_at,
+        plan_complete_date=order.plan_complete_date,
         actual_start_at=order.actual_start_at,
         actual_end_at=order.actual_end_at,
         executor=order.executor,
@@ -307,8 +324,13 @@ def create_order(
     db: Session = Depends(get_db),
 ):
     _get_equipment_or_404(payload.equipment_id, db)
+    plan = None
     if payload.plan_id:
-        _get_plan_or_404(payload.plan_id, db)
+        plan = _get_plan_or_404(payload.plan_id, db)
+    plan_complete_date = _resolve_plan_complete_date(
+        explicit=payload.plan_complete_date,
+        plan=plan,
+    )
     order = EquipmentMaintenanceOrder(
         plan_id=payload.plan_id,
         equipment_id=payload.equipment_id,
@@ -316,6 +338,7 @@ def create_order(
         status="pending",
         assignee=payload.assignee,
         planned_start_at=payload.planned_start_at,
+        plan_complete_date=plan_complete_date,
         remark=payload.remark,
     )
     db.add(order)
@@ -360,6 +383,7 @@ def generate_order_from_plan(
         order_no=_generate_order_no(db),
         status="pending",
         planned_start_at=planned_start,
+        plan_complete_date=_plan_complete_date_from_plan(plan),
     )
     db.add(order)
     try:
@@ -384,6 +408,10 @@ def update_order(
         _get_equipment_or_404(data["equipment_id"], db)
     if "plan_id" in data and data["plan_id"]:
         _get_plan_or_404(data["plan_id"], db)
+    if "plan_id" in data and data["plan_id"] and "plan_complete_date" not in data:
+        plan = _get_plan_or_404(data["plan_id"], db)
+        if order.plan_complete_date is None:
+            data["plan_complete_date"] = _plan_complete_date_from_plan(plan)
     if "status" in data and data["status"] != order.status:
         allowed = VALID_ORDER_TRANSITIONS.get(order.status, set())
         if data["status"] not in allowed:

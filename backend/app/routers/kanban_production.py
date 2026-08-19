@@ -1,7 +1,16 @@
+"""生产看板 — 从产量事实表聚合。"""
+
+from __future__ import annotations
+
+from collections import defaultdict
+from datetime import date, datetime
+
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
-from app.models import User
+from app.database import get_db
+from app.models import Product, ProductionOutputRecord, ProductionPlan, User
 from app.schemas import (
     CompletionChartPoint,
     ProductionDetailRow,
@@ -11,88 +20,122 @@ from app.schemas import (
 
 router = APIRouter(prefix="/api/kanban", tags=["kanban-production"])
 
+WEEKDAY_CN = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]
 
-def _mock_production_kanban() -> ProductionKanbanDashboard:
-    return ProductionKanbanDashboard(
-        board_category="production",
-        display_time="2026-08-07 08:46:44",
-        weekday="星期五",
-        achievement_rate=4,
-        production_area=4,
-        stats_rows=[
+
+def _build_production_kanban(db: Session) -> ProductionKanbanDashboard:
+    today = date.today()
+    now = datetime.now()
+    start = datetime.combine(today, datetime.min.time())
+
+    outputs = (
+        db.query(ProductionOutputRecord)
+        .filter(ProductionOutputRecord.record_at >= start)
+        .order_by(ProductionOutputRecord.record_at)
+        .all()
+    )
+
+    # cumulative stats by hour
+    by_hour: dict[int, dict] = defaultdict(
+        lambda: {
+            "completed": 0,
+            "area": 0.0,
+            "defect": 0,
+            "incoming": 0,
+        }
+    )
+    for o in outputs:
+        h = o.record_at.hour
+        by_hour[h]["completed"] += o.actual_qty
+        by_hour[h]["area"] += float(o.area_output or 0)
+        by_hour[h]["defect"] += o.defect_qty
+        by_hour[h]["incoming"] += o.incoming_boards
+
+    stats_rows = []
+    cum = {"completed": 0, "area": 0.0, "defect": 0, "incoming": 0}
+    for h in sorted(by_hour.keys()):
+        cum["completed"] += by_hour[h]["completed"]
+        cum["area"] += by_hour[h]["area"]
+        cum["defect"] += by_hour[h]["defect"]
+        cum["incoming"] += by_hour[h]["incoming"]
+        rate = (
+            f"{round(cum['defect'] / cum['completed'] * 100, 2)}%"
+            if cum["completed"]
+            else "0%"
+        )
+        stats_rows.append(
+            ProductionStatsRow(
+                time=f"{h:02d}:00",
+                today_completed=cum["completed"],
+                today_area_output=round(cum["area"], 1),
+                today_defect_total=cum["defect"],
+                daily_defect_rate=rate,
+                today_incoming_boards=cum["incoming"],
+            )
+        )
+    if not stats_rows:
+        stats_rows = [
             ProductionStatsRow(
                 time="08:00",
-                today_completed=1250,
-                today_area_output=3850.5,
-                today_defect_total=12,
-                daily_defect_rate="0.96%",
-                today_incoming_boards=1300,
-            ),
-            ProductionStatsRow(
-                time="09:00",
-                today_completed=2480,
-                today_area_output=7620.0,
-                today_defect_total=18,
-                daily_defect_rate="0.73%",
-                today_incoming_boards=2550,
-            ),
-            ProductionStatsRow(
-                time="10:00",
-                today_completed=3720,
-                today_area_output=11450.8,
-                today_defect_total=25,
-                daily_defect_rate="0.67%",
-                today_incoming_boards=3800,
-            ),
-        ],
-        detail_rows=[
+                today_completed=0,
+                today_area_output=0,
+                today_defect_total=0,
+                daily_defect_rate="0%",
+                today_incoming_boards=0,
+            )
+        ]
+
+    chart = []
+    for row in stats_rows:
+        chart.append(
+            CompletionChartPoint(
+                label=row.time,
+                lot_output=row.today_completed,
+                model_output=row.today_completed,
+            )
+        )
+
+    detail_rows = []
+    for o in outputs[-30:]:
+        product = (
+            db.query(Product).filter(Product.id == o.product_id).first()
+            if o.product_id
+            else None
+        )
+        detail_rows.append(
             ProductionDetailRow(
-                time="08:46:12",
-                process_card_no="PC-20260807-001",
-                product_model="ZR-A100",
-                quantity=500,
-                today_completed=480,
-                total_completed=480,
-            ),
-            ProductionDetailRow(
-                time="08:46:28",
-                process_card_no="PC-20260807-002",
-                product_model="ZR-B200",
-                quantity=800,
-                today_completed=750,
-                total_completed=750,
-            ),
-            ProductionDetailRow(
-                time="08:46:35",
-                process_card_no="PC-20260807-003",
-                product_model="ZR-C300",
-                quantity=600,
-                today_completed=580,
-                total_completed=580,
-            ),
-            ProductionDetailRow(
-                time="08:46:41",
-                process_card_no="PC-20260807-004",
-                product_model="ZR-D400",
-                quantity=400,
-                today_completed=390,
-                total_completed=390,
-            ),
-        ],
-        completion_chart=[
-            CompletionChartPoint(label="08:00", lot_output=1200000, model_output=980000),
-            CompletionChartPoint(label="10:00", lot_output=2800000, model_output=2100000),
-            CompletionChartPoint(label="12:00", lot_output=4500000, model_output=3600000),
-            CompletionChartPoint(label="14:00", lot_output=5200000, model_output=4100000),
-        ],
+                time=o.record_at.strftime("%H:%M:%S"),
+                process_card_no=o.process_card_no or "-",
+                product_model=(product.model or product.product_code) if product else "-",
+                quantity=o.actual_qty,
+                today_completed=o.actual_qty,
+                total_completed=o.actual_qty,
+            )
+        )
+
+    plan_today = sum(
+        p.plan_qty for p in db.query(ProductionPlan).filter(ProductionPlan.plan_date == today)
+    )
+    actual_today = sum(o.actual_qty for o in outputs)
+    achievement = round(actual_today / plan_today * 100, 1) if plan_today else 0
+    area_kpi = round(sum(float(o.area_output or 0) for o in outputs) / 1000, 1)
+
+    return ProductionKanbanDashboard(
+        board_category="production",
+        display_time=now.strftime("%Y-%m-%d %H:%M:%S"),
+        weekday=WEEKDAY_CN[now.weekday()],
+        achievement_rate=achievement,
+        production_area=area_kpi,
+        stats_rows=stats_rows,
+        detail_rows=detail_rows,
+        completion_chart=chart,
     )
 
 
 @router.get("/production", response_model=ProductionKanbanDashboard)
 def get_production_kanban(
-    board_category: str = Query(default="production"),
     _current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    _refresh: int | None = Query(None),
 ):
-    data = _mock_production_kanban()
-    data.board_category = board_category
-    return data
+    return _build_production_kanban(db)

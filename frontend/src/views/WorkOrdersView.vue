@@ -67,6 +67,12 @@
         <el-table-column prop="start_date" label="计划开始" width="110">
           <template #default="{ row }">{{ row.start_date || '-' }}</template>
         </el-table-column>
+        <el-table-column prop="actual_start_time" label="实际开始时间" width="110">
+          <template #default="{ row }">{{ formatDateTime(row.actual_start_time) }}</template>
+        </el-table-column>
+        <el-table-column prop="actual_end_time" label="实际结束时间" width="110">
+          <template #default="{ row }">{{ formatDateTime(row.actual_end_time) }}</template>
+        </el-table-column>
         <el-table-column prop="end_date" label="计划结束" width="110">
           <template #default="{ row }">{{ row.end_date || '-' }}</template>
         </el-table-column>
@@ -271,6 +277,14 @@ function priorityTagType(priority) {
     urgent: 'danger',
   }
   return map[priority] || 'info'
+}
+
+function formatDateTime(value) {
+  if (!value) return '—'
+  if (typeof value === 'string' && value.length >= 16) {
+    return value.slice(0, 16).replace('T', ' ')
+  }
+  return value
 }
 
 function resetForm() {
