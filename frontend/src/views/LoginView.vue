@@ -8,24 +8,6 @@
           <span class="logo-divider" aria-hidden="true" />
           <img class="zlpcb-logo" :src="zlpcbLogoUrl" alt="ZLPCB" />
         </div>
-        <div class="header-right">
-          <h2 class="left-company-title">江西中软电子有限公司</h2>
-          <nav class="top-nav">
-            <span>开源定制</span>
-            <span class="nav-sep">|</span>
-            <span>多层架构</span>
-            <span class="nav-sep">|</span>
-            <span>原子开发</span>
-            <span class="nav-sep">|</span>
-            <span>多数据库</span>
-            <span class="nav-sep">|</span>
-            <span>多样式展现</span>
-            <span class="nav-sep">|</span>
-            <span>分布式部署</span>
-            <span class="nav-sep">|</span>
-            <span>行业套件</span>
-          </nav>
-        </div>
       </div>
 
       <div class="left-main">
@@ -66,6 +48,24 @@
 
     <!-- 右侧表单区 ~40% -->
     <div class="login-right">
+      <div class="header-right">
+        <h2 class="left-company-title">江西中软电子有限公司</h2>
+        <nav class="top-nav">
+          <span>开源定制</span>
+          <span class="nav-sep">|</span>
+          <span>多层架构</span>
+          <span class="nav-sep">|</span>
+          <span>原子开发</span>
+          <span class="nav-sep">|</span>
+          <span>多数据库</span>
+          <span class="nav-sep">|</span>
+          <span>多样式展现</span>
+          <span class="nav-sep">|</span>
+          <span>分布式部署</span>
+          <span class="nav-sep">|</span>
+          <span>行业套件</span>
+        </nav>
+      </div>
       <div class="login-card-wrap">
         <div class="login-card">
           <div class="card-brand">
@@ -350,19 +350,14 @@ onMounted(() => {
 .left-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   padding: 22px 40px 0;
   flex-shrink: 0;
-  gap: 28px;
 }
 
 .header-right {
+  flex-shrink: 0;
   text-align: right;
-  max-width: 58%;
-  margin-left: auto;
-  /* 标题+标签行整体右移，logo 区与下方展示区位置不变 */
-  margin-right: -56px;
-  padding-left: 24px;
+  padding: 22px 48px 0;
 }
 
 .left-company-title {
@@ -750,16 +745,12 @@ onMounted(() => {
   }
 
   .header-right {
-    max-width: 100%;
     text-align: center;
-    margin-top: 12px;
-    margin-right: 0;
-    padding-left: 0;
+    padding: 16px 20px 0;
   }
 
   .left-header {
-    flex-direction: column;
-    align-items: center;
+    justify-content: center;
   }
 
   .top-nav {
