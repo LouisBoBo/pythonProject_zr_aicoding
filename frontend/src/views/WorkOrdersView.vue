@@ -49,6 +49,9 @@
         <el-table-column prop="production_line" label="生产线" min-width="90">
           <template #default="{ row }">{{ row.production_line || '-' }}</template>
         </el-table-column>
+        <el-table-column prop="current_process" label="当前工序" min-width="100">
+          <template #default="{ row }">{{ row.current_process || '—' }}</template>
+        </el-table-column>
         <el-table-column prop="plan_quantity" label="计划数量" width="90" align="center" />
         <el-table-column prop="actual_quantity" label="实际数量" width="90" align="center" />
         <el-table-column prop="status" label="状态" width="90" align="center">

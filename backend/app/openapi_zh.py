@@ -22,6 +22,7 @@ OPENAPI_TAGS: list[dict] = [
     {"name": "设备维修", "description": "维修工单与配件明细"},
     {"name": "设备看板", "description": "设备运行状态、OEE、利用率、告警与产量"},
     {"name": "品质管理", "description": "品质 KPI、趋势、不良分布与异常"},
+    {"name": "报表中心", "description": "MES 报表查询与导出"},
     {"name": "仓储看板", "description": "库存 KPI、出入库趋势、库位与物料明细"},
 ]
 
@@ -365,6 +366,53 @@ API_ZH: dict[tuple[str, str], dict[str, str]] = {
             "实时流水与物料明细表。"
         ),
     },
+    ("GET", "/api/warehouse/inventory-stock"): {
+        "summary": "物料库存列表",
+        "description": (
+            "分页查询 inventory_stock 表，支持按物料编码、物料名称、仓库名称筛选；"
+            "返回库存数量、单位、安全库存、更新时间等字段。"
+        ),
+    },
+    ("GET", "/api/warehouse/warehouses"): {
+        "summary": "仓库下拉选项",
+        "description": "返回全部仓库，供物料库存筛选使用。",
+    },
+    ("GET", "/api/warehouse/materials"): {
+        "summary": "物料下拉选项",
+        "description": "返回全部物料主数据，供入库表单选择物料。",
+    },
+    ("GET", "/api/warehouse/locations"): {
+        "summary": "库位下拉选项",
+        "description": "返回库位列表，可按 warehouse_id 筛选，供入库表单选择库位。",
+    },
+    ("GET", "/api/warehouse/material-inbound"): {
+        "summary": "物料入库列表",
+        "description": (
+            "分页查询 material_inbounds 表，支持按入库单号、物料编码/名称、"
+            "状态（pending=待入库/completed=已入库）、入库日期范围筛选。"
+        ),
+    },
+    ("POST", "/api/warehouse/material-inbound"): {
+        "summary": "新增物料入库",
+        "description": (
+            "创建入库单并写入 material_inbounds 表；"
+            "状态为 completed（已入库）时同步更新 inventory_balances、"
+            "inventory_transactions 与 inventory_stock。"
+        ),
+    },
+    # ----- 报表中心 -----
+    ("GET", "/api/reports/wip"): {
+        "summary": "在制品报表",
+        "description": (
+            "按工单维度查询在制品（wip 口径：未完工且非取消）。"
+            "在制数量 = 计划数量 - 实际数量；"
+            "支持按状态、工序、计划开始/结束日期筛选与分页。"
+        ),
+    },
+    ("GET", "/api/reports/wip/processes"): {
+        "summary": "在制品报表工序选项",
+        "description": "返回标准工序列表，供报表筛选下拉使用。",
+    },
 }
 
 # 路由模块 tags 中文映射（用于把代码里的英文 tag 替换进 OpenAPI）
@@ -383,7 +431,8 @@ TAG_ZH_MAP: dict[str, str] = {
     "设备维修": "设备维修",
     "device-dashboard": "设备看板",
     "quality": "品质管理",
-    "warehouse": "仓储看板",
+    "reports": "报表中心",
+    "warehouse": "仓储管理",
 }
 
 

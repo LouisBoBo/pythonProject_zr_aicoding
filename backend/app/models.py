@@ -32,6 +32,7 @@ class WorkOrder(Base):
     actual_start_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     actual_end_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    current_process: Mapped[str | None] = mapped_column(String(50), nullable=True)
     remark: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=datetime.utcnow
@@ -605,6 +606,61 @@ class InventoryTransaction(Base):
     remark: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     material: Mapped["Material"] = relationship(back_populates="transactions")
+    location: Mapped["WarehouseLocation | None"] = relationship()
+
+
+class InventoryStock(Base):
+    """物料库存汇总（按物料 + 仓库维度，关联物料主数据）"""
+
+    __tablename__ = "inventory_stock"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    material_id: Mapped[int] = mapped_column(ForeignKey("materials.id"), nullable=False, index=True)
+    material_code: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    material_name: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    warehouse_id: Mapped[int] = mapped_column(ForeignKey("warehouses.id"), nullable=False, index=True)
+    warehouse_name: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    unit: Mapped[str] = mapped_column(String(20), nullable=False, default="件")
+    safety_stock: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    material: Mapped["Material"] = relationship()
+    warehouse: Mapped["Warehouse"] = relationship()
+
+
+class MaterialInbound(Base):
+    """物料入库单"""
+
+    __tablename__ = "material_inbounds"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    inbound_no: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
+    material_id: Mapped[int] = mapped_column(ForeignKey("materials.id"), nullable=False, index=True)
+    material_code: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    material_name: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    spec: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    unit: Mapped[str] = mapped_column(String(20), nullable=False, default="件")
+    warehouse_id: Mapped[int] = mapped_column(ForeignKey("warehouses.id"), nullable=False, index=True)
+    warehouse_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    location_id: Mapped[int | None] = mapped_column(
+        ForeignKey("warehouse_locations.id"), nullable=True
+    )
+    location_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    inbound_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    handler: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="pending", index=True
+    )  # pending=待入库, completed=已入库
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.utcnow
+    )
+
+    material: Mapped["Material"] = relationship()
+    warehouse: Mapped["Warehouse"] = relationship()
     location: Mapped["WarehouseLocation | None"] = relationship()
 
 

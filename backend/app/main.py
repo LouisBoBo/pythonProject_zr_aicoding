@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from sqlalchemy import inspect, text
+from sqlalchemy.orm import joinedload
 
 from app.auth import hash_password
 from app.database import Base, SessionLocal, engine
@@ -22,10 +23,17 @@ from app.models import (
     InspectionPlanItem,
     InspectionRecord,
     InspectionRecordItem,
+    InventoryBalance,
+    InventoryStock,
+    InventoryTransaction,
+    Material,
+    MaterialInbound,
     QualityAnomaly,
     QualityDefectDetail,
     QualityMetrics,
     User,
+    Warehouse,
+    WarehouseLocation,
 )
 from app.routers import (
     auth,
@@ -41,6 +49,7 @@ from app.routers import (
     kanban_production,
     production,
     quality,
+    reports,
     warehouse,
     work_orders,
 )
@@ -134,6 +143,32 @@ def ensure_work_orders_actual_end_time():
         )
 
 
+def ensure_work_orders_current_process():
+    """为 work_orders 补齐 current_process 列，并按进度回填已开工/已完成工单工序。"""
+    from app.models import WorkOrder
+    from app.work_order_utils import derive_current_process
+
+    inspector = inspect(engine)
+    columns = [column["name"] for column in inspector.get_columns("work_orders")]
+    if "current_process" not in columns:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE work_orders ADD COLUMN current_process VARCHAR(50)"))
+
+    db = SessionLocal()
+    try:
+        orders = db.query(WorkOrder).all()
+        changed = 0
+        for wo in orders:
+            expected = derive_current_process(wo.status, wo.plan_quantity, wo.actual_quantity)
+            if wo.current_process != expected:
+                wo.current_process = expected
+                changed += 1
+        if changed:
+            db.commit()
+    finally:
+        db.close()
+
+
 def ensure_equipment_repairs_repair_completed_at():
     """为已有数据库的 equipment_repairs 表补齐 repair_completed_at 列，并回填已完成/已关闭存量工单。"""
     inspector = inspect(engine)
@@ -169,6 +204,164 @@ def ensure_equipment_repairs_repair_completed_at():
                 """
             )
         )
+
+
+def ensure_inventory_stock_backfill():
+    """从 inventory_balances 聚合回填 inventory_stock（表为空时执行，保证列表有演示数据）。"""
+    inspector = inspect(engine)
+    if not inspector.has_table("inventory_stock"):
+        return
+    if not inspector.has_table("inventory_balances"):
+        return
+
+    db = SessionLocal()
+    try:
+        if db.query(InventoryStock).count() > 0:
+            return
+
+        default_wh = db.query(Warehouse).order_by(Warehouse.id).first()
+        if not default_wh:
+            return
+
+        materials = {m.id: m for m in db.query(Material).all()}
+        loc_wh_map = {
+            loc.id: loc.warehouse_id for loc in db.query(WarehouseLocation).all()
+        }
+        wh_names = {w.id: w.name for w in db.query(Warehouse).all()}
+
+        agg: dict[tuple[int, int], dict] = {}
+        for bal in db.query(InventoryBalance).all():
+            wh_id = loc_wh_map.get(bal.location_id) if bal.location_id else default_wh.id
+            if not wh_id:
+                wh_id = default_wh.id
+            key = (bal.material_id, wh_id)
+            if key not in agg:
+                agg[key] = {"quantity": 0, "updated_at": bal.updated_at}
+            agg[key]["quantity"] += bal.quantity
+            if bal.updated_at > agg[key]["updated_at"]:
+                agg[key]["updated_at"] = bal.updated_at
+
+        for (material_id, warehouse_id), data in agg.items():
+            material = materials.get(material_id)
+            if not material:
+                continue
+            db.add(
+                InventoryStock(
+                    material_id=material_id,
+                    material_code=material.material_code,
+                    material_name=material.material_name,
+                    warehouse_id=warehouse_id,
+                    warehouse_name=wh_names.get(warehouse_id, default_wh.name),
+                    quantity=data["quantity"],
+                    unit=material.unit,
+                    safety_stock=material.safety_stock,
+                    updated_at=data["updated_at"],
+                )
+            )
+        db.commit()
+    finally:
+        db.close()
+
+
+def ensure_material_inbound_backfill():
+    """从 inventory_transactions 入库流水回填 material_inbounds（表为空时执行）。"""
+    inspector = inspect(engine)
+    if not inspector.has_table("material_inbounds"):
+        return
+    if not inspector.has_table("inventory_transactions"):
+        return
+
+    db = SessionLocal()
+    try:
+        if db.query(MaterialInbound).count() > 0:
+            return
+
+        txns = (
+            db.query(InventoryTransaction)
+            .options(joinedload(InventoryTransaction.material))
+            .filter(InventoryTransaction.txn_type == "in")
+            .order_by(InventoryTransaction.txn_at.asc())
+            .all()
+        )
+        if not txns:
+            return
+
+        wh_map = {w.id: w for w in db.query(Warehouse).all()}
+        loc_map = {loc.id: loc for loc in db.query(WarehouseLocation).all()}
+        default_wh = db.query(Warehouse).order_by(Warehouse.id).first()
+        handlers = ["张三", "李四", "王五", "赵六"]
+
+        for idx, txn in enumerate(txns):
+            material = txn.material
+            if not material:
+                continue
+            loc = loc_map.get(txn.location_id) if txn.location_id else None
+            wh_id = loc.warehouse_id if loc else (default_wh.id if default_wh else None)
+            if not wh_id:
+                continue
+            wh = wh_map.get(wh_id)
+            if not wh:
+                continue
+
+            inbound_no = txn.ref_no or f"RK-{txn.txn_at:%Y%m%d}-{idx + 1:03d}"
+            if db.query(MaterialInbound).filter(MaterialInbound.inbound_no == inbound_no).first():
+                inbound_no = f"{inbound_no}-{idx + 1}"
+
+            db.add(
+                MaterialInbound(
+                    inbound_no=inbound_no,
+                    material_id=material.id,
+                    material_code=material.material_code,
+                    material_name=material.material_name,
+                    spec=material.spec,
+                    quantity=txn.quantity,
+                    unit=material.unit,
+                    warehouse_id=wh.id,
+                    warehouse_name=wh.name,
+                    location_id=txn.location_id,
+                    location_code=loc.location_code if loc else None,
+                    inbound_date=txn.txn_at.date(),
+                    handler=handlers[idx % len(handlers)],
+                    status="completed",
+                    created_at=txn.txn_at,
+                )
+            )
+
+        # 追加 1 条待入库演示数据
+        first_material = db.query(Material).order_by(Material.id).first()
+        first_wh = default_wh
+        first_loc = (
+            db.query(WarehouseLocation)
+            .filter(WarehouseLocation.warehouse_id == first_wh.id, WarehouseLocation.status == "free")
+            .first()
+            if first_wh
+            else None
+        )
+        if first_material and first_wh:
+            pending_no = f"RK-{date.today():%Y%m%d}-P01"
+            if not db.query(MaterialInbound).filter(MaterialInbound.inbound_no == pending_no).first():
+                db.add(
+                    MaterialInbound(
+                        inbound_no=pending_no,
+                        material_id=first_material.id,
+                        material_code=first_material.material_code,
+                        material_name=first_material.material_name,
+                        spec=first_material.spec,
+                        quantity=100,
+                        unit=first_material.unit,
+                        warehouse_id=first_wh.id,
+                        warehouse_name=first_wh.name,
+                        location_id=first_loc.id if first_loc else None,
+                        location_code=first_loc.location_code if first_loc else None,
+                        inbound_date=date.today(),
+                        handler="待确认",
+                        status="pending",
+                    )
+                )
+
+        db.commit()
+    finally:
+        db.close()
 
 
 def seed_inspection_data():
@@ -598,6 +791,7 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     ensure_work_orders_actual_start_time()
     ensure_work_orders_actual_end_time()
+    ensure_work_orders_current_process()
     ensure_maintenance_orders_plan_complete_date()
     ensure_equipment_repairs_repair_completed_at()
     seed_default_user()
@@ -608,6 +802,8 @@ async def lifespan(app: FastAPI):
     seed_quality_data()
     seed_analytics_data()
     backfill_recent_operational_data()
+    ensure_inventory_stock_backfill()
+    ensure_material_inbound_backfill()
     yield
 
 
@@ -643,7 +839,7 @@ app.openapi = custom_openapi
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=["http://localhost:5175", "http://127.0.0.1:5175"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -663,6 +859,7 @@ app.include_router(equipment_maintenance.router)
 app.include_router(equipment_repair.router)
 app.include_router(device_dashboard.router)
 app.include_router(quality.router)
+app.include_router(reports.router)
 app.include_router(warehouse.router)
 
 

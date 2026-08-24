@@ -4,8 +4,9 @@
     <div class="login-left">
       <div class="left-header">
         <div class="header-logos">
-          <img class="csoft-logo" src="../assets/login/csoft-logo.svg" alt="中软信息" />
-          <img class="zlpcb-logo" src="../assets/login/zlpcb-logo.svg" alt="ZLPCB" />
+          <img class="csoft-logo" :src="csoftLogoUrl" alt="中软信息" />
+          <span class="logo-divider" aria-hidden="true" />
+          <img class="zlpcb-logo" :src="zlpcbLogoUrl" alt="ZLPCB" />
         </div>
         <div class="header-right">
           <h2 class="left-company-title">江西中软电子有限公司</h2>
@@ -68,9 +69,6 @@
       <div class="login-card-wrap">
         <div class="login-card">
           <div class="card-brand">
-            <div class="card-logos">
-              <img class="card-zlpcb-img" src="../assets/login/zlpcb-logo.svg" alt="ZLPCB" />
-            </div>
             <h3 class="card-company">江西中软电子有限公司</h3>
             <p class="card-company-sub">江西中软信息技术有限公司</p>
           </div>
@@ -156,6 +154,8 @@ import { LineChart, PieChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
 import VChart from 'vue-echarts'
 import { login } from '../api/auth'
+import csoftLogoUrl from '../assets/login/csoft-logo.svg'
+import zlpcbLogoUrl from '../assets/login/zlpcb-logo.svg'
 
 use([CanvasRenderer, LineChart, PieChart, GridComponent, TooltipComponent, LegendComponent])
 
@@ -349,40 +349,59 @@ onMounted(() => {
 
 .left-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  padding: 18px 36px 0;
+  padding: 22px 40px 0;
   flex-shrink: 0;
+  gap: 28px;
 }
 
 .header-right {
   text-align: right;
-  max-width: 55%;
+  max-width: 58%;
+  margin-left: auto;
+  /* 标题+标签行整体右移，logo 区与下方展示区位置不变 */
+  margin-right: -56px;
+  padding-left: 24px;
 }
 
 .left-company-title {
-  font-size: 22px;
-  font-weight: 700;
-  color: #fff;
-  margin: 0 0 8px;
-  letter-spacing: 1px;
+  font-size: 17px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.92);
+  margin: 0 0 7px;
+  letter-spacing: 0.8px;
   white-space: nowrap;
 }
 
 .header-logos {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 14px;
+  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  flex-shrink: 0;
+}
+
+.logo-divider {
+  width: 1px;
+  height: 28px;
+  background: rgba(255, 255, 255, 0.18);
+  flex-shrink: 0;
 }
 
 .csoft-logo {
-  height: 44px;
+  height: 38px;
   width: auto;
+  display: block;
 }
 
 .zlpcb-logo {
-  height: 32px;
+  height: 26px;
   width: auto;
+  display: block;
 }
 
 .left-main {
@@ -546,32 +565,22 @@ onMounted(() => {
 
 .card-brand {
   text-align: center;
-  margin-bottom: 28px;
-}
-
-.card-logos {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 14px;
-}
-
-.card-zlpcb-img {
-  height: 34px;
-  width: auto;
+  margin-bottom: 24px;
 }
 
 .card-company {
-  font-size: 20px;
-  font-weight: 700;
-  color: #1a1a2e;
-  margin: 0 0 6px;
-  letter-spacing: 0.5px;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0 0 5px;
+  letter-spacing: 0.3px;
 }
 
 .card-company-sub {
-  font-size: 13px;
-  color: #666;
+  font-size: 12px;
+  color: #8c8c8c;
   margin: 0;
+  font-weight: 400;
 }
 
 .login-form {
@@ -744,6 +753,8 @@ onMounted(() => {
     max-width: 100%;
     text-align: center;
     margin-top: 12px;
+    margin-right: 0;
+    padding-left: 0;
   }
 
   .left-header {

@@ -201,6 +201,8 @@ const expandedSubmenus = reactive({
   production: true,
   kanban: true,
   equipment: true,
+  warehouse: true,
+  reports: true,
 })
 
 const menuGroups = [
@@ -251,14 +253,29 @@ const menuGroups = [
           { path: '/equipment/repairs', title: '维修管理', icon: SetUp },
         ],
       },
-      { path: '/warehouse', title: '仓储管理', icon: Box },
+      {
+        key: 'warehouse',
+        title: '仓储管理',
+        icon: Box,
+        children: [
+          { path: '/warehouse/inventory', title: '物料库存', icon: Box },
+          { path: '/warehouse/inbound', title: '物料入库', icon: List },
+        ],
+      },
     ],
   },
   {
     key: 'system',
     title: '系统',
     items: [
-      { path: '/reports', title: '报表中心', icon: DataLine },
+      {
+        key: 'reports',
+        title: '报表中心',
+        icon: DataLine,
+        children: [
+          { path: '/reports/wip', title: '在制品报表', icon: Document },
+        ],
+      },
       { path: '/settings', title: '系统设置', icon: Setting },
       { path: '/messages', title: '消息中心', icon: Bell },
       { path: '/help', title: '帮助文档', icon: QuestionFilled },

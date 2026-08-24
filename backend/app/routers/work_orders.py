@@ -14,6 +14,7 @@ from app.schemas import (
     WorkOrderStatusUpdate,
     WorkOrderUpdate,
 )
+from app.work_order_utils import derive_current_process
 
 router = APIRouter(prefix="/api/work-orders", tags=["work-orders"])
 
@@ -136,6 +137,10 @@ def update_work_order(
 
     for field, value in update_data.items():
         setattr(work_order, field, value)
+    if "actual_quantity" in update_data or "status" in update_data or "plan_quantity" in update_data:
+        work_order.current_process = derive_current_process(
+            work_order.status, work_order.plan_quantity, work_order.actual_quantity
+        )
     work_order.updated_at = datetime.utcnow()
 
     try:
@@ -169,6 +174,9 @@ def update_work_order_status(
     if payload.status == "completed" and work_order.actual_end_time is None:
         work_order.actual_end_time = datetime.utcnow()
     work_order.status = payload.status
+    work_order.current_process = derive_current_process(
+        work_order.status, work_order.plan_quantity, work_order.actual_quantity
+    )
     work_order.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(work_order)

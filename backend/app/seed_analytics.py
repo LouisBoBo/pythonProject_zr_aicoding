@@ -10,6 +10,7 @@ from datetime import date, datetime, timedelta
 from sqlalchemy import func
 
 from app.database import SessionLocal
+from app.work_order_utils import derive_current_process
 from app.models import (
     DashboardTodo,
     Device,
@@ -1096,6 +1097,7 @@ def backfill_recent_operational_data(days: int = 7) -> None:
                         )
                     )
 
+        ensure_rich_work_orders(db, today=today, now=now, target_count=100)
         _rebase_live_records_to_today(db, today, now)
 
         db.commit()
@@ -1198,3 +1200,193 @@ def _rebase_live_records_to_today(db, today: date, now: datetime) -> None:
                     planned_start_at=now.replace(minute=0, second=0, microsecond=0),
                 )
             )
+
+
+# 工单分析用状态分布（合计 100）
+_WORK_ORDER_STATUS_MIX = (
+    ["pending"] * 18
+    + ["in_progress"] * 28
+    + ["completed"] * 24
+    + ["closed"] * 18
+    + ["cancelled"] * 12
+)
+_WORK_ORDER_PRIORITIES = ["urgent", "high", "high", "normal", "normal", "normal", "low"]
+_WORK_ORDER_ASSIGNEES = [
+    "张三",
+    "李四",
+    "王五",
+    "赵六",
+    "钱七",
+    "孙八",
+    "周九",
+    "吴十",
+    "郑十一",
+    "冯十二",
+]
+_WORK_ORDER_REMARKS = [
+    "正常排产",
+    "客户加急订单",
+    "换线首件确认中",
+    "物料齐套后开工",
+    "节拍偏慢，跟进中",
+    "已完成入库待关闭",
+    "质检复核后关闭",
+    "客户取消，工单作废",
+    "设备故障暂停后恢复",
+    "跨产线协作工单",
+    "今日计划内工单",
+    "昨日结转在制",
+]
+
+
+def _work_order_profile(idx: int, today: date, now: datetime) -> dict:
+    """按序号生成一条可分析的工单字段画像（对齐今天、覆盖多状态）。"""
+    status = _WORK_ORDER_STATUS_MIX[idx % len(_WORK_ORDER_STATUS_MIX)]
+    priority = _WORK_ORDER_PRIORITIES[idx % len(_WORK_ORDER_PRIORITIES)]
+    if status in ("pending", "in_progress") and idx % 11 == 0:
+        priority = "urgent"
+    plan_qty = 200 + (idx % 20) * 50 + (idx % 7) * 10
+    hour = 8 + (idx % 10)
+    minute = (idx * 7) % 60
+
+    if status == "pending":
+        start_off = -(idx % 3)  # 今天或近两日开立
+        end_off = 2 + (idx % 5)
+        actual = 0
+        actual_start = None
+        actual_end = None
+        created_off = max(start_off + 1, 1)
+    elif status == "in_progress":
+        start_off = idx % 4  # 0~3 天前开工
+        # 约 1/4 逾期（计划结束早于今天）
+        end_off = -1 - (idx % 2) if idx % 4 == 0 else 1 + (idx % 4)
+        ratio = 0.25 + (idx % 8) * 0.08
+        actual = max(int(plan_qty * ratio), 1)
+        actual_start = datetime(
+            today.year, today.month, today.day, hour, minute, 0
+        ) - timedelta(days=start_off)
+        actual_end = None
+        created_off = start_off + 1
+    elif status == "completed":
+        start_off = 1 + (idx % 5)
+        end_off = -(idx % 2)  # 今天或昨天计划结束
+        finish_days_ago = abs(end_off)
+        over_under = 1.0 + ((idx % 5) - 2) * 0.03
+        actual = max(int(plan_qty * over_under), 1)
+        actual_start = datetime(
+            today.year, today.month, today.day, 8, minute, 0
+        ) - timedelta(days=start_off)
+        actual_end = datetime(
+            today.year, today.month, today.day, min(hour + 2, 20), minute, 0
+        ) - timedelta(days=finish_days_ago)
+        created_off = start_off + 1
+    elif status == "closed":
+        start_off = 3 + (idx % 7)
+        end_off = -(1 + idx % 4)
+        actual = plan_qty + (idx % 3) * 5
+        actual_start = datetime(
+            today.year, today.month, today.day, 8, 0, 0
+        ) - timedelta(days=start_off)
+        actual_end = datetime(
+            today.year, today.month, today.day, 16, minute, 0
+        ) - timedelta(days=abs(end_off))
+        created_off = start_off + 2
+    else:  # cancelled
+        start_off = idx % 6
+        end_off = 1 + (idx % 3)
+        actual = 0 if idx % 2 == 0 else max(int(plan_qty * 0.1), 1)
+        actual_start = None
+        if actual > 0:
+            actual_start = datetime(
+                today.year, today.month, today.day, 9, minute, 0
+            ) - timedelta(days=start_off)
+        actual_end = None
+        created_off = start_off + 1
+
+    return {
+        "status": status,
+        "priority": priority,
+        "plan_quantity": plan_qty,
+        "actual_quantity": actual,
+        "current_process": derive_current_process(status, plan_qty, actual),
+        "assignee": _WORK_ORDER_ASSIGNEES[idx % len(_WORK_ORDER_ASSIGNEES)],
+        "start_date": today - timedelta(days=start_off),
+        "end_date": today + timedelta(days=end_off),
+        "actual_start_time": actual_start,
+        "actual_end_time": actual_end,
+        "remark": _WORK_ORDER_REMARKS[idx % len(_WORK_ORDER_REMARKS)],
+        "created_at": now - timedelta(days=created_off, hours=idx % 12),
+        "updated_at": now - timedelta(minutes=idx % 90),
+    }
+
+
+def ensure_rich_work_orders(
+    db,
+    *,
+    today: date | None = None,
+    now: datetime | None = None,
+    target_count: int = 100,
+) -> None:
+    """补齐并刷新工单至 target_count 条：多状态/优先级/产线，日期对齐今天。可重复调用。"""
+    today = today or date.today()
+    now = now or datetime.now()
+    lines = db.query(ProductionLine).order_by(ProductionLine.id).all()
+    products = db.query(Product).order_by(Product.id).all()
+    if not lines or not products:
+        return
+
+    products_by_line: dict[int, list[Product]] = {ln.id: [] for ln in lines}
+    for product in products:
+        if product.default_line_id in products_by_line:
+            products_by_line[product.default_line_id].append(product)
+
+    existing = db.query(WorkOrder).order_by(WorkOrder.id).all()
+    # 刷新已有工单画像，保证分析维度齐全且对齐今天
+    for idx, wo in enumerate(existing):
+        line = lines[idx % len(lines)]
+        line_products = products_by_line.get(line.id) or products
+        product = line_products[idx % len(line_products)]
+        profile = _work_order_profile(idx, today, now)
+        wo.product_name = product.product_name
+        wo.product_code = product.product_code
+        wo.production_line = line.name
+        for key, value in profile.items():
+            setattr(wo, key, value)
+
+    need = target_count - len(existing)
+    if need <= 0:
+        return
+
+    used_nos = {wo.order_no for wo in existing}
+    next_seq = 1
+    for i in range(need):
+        idx = len(existing) + i
+        while True:
+            order_no = f"WO-AN-{next_seq:03d}"
+            next_seq += 1
+            if order_no not in used_nos:
+                used_nos.add(order_no)
+                break
+        line = lines[idx % len(lines)]
+        line_products = products_by_line.get(line.id) or products
+        product = line_products[idx % len(line_products)]
+        profile = _work_order_profile(idx, today, now)
+        db.add(
+            WorkOrder(
+                order_no=order_no,
+                product_name=product.product_name,
+                product_code=product.product_code,
+                production_line=line.name,
+                **profile,
+            )
+        )
+
+
+def seed_rich_work_orders(target_count: int = 100) -> None:
+    """独立入口：补齐丰富工单数据（供脚本/手工触发）。"""
+    db = SessionLocal()
+    try:
+        ensure_rich_work_orders(db, target_count=target_count)
+        db.commit()
+    finally:
+        db.close()

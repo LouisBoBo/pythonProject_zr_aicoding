@@ -15,8 +15,10 @@ import MaintenancePlansView from '../views/equipment/MaintenancePlansView.vue'
 import MaintenanceOrdersView from '../views/equipment/MaintenanceOrdersView.vue'
 import RepairManagement from '../views/equipment/RepairManagement.vue'
 import RepairDetail from '../views/equipment/RepairDetail.vue'
-import WarehouseIndex from '../views/warehouse/Index.vue'
+import MaterialInventoryView from '../views/warehouse/MaterialInventoryView.vue'
+import MaterialInboundListView from '../views/warehouse/MaterialInboundListView.vue'
 import ReportsIndex from '../views/reports/Index.vue'
+import WipReportView from '../views/reports/WipReportView.vue'
 import SettingsIndex from '../views/settings/Index.vue'
 import MessagesIndex from '../views/messages/Index.vue'
 import HelpIndex from '../views/help/Index.vue'
@@ -97,9 +99,22 @@ const router = createRouter({
         { path: 'inspection/execute', redirect: { path: '/equipment/inspection', query: { tab: 'execute' } } },
         { path: 'inspection/plans', redirect: { path: '/equipment/inspection', query: { tab: 'plans' } } },
         { path: 'inspection', redirect: { path: '/equipment/inspection', query: { tab: 'dashboard' } } },
-        { path: 'warehouse', name: 'warehouse', component: WarehouseIndex, meta: { title: '仓储管理', ...authRequired } },
-        { path: 'warehouse/:id', name: 'warehouse-detail', component: WarehouseIndex, meta: { title: '仓储管理', ...authRequired } },
+        { path: 'warehouse', redirect: '/warehouse/inventory' },
+        {
+          path: 'warehouse/inventory',
+          name: 'warehouse-inventory',
+          component: MaterialInventoryView,
+          meta: { title: '物料库存', ...authRequired },
+        },
+        {
+          path: 'warehouse/inbound',
+          name: 'warehouse-inbound',
+          component: MaterialInboundListView,
+          meta: { title: '物料入库', ...authRequired },
+        },
+        { path: 'warehouse/:id', redirect: '/warehouse/inventory' },
         { path: 'reports', name: 'reports', component: ReportsIndex, meta: { title: '报表中心', ...authRequired } },
+        { path: 'reports/wip', name: 'reports-wip', component: WipReportView, meta: { title: '在制品报表', ...authRequired } },
         { path: 'settings', name: 'settings', component: SettingsIndex, meta: { title: '系统设置', ...authRequired } },
         { path: 'messages', name: 'messages', component: MessagesIndex, meta: { title: '消息中心', ...authRequired } },
         { path: 'help', name: 'help', component: HelpIndex, meta: { title: '帮助文档', ...authRequired } },

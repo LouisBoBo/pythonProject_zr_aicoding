@@ -107,6 +107,7 @@ class WorkOrderCreate(BaseModel):
     start_date: date | None = None
     end_date: date | None = None
     remark: str | None = Field(default=None, max_length=500)
+    current_process: str | None = Field(default=None, max_length=50, description="当前工序")
 
 
 class WorkOrderUpdate(BaseModel):
@@ -121,6 +122,7 @@ class WorkOrderUpdate(BaseModel):
     start_date: date | None = None
     end_date: date | None = None
     remark: str | None = Field(default=None, max_length=500)
+    current_process: str | None = Field(default=None, max_length=50)
 
 
 class WorkOrderStatusUpdate(BaseModel):
@@ -142,6 +144,7 @@ class WorkOrderResponse(BaseModel):
     actual_start_time: datetime | None
     actual_end_time: datetime | None = Field(default=None, description="实际结束时间")
     end_date: date | None
+    current_process: str | None = Field(default=None, description="当前工序")
     remark: str | None
     created_at: datetime
     updated_at: datetime
@@ -154,6 +157,35 @@ class WorkOrderListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+class WipReportItem(BaseModel):
+    """在制品报表行：按工单维度。"""
+
+    id: int
+    order_no: str = Field(description="工单号")
+    product_name: str = Field(description="品名")
+    current_process: str | None = Field(default=None, description="当前工序，待开工为空")
+    wip_quantity: int = Field(description="在制数量（wip 口径：计划数量 - 实际数量）")
+    status: str = Field(description="工单状态")
+    start_date: date | None = Field(default=None, description="计划开始日期")
+    end_date: date | None = Field(default=None, description="计划结束日期")
+    plan_quantity: int = Field(description="计划数量")
+    actual_quantity: int = Field(description="实际数量")
+
+    model_config = {"from_attributes": True}
+
+
+class WipReportListResponse(BaseModel):
+    items: list[WipReportItem]
+    total: int
+    page: int
+    page_size: int
+    metric: str = Field(default="wip", description="指标口径标识")
+
+
+class WipReportProcessesResponse(BaseModel):
+    processes: list[str] = Field(description="可选工序列表（用于筛选）")
 
 
 KanbanBoardCategory = Literal["production", "quality", "equipment", "warehouse", "general"]
@@ -1095,3 +1127,108 @@ class WarehouseDashboardResponse(BaseModel):
     activities: list[WarehouseActivityItem]
     materials: list[WarehouseMaterialRow]
     categories: list[str]
+
+
+class InventoryStockResponse(BaseModel):
+    """物料库存列表行"""
+
+    id: int
+    material_id: int
+    material_code: str
+    material_name: str
+    warehouse_id: int
+    warehouse_name: str
+    quantity: int
+    unit: str
+    safety_stock: int
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class InventoryStockListResponse(BaseModel):
+    """物料库存分页列表"""
+
+    items: list[InventoryStockResponse]
+    total: int
+    page: int
+    page_size: int
+    quantity_sum: int
+
+
+class WarehouseOption(BaseModel):
+    """仓库下拉选项"""
+
+    id: int
+    code: str
+    name: str
+
+    model_config = {"from_attributes": True}
+
+
+class MaterialOption(BaseModel):
+    """物料下拉选项（入库表单）"""
+
+    id: int
+    material_code: str
+    material_name: str
+    spec: str | None = None
+    unit: str
+
+    model_config = {"from_attributes": True}
+
+
+class WarehouseLocationOption(BaseModel):
+    """库位下拉选项"""
+
+    id: int
+    location_code: str
+    warehouse_id: int
+    warehouse_name: str
+    status: str
+
+    model_config = {"from_attributes": True}
+
+
+class MaterialInboundResponse(BaseModel):
+    """物料入库列表行"""
+
+    id: int
+    inbound_no: str
+    material_id: int
+    material_code: str
+    material_name: str
+    spec: str | None = None
+    quantity: int
+    unit: str
+    warehouse_id: int
+    warehouse_name: str
+    location_id: int | None = None
+    location_code: str | None = None
+    inbound_date: date
+    handler: str | None = None
+    status: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class MaterialInboundListResponse(BaseModel):
+    """物料入库分页列表"""
+
+    items: list[MaterialInboundResponse]
+    total: int
+    page: int
+    page_size: int
+
+
+class MaterialInboundCreate(BaseModel):
+    """新增物料入库"""
+
+    material_id: int
+    quantity: int
+    warehouse_id: int
+    location_id: int | None = None
+    inbound_date: date
+    handler: str | None = None
+    status: str = "completed"
