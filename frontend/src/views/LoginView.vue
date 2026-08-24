@@ -122,7 +122,6 @@
             </div>
 
             <div class="checkbox-row">
-              <el-checkbox v-model="rememberPassword">记住密码</el-checkbox>
               <el-checkbox v-model="rememberAccount">记住账号</el-checkbox>
               <el-checkbox v-model="autoLogin">自动登录</el-checkbox>
             </div>
@@ -153,7 +152,7 @@ import { CanvasRenderer } from 'echarts/renderers'
 import { LineChart, PieChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
 import VChart from 'vue-echarts'
-import { login } from '../api/auth'
+import { login, getToken, fetchCurrentUser } from '../api/auth'
 import csoftLogoUrl from '../assets/login/csoft-logo.svg'
 import zlpcbLogoUrl from '../assets/login/zlpcb-logo.svg'
 
@@ -174,7 +173,6 @@ const enterpriseOptions = ['江西中软电子有限公司']
 const enterpriseCode = ref('江西中软电子有限公司')
 const username = ref('')
 const password = ref('')
-const rememberPassword = ref(false)
 const rememberAccount = ref(false)
 const autoLogin = ref(false)
 const error = ref('')
@@ -266,19 +264,21 @@ function loadPrefs() {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return
     const prefs = JSON.parse(raw)
+
     if (prefs.rememberAccount && prefs.username) {
       username.value = prefs.username
       rememberAccount.value = true
-    }
-    if (prefs.rememberPassword && prefs.password) {
-      password.value = prefs.password
-      rememberPassword.value = true
     }
     if (prefs.autoLogin) {
       autoLogin.value = true
     }
     if (prefs.enterpriseCode) {
       enterpriseCode.value = prefs.enterpriseCode
+    }
+
+    // 清除历史版本中可能残留的明文密码
+    if ('password' in prefs || prefs.rememberPassword) {
+      savePrefs()
     }
   } catch {
     /* ignore */
@@ -288,13 +288,22 @@ function loadPrefs() {
 function savePrefs() {
   const prefs = {
     rememberAccount: rememberAccount.value,
-    rememberPassword: rememberPassword.value,
     autoLogin: autoLogin.value,
     username: rememberAccount.value ? username.value : '',
-    password: rememberPassword.value ? password.value : '',
     enterpriseCode: enterpriseCode.value,
   }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs))
+}
+
+async function tryAutoLogin() {
+  if (!autoLogin.value || !getToken()) return
+  try {
+    await fetchCurrentUser()
+    const redirect = route.query.redirect || '/home'
+    router.replace(redirect)
+  } catch {
+    /* token 无效时留在登录页，由用户重新输入密码 */
+  }
 }
 
 async function handleLogin() {
@@ -321,8 +330,9 @@ async function handleLogin() {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   loadPrefs()
+  await tryAutoLogin()
 })
 </script>
 
@@ -525,6 +535,8 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  position: relative;
+  z-index: 2;
 }
 
 .top-nav {
@@ -556,6 +568,8 @@ onMounted(() => {
   border-radius: 12px;
   padding: 36px 36px 40px;
   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.35), 0 2px 8px rgba(0, 0, 0, 0.2);
+  position: relative;
+  z-index: 2;
 }
 
 .card-brand {
@@ -646,16 +660,37 @@ onMounted(() => {
   gap: 18px;
   margin: 4px 0 24px;
   flex-wrap: wrap;
+  position: relative;
+  z-index: 2;
+}
+
+.checkbox-row :deep(.el-checkbox) {
+  height: auto;
+  cursor: pointer;
 }
 
 .checkbox-row :deep(.el-checkbox__label) {
   font-size: 13px;
   color: #555;
+  padding-left: 8px;
+  cursor: pointer;
 }
 
 .checkbox-row :deep(.el-checkbox__inner) {
-  background: #fafafa;
   border-color: #d9d9d9;
+}
+
+.checkbox-row :deep(.el-checkbox__input.is-checked .el-checkbox__inner) {
+  background-color: #1677ff;
+  border-color: #1677ff;
+}
+
+.checkbox-row :deep(.el-checkbox__input.is-checked + .el-checkbox__label) {
+  color: #333;
+}
+
+.checkbox-row :deep(.el-checkbox__input.is-focus .el-checkbox__inner) {
+  border-color: #1677ff;
 }
 
 .error-msg {
