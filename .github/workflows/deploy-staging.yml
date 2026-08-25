@@ -1,39 +1,29 @@
 # 真实预发部署 → 腾讯云轻量应用服务器 + 宝塔面板（SSH + rsync）
 # 目标仓：LouisBoBo/pythonProject_zr_aicoding（frontend Vite + backend FastAPI）
 #
-# ======== 腾讯云侧先准备（一次性）========
-# 机型参考：轻量应用服务器「宝塔Linux面板」镜像（控制台可见公网 IPv4）
-# 1. 公网 IP：控制台实例详情里的「IPv4 地址」（例：175.178.238.31）
-# 2. 防火墙 / 安全组：放行 TCP 22（SSH）；业务端口 80/443（及后端端口若直接对外）
-#    轻量应用服务器 → 防火墙；同时宝塔「安全」里也要放行对应端口
-# 3. SSH 密钥（Actions 必须用密钥，不能靠网页「重置密码」 alone）：
-#      本机：ssh-keygen -t ed25519 -C "github-actions-deploy" -f ~/.ssh/tc_staging_deploy
-#      把 .pub 写入服务器 authorized_keys，或控制台「密钥」→ 绑定
-#      本机验证：ssh -i ~/.ssh/tc_staging_deploy ubuntu@公网IP
-#      （宝塔 Ubuntu 常见用户 ubuntu；若只有 root，用户填 root）
-# 4. 宝塔站点目录（推荐）：
-#      宝塔 → 网站 → 添加站点 → 根目录如 /www/wwwroot/zr-aicoding
-#      前端静态：/www/wwwroot/zr-aicoding/frontend/dist  （或站点根直接指 dist）
-#      后端代码：/www/wwwroot/zr-aicoding/backend
-#      STAGING_APP_PATH 填：/www/wwwroot/zr-aicoding
-# 5. 宝塔里用「Python 项目 / Supervisor」或 systemd 跑 uvicorn；记下重启命令
+# ======== 部署失败最常见原因（先查）========
+# GitHub Actions 跑在【国外】机器上。若腾讯云「防火墙 / 宝塔安全」只放行了你自己的 IP，
+# 本机 ssh 能通，但 Actions 会报 exit 255 / Connection timed out / Permission denied。
+# 必须：轻量控制台 → 防火墙 → 放行 TCP 22，来源 0.0.0.0/0（或至少含全部外网）；
+#       宝塔「安全」同步放行 22。
+# 外部自检（应显示 22 开放）：任意端口检测网站查 公网IP:22
 #
-# ======== GitHub 仓 Secrets（按你当前这台机示例）========
-#   STAGING_SSH_HOST     175.178.238.31
-#   STAGING_SSH_USER     ubuntu   （或 root，以你能 SSH 登录的为准）
-#   STAGING_SSH_KEY      私钥全文（~/.ssh/tc_staging_deploy，勿提交到仓库）
+# ======== 腾讯云侧准备 ========
+# 1. 公网 IP（例 175.178.238.31）；防火墙放行 22 + 80/443
+# 2. Mac 生成密钥（CI 用必须无 passphrase）：
+#      ssh-keygen -t ed25519 -C "github-actions-deploy" -f ~/.ssh/tc_staging_deploy -N ""
+#      公钥写入服务器 ~/.ssh/authorized_keys
+# 3. 站点目录：
+#      mkdir -p /www/wwwroot/zr-aicoding/{frontend/dist,backend}
+#
+# ======== GitHub Secrets ========
+#   STAGING_SSH_HOST     公网 IP
+#   STAGING_SSH_USER     root（或 ubuntu）
+#   STAGING_SSH_KEY      私钥全文（BEGIN…END）
 #   STAGING_APP_PATH     /www/wwwroot/zr-aicoding
-#   STAGING_RESTART_CMD  （可选）例：
-#                        sudo supervisorctl restart zr-aicoding-api
-#                        或宝塔里对应的重启命令
+#   STAGING_RESTART_CMD  （可选）
 #
-# 同步结果：
-#   $STAGING_APP_PATH/frontend/dist/  ← Vite 构建产物
-#   $STAGING_APP_PATH/backend/        ← FastAPI 代码（不含 venv）
-#
-# WorkBuddy 系统配置：
-#   仓库 LouisBoBo/pythonProject_zr_aicoding
-#   Workflow 文件名 deploy-staging.yml
+# WorkBuddy：仓库 LouisBoBo/pythonProject_zr_aicoding · Workflow deploy-staging.yml
 
 name: Deploy Staging
 
@@ -52,8 +42,6 @@ permissions:
 jobs:
   deploy-staging:
     runs-on: ubuntu-latest
-    # 若仓库尚未创建 Environment「staging」，可删掉下一行，避免卡住审批
-    # environment: staging
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -90,12 +78,7 @@ jobs:
         run: |
           python -m pip install -U pip
           pip install -r requirements.txt
-          # 部署流水线：装依赖成功即可。单测失败不阻断发布（质量另开测试 workflow）
-          if [ -d tests ] && ls tests/test_*.py >/dev/null 2>&1; then
-            pytest -q || echo "::warning::pytest 未通过，部署继续"
-          else
-            echo "skip pytest（暂无测试文件）"
-          fi
+          # 部署不跑单测，避免测试失败阻断发布
 
       - name: Pack release
         run: |
@@ -139,20 +122,49 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p ~/.ssh
-          printf '%s\n' "$STAGING_SSH_KEY" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H "$STAGING_SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          # 统一写成 deploy_key（兼容 ed25519 / rsa），勿误用 id_rsa 文件名限制
+          KEY_FILE="$HOME/.ssh/deploy_key"
+          # 规范化换行（GitHub Secret 有时带 CRLF）
+          printf '%s\n' "$STAGING_SSH_KEY" | tr -d '\r' > "$KEY_FILE"
+          chmod 600 "$KEY_FILE"
+
+          # 探测 22：不通则直接给出防火墙提示（避免干等）
+          echo "探测 ${STAGING_SSH_HOST}:22 …"
+          if ! timeout 12 bash -c "echo >/dev/tcp/${STAGING_SSH_HOST}/22" 2>/dev/null; then
+            echo "::error::无法连接 ${STAGING_SSH_HOST}:22。腾讯云防火墙/宝塔安全须放行 TCP 22（来源 0.0.0.0/0），否则 GitHub 国外 runner 连不上（本机 SSH 通也不能说明 Actions 能通）。"
+            exit 1
+          fi
+          echo "端口 22 可达"
+
+          ssh-keyscan -T 10 -H "$STAGING_SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+          SSH_BASE=(
+            ssh
+            -i "$KEY_FILE"
+            -o IdentitiesOnly=yes
+            -o BatchMode=yes
+            -o StrictHostKeyChecking=accept-new
+            -o ConnectTimeout=20
+            -o ServerAliveInterval=10
+            -o PreferredAuthentications=publickey
+          )
+          # rsync 的 -e 需要单个字符串
+          RSYNC_SSH="ssh -i ${KEY_FILE} -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o PreferredAuthentications=publickey"
 
           REMOTE="${STAGING_SSH_USER}@${STAGING_SSH_HOST}"
           APP="${STAGING_APP_PATH}"
 
-          ssh -o StrictHostKeyChecking=accept-new "$REMOTE" "mkdir -p '$APP/frontend/dist' '$APP/backend'"
+          echo "SSH 登录测试…"
+          if ! "${SSH_BASE[@]}" "$REMOTE" "echo ssh_ok; mkdir -p '$APP/frontend/dist' '$APP/backend'"; then
+            echo "::error::SSH 登录失败（exit 255 常见原因：1) 防火墙未对全世界开放 22  2) STAGING_SSH_KEY 不是无密码私钥或与服务器 authorized_keys 不匹配  3) STAGING_SSH_USER 填错）。本机请先：ssh -o BatchMode=yes -i ~/.ssh/tc_staging_deploy 用户@公网IP"
+            exit 255
+          fi
 
-          rsync -az --delete \
+          rsync -az --delete -e "$RSYNC_SSH" \
             release/frontend/ \
             "$REMOTE:$APP/frontend/dist/"
 
-          rsync -az --delete \
+          rsync -az --delete -e "$RSYNC_SSH" \
             --exclude '__pycache__' \
             --exclude '.venv' \
             --exclude 'venv' \
@@ -161,7 +173,7 @@ jobs:
 
           if [ -n "${STAGING_RESTART_CMD:-}" ]; then
             echo "执行远端重启…"
-            ssh "$REMOTE" "bash -lc $(printf '%q' "$STAGING_RESTART_CMD")"
+            "${SSH_BASE[@]}" "$REMOTE" "bash -lc $(printf '%q' "$STAGING_RESTART_CMD")"
           else
             echo "未配置 STAGING_RESTART_CMD，已同步文件，请自行重启 API / Nginx"
           fi
