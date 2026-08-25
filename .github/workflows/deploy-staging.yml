@@ -1,0 +1,84 @@
+# 示例：预发自动化部署（供拷贝到「业务项目」仓库）
+#
+# 用法：
+# 1. 在目标 GitHub 仓新建：.github/workflows/deploy-staging.yml
+# 2. 把本文件内容粘贴进去并按需改「部署步骤」
+# 3. 在 ZR WorkBuddy「系统配置 → 自动化部署」填写：
+#    - GitHub 仓库：owner/repo
+#    - Workflow 文件名：deploy-staging.yml
+#    - Token：能触发该仓 Actions 的 PAT
+# 4. 对话说「部署到预发」→ 确认卡 → 本流水线被 workflow_dispatch 触发
+#
+# 注意：
+# - 必须保留 on.workflow_dispatch，否则 WorkBuddy 无法手动触发
+# - 下面「部署到服务器」步骤是占位；按你们真实方式改（SSH / 镜像 / k8s）
+# - 本文件默认不写死任何生产主机密钥；密钥请放在仓库 Settings → Secrets
+
+name: Deploy Staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "目标环境（WorkBuddy 会传入 staging）"
+        required: false
+        default: "staging"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-staging:
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show context
+        run: |
+          echo "ref=${{ github.ref }}"
+          echo "sha=${{ github.sha }}"
+          echo "environment=${{ inputs.environment || 'staging' }}"
+
+      # —— 按项目类型任选/改写下面构建步骤 ——
+      # 前端示例：
+      # - uses: actions/setup-node@v4
+      #   with:
+      #     node-version: "20"
+      # - run: npm ci && npm run build
+      #
+      # Python 示例：
+      # - uses: actions/setup-python@v5
+      #   with:
+      #     python-version: "3.11"
+      # - run: pip install -r requirements.txt && pytest -q
+
+      - name: Build (placeholder)
+        run: |
+          echo "在此替换为真实构建命令（npm/pip/mvn 等）"
+          echo "构建产物就绪后再进入部署步骤"
+
+      # —— 部署到预发机（占位：请改成你们现网方式）——
+      # 常见做法 A：SSH + rsync
+      # - name: Deploy via SSH
+      #   env:
+      #     SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+      #     SSH_USER: ${{ secrets.STAGING_SSH_USER }}
+      #     SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+      #   run: |
+      #     mkdir -p ~/.ssh
+      #     echo "$SSH_KEY" > ~/.ssh/id_rsa
+      #     chmod 600 ~/.ssh/id_rsa
+      #     rsync -az --delete ./dist/ "$SSH_USER@$SSH_HOST:/var/www/app/"
+      #
+      # 常见做法 B：推镜像后滚动更新
+      # - run: echo "docker build / push / kubectl rollout ..."
+
+      - name: Deploy (placeholder)
+        run: |
+          echo "占位：尚未配置真实预发发布。"
+          echo "配好 Secrets 与上面部署命令后，删除本占位步骤。"
+          # 若暂时只想验证 WorkBuddy「能触发流水线」，保持本步成功即可：
+          exit 0
