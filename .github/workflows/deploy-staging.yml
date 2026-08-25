@@ -1,18 +1,39 @@
-# 示例：预发自动化部署（供拷贝到「业务项目」仓库）
+# 真实预发部署 → 腾讯云轻量应用服务器 + 宝塔面板（SSH + rsync）
+# 目标仓：LouisBoBo/pythonProject_zr_aicoding（frontend Vite + backend FastAPI）
 #
-# 用法：
-# 1. 在目标 GitHub 仓新建：.github/workflows/deploy-staging.yml
-# 2. 把本文件内容粘贴进去并按需改「部署步骤」
-# 3. 在 ZR WorkBuddy「系统配置 → 自动化部署」填写：
-#    - GitHub 仓库：owner/repo
-#    - Workflow 文件名：deploy-staging.yml
-#    - Token：能触发该仓 Actions 的 PAT
-# 4. 对话说「部署到预发」→ 确认卡 → 本流水线被 workflow_dispatch 触发
+# ======== 腾讯云侧先准备（一次性）========
+# 机型参考：轻量应用服务器「宝塔Linux面板」镜像（控制台可见公网 IPv4）
+# 1. 公网 IP：控制台实例详情里的「IPv4 地址」（例：175.178.238.31）
+# 2. 防火墙 / 安全组：放行 TCP 22（SSH）；业务端口 80/443（及后端端口若直接对外）
+#    轻量应用服务器 → 防火墙；同时宝塔「安全」里也要放行对应端口
+# 3. SSH 密钥（Actions 必须用密钥，不能靠网页「重置密码」 alone）：
+#      本机：ssh-keygen -t ed25519 -C "github-actions-deploy" -f ~/.ssh/tc_staging_deploy
+#      把 .pub 写入服务器 authorized_keys，或控制台「密钥」→ 绑定
+#      本机验证：ssh -i ~/.ssh/tc_staging_deploy ubuntu@公网IP
+#      （宝塔 Ubuntu 常见用户 ubuntu；若只有 root，用户填 root）
+# 4. 宝塔站点目录（推荐）：
+#      宝塔 → 网站 → 添加站点 → 根目录如 /www/wwwroot/zr-aicoding
+#      前端静态：/www/wwwroot/zr-aicoding/frontend/dist  （或站点根直接指 dist）
+#      后端代码：/www/wwwroot/zr-aicoding/backend
+#      STAGING_APP_PATH 填：/www/wwwroot/zr-aicoding
+# 5. 宝塔里用「Python 项目 / Supervisor」或 systemd 跑 uvicorn；记下重启命令
 #
-# 注意：
-# - 必须保留 on.workflow_dispatch，否则 WorkBuddy 无法手动触发
-# - 下面「部署到服务器」步骤是占位；按你们真实方式改（SSH / 镜像 / k8s）
-# - 本文件默认不写死任何生产主机密钥；密钥请放在仓库 Settings → Secrets
+# ======== GitHub 仓 Secrets（按你当前这台机示例）========
+#   STAGING_SSH_HOST     175.178.238.31
+#   STAGING_SSH_USER     ubuntu   （或 root，以你能 SSH 登录的为准）
+#   STAGING_SSH_KEY      私钥全文（~/.ssh/tc_staging_deploy，勿提交到仓库）
+#   STAGING_APP_PATH     /www/wwwroot/zr-aicoding
+#   STAGING_RESTART_CMD  （可选）例：
+#                        sudo supervisorctl restart zr-aicoding-api
+#                        或宝塔里对应的重启命令
+#
+# 同步结果：
+#   $STAGING_APP_PATH/frontend/dist/  ← Vite 构建产物
+#   $STAGING_APP_PATH/backend/        ← FastAPI 代码（不含 venv）
+#
+# WorkBuddy 系统配置：
+#   仓库 LouisBoBo/pythonProject_zr_aicoding
+#   Workflow 文件名 deploy-staging.yml
 
 name: Deploy Staging
 
@@ -31,7 +52,8 @@ permissions:
 jobs:
   deploy-staging:
     runs-on: ubuntu-latest
-    environment: staging
+    # 若仓库尚未创建 Environment「staging」，可删掉下一行，避免卡住审批
+    # environment: staging
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -42,43 +64,106 @@ jobs:
           echo "sha=${{ github.sha }}"
           echo "environment=${{ inputs.environment || 'staging' }}"
 
-      # —— 按项目类型任选/改写下面构建步骤 ——
-      # 前端示例：
-      # - uses: actions/setup-node@v4
-      #   with:
-      #     node-version: "20"
-      # - run: npm ci && npm run build
-      #
-      # Python 示例：
-      # - uses: actions/setup-python@v5
-      #   with:
-      #     python-version: "3.11"
-      # - run: pip install -r requirements.txt && pytest -q
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
-      - name: Build (placeholder)
+      - name: Build frontend
+        working-directory: frontend
         run: |
-          echo "在此替换为真实构建命令（npm/pip/mvn 等）"
-          echo "构建产物就绪后再进入部署步骤"
+          npm ci
+          npm run build
+          test -d dist
 
-      # —— 部署到预发机（占位：请改成你们现网方式）——
-      # 常见做法 A：SSH + rsync
-      # - name: Deploy via SSH
-      #   env:
-      #     SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
-      #     SSH_USER: ${{ secrets.STAGING_SSH_USER }}
-      #     SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
-      #   run: |
-      #     mkdir -p ~/.ssh
-      #     echo "$SSH_KEY" > ~/.ssh/id_rsa
-      #     chmod 600 ~/.ssh/id_rsa
-      #     rsync -az --delete ./dist/ "$SSH_USER@$SSH_HOST:/var/www/app/"
-      #
-      # 常见做法 B：推镜像后滚动更新
-      # - run: echo "docker build / push / kubectl rollout ..."
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
 
-      - name: Deploy (placeholder)
+      - name: Install backend deps (CI check)
+        working-directory: backend
         run: |
-          echo "占位：尚未配置真实预发发布。"
-          echo "配好 Secrets 与上面部署命令后，删除本占位步骤。"
-          # 若暂时只想验证 WorkBuddy「能触发流水线」，保持本步成功即可：
-          exit 0
+          python -m pip install -U pip
+          pip install -r requirements.txt
+          # 有测试则跑；无测试文件也不失败
+          if [ -d tests ] && ls tests/test_*.py >/dev/null 2>&1; then
+            pytest -q
+          else
+            echo "skip pytest（暂无测试文件）"
+          fi
+
+      - name: Pack release
+        run: |
+          mkdir -p release/frontend release/backend
+          cp -a frontend/dist/. release/frontend/
+          rsync -a \
+            --exclude '__pycache__' \
+            --exclude '.venv' \
+            --exclude 'venv' \
+            --exclude '*.pyc' \
+            --exclude '.pytest_cache' \
+            backend/ release/backend/
+          echo "packed=$(du -sh release | cut -f1)"
+
+      - name: Require deploy secrets
+        env:
+          STAGING_SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+          STAGING_SSH_USER: ${{ secrets.STAGING_SSH_USER }}
+          STAGING_SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+          STAGING_APP_PATH: ${{ secrets.STAGING_APP_PATH }}
+        run: |
+          missing=0
+          for k in STAGING_SSH_HOST STAGING_SSH_USER STAGING_SSH_KEY STAGING_APP_PATH; do
+            if [ -z "${!k}" ]; then
+              echo "缺少 Secret: $k"
+              missing=1
+            fi
+          done
+          if [ "$missing" = "1" ]; then
+            echo "::error::请到仓库 Settings → Secrets and variables → Actions 配置上述 Secrets 后再部署"
+            exit 1
+          fi
+
+      - name: Deploy via SSH (rsync)
+        env:
+          STAGING_SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+          STAGING_SSH_USER: ${{ secrets.STAGING_SSH_USER }}
+          STAGING_SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+          STAGING_APP_PATH: ${{ secrets.STAGING_APP_PATH }}
+          STAGING_RESTART_CMD: ${{ secrets.STAGING_RESTART_CMD }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "$STAGING_SSH_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H "$STAGING_SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+          REMOTE="${STAGING_SSH_USER}@${STAGING_SSH_HOST}"
+          APP="${STAGING_APP_PATH}"
+
+          ssh -o StrictHostKeyChecking=accept-new "$REMOTE" "mkdir -p '$APP/frontend/dist' '$APP/backend'"
+
+          rsync -az --delete \
+            release/frontend/ \
+            "$REMOTE:$APP/frontend/dist/"
+
+          rsync -az --delete \
+            --exclude '__pycache__' \
+            --exclude '.venv' \
+            --exclude 'venv' \
+            release/backend/ \
+            "$REMOTE:$APP/backend/"
+
+          if [ -n "${STAGING_RESTART_CMD:-}" ]; then
+            echo "执行远端重启…"
+            ssh "$REMOTE" "bash -lc $(printf '%q' "$STAGING_RESTART_CMD")"
+          else
+            echo "未配置 STAGING_RESTART_CMD，已同步文件，请自行重启 API / Nginx"
+          fi
+
+          echo "部署完成 → $REMOTE:$APP"
