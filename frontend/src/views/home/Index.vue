@@ -19,7 +19,7 @@
           <v-chart class="gauge-chart" :option="monthlyGaugeOption" autoresize />
           <div class="gauge-footer">
             <span class="gauge-last-value">{{ formatNumber(data.last_month_output) }}</span>
-            <span class="gauge-last-label">上月产量</span>
+            <span class="gauge-last-label">上一月产量</span>
           </div>
         </div>
       </div>
