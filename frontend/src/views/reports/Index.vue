@@ -14,13 +14,18 @@
           <span class="link-title">在制品报表</span>
           <span class="link-desc">按工单查看工序与在制数量（wip 口径）</span>
         </router-link>
+        <router-link to="/reports/daily-output" class="report-link-card">
+          <el-icon :size="28"><DataAnalysis /></el-icon>
+          <span class="link-title">日产报表</span>
+          <span class="link-desc">按日 / 产线 / 产品查看计划与实际产量</span>
+        </router-link>
       </div>
     </el-card>
   </div>
 </template>
 
 <script setup>
-import { DataLine, Document } from '@element-plus/icons-vue'
+import { DataLine, Document, DataAnalysis } from '@element-plus/icons-vue'
 </script>
 
 <style scoped>

@@ -53,3 +53,24 @@ export async function fetchWipReport({
 export async function fetchWipProcesses() {
   return authFetch('/api/reports/wip/processes')
 }
+
+export async function fetchDailyOutputReport({
+  page = 1,
+  pageSize = 10,
+  dateFrom,
+  dateTo,
+  productionLine,
+} = {}) {
+  const params = new URLSearchParams({
+    page: String(page),
+    page_size: String(pageSize),
+  })
+  if (dateFrom) params.set('date_from', dateFrom)
+  if (dateTo) params.set('date_to', dateTo)
+  if (productionLine) params.set('production_line', productionLine)
+  return authFetch(`/api/reports/daily-output?${params}`)
+}
+
+export async function fetchDailyOutputLines() {
+  return authFetch('/api/reports/daily-output/lines')
+}
