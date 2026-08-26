@@ -19,6 +19,7 @@ import MaterialInventoryView from '../views/warehouse/MaterialInventoryView.vue'
 import MaterialInboundListView from '../views/warehouse/MaterialInboundListView.vue'
 import ReportsIndex from '../views/reports/Index.vue'
 import WipReportView from '../views/reports/WipReportView.vue'
+import DailyOutputReportView from '../views/reports/DailyOutputReportView.vue'
 import SettingsIndex from '../views/settings/Index.vue'
 import MessagesIndex from '../views/messages/Index.vue'
 import HelpIndex from '../views/help/Index.vue'
@@ -115,6 +116,12 @@ const router = createRouter({
         { path: 'warehouse/:id', redirect: '/warehouse/inventory' },
         { path: 'reports', name: 'reports', component: ReportsIndex, meta: { title: '报表中心', ...authRequired } },
         { path: 'reports/wip', name: 'reports-wip', component: WipReportView, meta: { title: '在制品报表', ...authRequired } },
+        {
+          path: 'reports/daily-output',
+          name: 'reports-daily-output',
+          component: DailyOutputReportView,
+          meta: { title: '日产报表', ...authRequired },
+        },
         { path: 'settings', name: 'settings', component: SettingsIndex, meta: { title: '系统设置', ...authRequired } },
         { path: 'messages', name: 'messages', component: MessagesIndex, meta: { title: '消息中心', ...authRequired } },
         { path: 'help', name: 'help', component: HelpIndex, meta: { title: '帮助文档', ...authRequired } },

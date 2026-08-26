@@ -413,6 +413,17 @@ API_ZH: dict[tuple[str, str], dict[str, str]] = {
         "summary": "在制品报表工序选项",
         "description": "返回标准工序列表，供报表筛选下拉使用。",
     },
+    ("GET", "/api/reports/daily-output"): {
+        "summary": "日产报表",
+        "description": (
+            "按生产日期、产线、产品聚合日产量（计划/实际/不良/达成率/不良率）。"
+            "默认近 7 日；支持日期范围、产线筛选与分页。报表中心「日产报表」页使用本接口。"
+        ),
+    },
+    ("GET", "/api/reports/daily-output/lines"): {
+        "summary": "日产报表产线选项",
+        "description": "返回产线名称列表，供日产报表筛选下拉使用。",
+    },
 }
 
 # 路由模块 tags 中文映射（用于把代码里的英文 tag 替换进 OpenAPI）

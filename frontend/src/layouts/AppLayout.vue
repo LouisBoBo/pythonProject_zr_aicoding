@@ -274,6 +274,7 @@ const menuGroups = [
         icon: DataLine,
         children: [
           { path: '/reports/wip', title: '在制品报表', icon: Document },
+          { path: '/reports/daily-output', title: '日产报表', icon: DataAnalysis },
         ],
       },
       { path: '/settings', title: '系统设置', icon: Setting },

@@ -188,6 +188,35 @@ class WipReportProcessesResponse(BaseModel):
     processes: list[str] = Field(description="可选工序列表（用于筛选）")
 
 
+class DailyOutputReportItem(BaseModel):
+    """日产报表行：按日期 / 产线 / 产品聚合。"""
+
+    report_date: date = Field(description="生产日期")
+    production_line: str = Field(description="产线名称")
+    product_code: str | None = Field(default=None, description="产品编码")
+    product_name: str | None = Field(default=None, description="产品名称")
+    plan_qty: int = Field(description="计划产量")
+    actual_qty: int = Field(description="实际产量")
+    defect_qty: int = Field(description="不良数量")
+    area_output: float = Field(description="面积产出")
+    achievement_rate: float = Field(description="达成率（%），计划为 0 时为 0")
+    defect_rate: float = Field(description="不良率（%），产量为 0 时为 0")
+
+
+class DailyOutputReportListResponse(BaseModel):
+    items: list[DailyOutputReportItem]
+    total: int
+    page: int
+    page_size: int
+    plan_qty_sum: int = Field(description="当前筛选条件下计划产量合计")
+    actual_qty_sum: int = Field(description="当前筛选条件下实际产量合计")
+    defect_qty_sum: int = Field(description="当前筛选条件下不良数量合计")
+
+
+class DailyOutputLinesResponse(BaseModel):
+    lines: list[str] = Field(description="可选产线名称列表（用于筛选）")
+
+
 KanbanBoardCategory = Literal["production", "quality", "equipment", "warehouse", "general"]
 KanbanBoardStatus = Literal["draft", "active", "archived"]
 
