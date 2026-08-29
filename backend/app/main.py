@@ -144,9 +144,9 @@ def ensure_work_orders_actual_end_time():
 
 
 def ensure_work_orders_current_process():
-    """为 work_orders 补齐 current_process 列，并按进度回填已开工/已完成工单工序。"""
+    """为 work_orders 补齐 current_process 列，并回填全部工单工序；完工/关闭补齐完工时间。"""
     from app.models import WorkOrder
-    from app.work_order_utils import derive_current_process
+    from app.work_order_utils import derive_current_process, ensure_work_order_timestamps
 
     inspector = inspect(engine)
     columns = [column["name"] for column in inspector.get_columns("work_orders")]
@@ -160,8 +160,17 @@ def ensure_work_orders_current_process():
         changed = 0
         for wo in orders:
             expected = derive_current_process(wo.status, wo.plan_quantity, wo.actual_quantity)
-            if wo.current_process != expected:
+            before_end = wo.actual_end_time
+            before_start = wo.actual_start_time
+            before_process = wo.current_process
+            if not wo.current_process or wo.current_process != expected:
                 wo.current_process = expected
+            ensure_work_order_timestamps(wo)
+            if (
+                wo.current_process != before_process
+                or wo.actual_end_time != before_end
+                or wo.actual_start_time != before_start
+            ):
                 changed += 1
         if changed:
             db.commit()

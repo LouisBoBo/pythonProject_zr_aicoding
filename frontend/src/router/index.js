@@ -20,6 +20,7 @@ import MaterialInboundListView from '../views/warehouse/MaterialInboundListView.
 import ReportsIndex from '../views/reports/Index.vue'
 import WipReportView from '../views/reports/WipReportView.vue'
 import DailyOutputReportView from '../views/reports/DailyOutputReportView.vue'
+import QualityAnomaliesReportView from '../views/reports/QualityAnomaliesReportView.vue'
 import SettingsIndex from '../views/settings/Index.vue'
 import MessagesIndex from '../views/messages/Index.vue'
 import HelpIndex from '../views/help/Index.vue'
@@ -121,6 +122,12 @@ const router = createRouter({
           name: 'reports-daily-output',
           component: DailyOutputReportView,
           meta: { title: '日产报表', ...authRequired },
+        },
+        {
+          path: 'reports/quality-anomalies',
+          name: 'reports-quality-anomalies',
+          component: QualityAnomaliesReportView,
+          meta: { title: '质量管理', ...authRequired },
         },
         { path: 'settings', name: 'settings', component: SettingsIndex, meta: { title: '系统设置', ...authRequired } },
         { path: 'messages', name: 'messages', component: MessagesIndex, meta: { title: '消息中心', ...authRequired } },

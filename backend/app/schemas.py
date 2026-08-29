@@ -93,7 +93,7 @@ class DashboardResponse(BaseModel):
 
 
 WorkOrderPriority = Literal["low", "normal", "high", "urgent"]
-WorkOrderStatus = Literal["pending", "in_progress", "completed", "cancelled"]
+WorkOrderStatus = Literal["pending", "in_progress", "completed", "closed", "cancelled"]
 
 
 class WorkOrderCreate(BaseModel):
@@ -165,7 +165,7 @@ class WipReportItem(BaseModel):
     id: int
     order_no: str = Field(description="工单号")
     product_name: str = Field(description="品名")
-    current_process: str | None = Field(default=None, description="当前工序，待开工为空")
+    current_process: str | None = Field(default=None, description="当前工序（贴片/焊接/AOI检测/功能测试/包装）")
     wip_quantity: int = Field(description="在制数量（wip 口径：计划数量 - 实际数量）")
     status: str = Field(description="工单状态")
     start_date: date | None = Field(default=None, description="计划开始日期")
@@ -900,6 +900,8 @@ class QualityAnomalyItem(BaseModel):
 class QualityAnomalyListResponse(BaseModel):
     items: list[QualityAnomalyItem]
     total: int
+    page: int | None = None
+    page_size: int | None = None
 
 
 class QualityTopDefectItem(BaseModel):

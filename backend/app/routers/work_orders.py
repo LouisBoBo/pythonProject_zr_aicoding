@@ -14,14 +14,15 @@ from app.schemas import (
     WorkOrderStatusUpdate,
     WorkOrderUpdate,
 )
-from app.work_order_utils import derive_current_process
+from app.work_order_utils import derive_current_process, ensure_work_order_timestamps
 
 router = APIRouter(prefix="/api/work-orders", tags=["work-orders"])
 
 VALID_STATUS_TRANSITIONS: dict[str, set[str]] = {
     "pending": {"in_progress", "cancelled"},
     "in_progress": {"completed", "cancelled"},
-    "completed": set(),
+    "completed": {"closed"},
+    "closed": set(),
     "cancelled": set(),
 }
 
@@ -141,6 +142,7 @@ def update_work_order(
         work_order.current_process = derive_current_process(
             work_order.status, work_order.plan_quantity, work_order.actual_quantity
         )
+    ensure_work_order_timestamps(work_order)
     work_order.updated_at = datetime.utcnow()
 
     try:
@@ -156,7 +158,11 @@ def update_work_order(
     "/{work_order_id}/status",
     response_model=WorkOrderResponse,
     summary="更新工单状态",
-    description="待开工→进行中时若尚未有实际开始时间，则写入当前时间；进行中→已完成时若尚未有实际结束时间，则写入当前时间。",
+    description=(
+        "待开工→进行中时若尚未有实际开始时间，则写入当前时间；"
+        "进行中→已完成 / 已完成→已关闭时若尚未有实际结束时间，则写入当前时间。"
+        "完工（completed）与关闭（closed）工单必须有实际结束时间。"
+    ),
 )
 def update_work_order_status(
     work_order_id: int,
@@ -169,11 +175,8 @@ def update_work_order_status(
     if payload.status not in allowed:
         raise HTTPException(status_code=400, detail=f"无法从 {work_order.status} 流转到 {payload.status}")
 
-    if payload.status == "in_progress" and work_order.actual_start_time is None:
-        work_order.actual_start_time = datetime.utcnow()
-    if payload.status == "completed" and work_order.actual_end_time is None:
-        work_order.actual_end_time = datetime.utcnow()
     work_order.status = payload.status
+    ensure_work_order_timestamps(work_order)
     work_order.current_process = derive_current_process(
         work_order.status, work_order.plan_quantity, work_order.actual_quantity
     )

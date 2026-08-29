@@ -29,6 +29,19 @@ PROCESSES = ["贴片", "焊接", "AOI检测", "功能测试", "包装"]
 DEFECT_TYPES = ["虚焊", "短路", "元件偏移", "漏件", "外观不良", "功能异常", "尺寸偏差"]
 
 
+def _to_anomaly_item(row: QualityAnomaly) -> QualityAnomalyItem:
+    return QualityAnomalyItem(
+        id=row.id,
+        production_line=row.production_line,
+        process=row.process,
+        defect_type=row.defect_type,
+        severity=row.severity,
+        status=row.status,
+        discovered_at=row.discovered_at,
+        handler=row.handler,
+    )
+
+
 def _safe_rate(numerator: int, denominator: int) -> float:
     if denominator <= 0:
         return 0.0
@@ -302,28 +315,30 @@ def get_defect_distribution(
 
 @router.get("/anomalies", response_model=QualityAnomalyListResponse)
 def get_anomalies(
-    status: str = Query("open"),
-    limit: int = Query(20, ge=1, le=100),
+    status: str | None = Query(None, description="异常状态：open / processing / closed，不传则不过滤"),
+    page: int | None = Query(None, ge=1, description="页码（与 page_size 配合使用）"),
+    page_size: int | None = Query(None, ge=1, le=100, description="每页条数"),
+    limit: int = Query(20, ge=1, le=100, description="最大返回条数（未传 page 时生效，兼容看板调用）"),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    query = db.query(QualityAnomaly).filter(QualityAnomaly.status == status)
+    query = db.query(QualityAnomaly)
+    if status:
+        query = query.filter(QualityAnomaly.status == status)
     total = query.count()
-    rows = query.order_by(QualityAnomaly.discovered_at.desc()).limit(limit).all()
-    items = [
-        QualityAnomalyItem(
-            id=r.id,
-            production_line=r.production_line,
-            process=r.process,
-            defect_type=r.defect_type,
-            severity=r.severity,
-            status=r.status,
-            discovered_at=r.discovered_at,
-            handler=r.handler,
+    ordered = query.order_by(QualityAnomaly.discovered_at.desc())
+    if page is not None:
+        effective_page_size = page_size or 10
+        offset = (page - 1) * effective_page_size
+        rows = ordered.offset(offset).limit(effective_page_size).all()
+        return QualityAnomalyListResponse(
+            items=[_to_anomaly_item(r) for r in rows],
+            total=total,
+            page=page,
+            page_size=effective_page_size,
         )
-        for r in rows
-    ]
-    return QualityAnomalyListResponse(items=items, total=total)
+    rows = ordered.limit(limit).all()
+    return QualityAnomalyListResponse(items=[_to_anomaly_item(r) for r in rows], total=total)
 
 
 @router.get("/top-defects", response_model=QualityTopDefectResponse)

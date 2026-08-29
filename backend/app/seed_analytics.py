@@ -701,12 +701,17 @@ def seed_analytics_data() -> None:
         db.close()
 
 
-def backfill_recent_operational_data(days: int = 7) -> None:
-    """把看板/总览依赖的事实表补到「今天」，已有日期跳过，可重复调用。"""
+def backfill_recent_operational_data(days: int | None = None) -> None:
+    """把看板/总览依赖的事实表补到「今天」，已有日期跳过，可重复调用。
+
+    days 默认覆盖当月 1 号至今（至少 7 天），保证每日都有产量数据。
+    """
     db = SessionLocal()
     try:
         today = date.today()
         now = datetime.now()
+        if days is None:
+            days = max((today - date(today.year, today.month, 1)).days + 1, 7)
         start_day = today - timedelta(days=days - 1)
 
         lines = db.query(ProductionLine).order_by(ProductionLine.id).all()
@@ -791,18 +796,21 @@ def backfill_recent_operational_data(days: int = 7) -> None:
                                     )
                                 )
                     else:
-                        record_at = datetime(the_day.year, the_day.month, the_day.day, 18, 0, 0)
-                        exists_out = (
+                        day_start = datetime(the_day.year, the_day.month, the_day.day, 0, 0, 0)
+                        day_end = day_start + timedelta(days=1)
+                        has_day_out = (
                             db.query(ProductionOutputRecord)
                             .filter(
                                 ProductionOutputRecord.production_line_id == line.id,
                                 ProductionOutputRecord.product_id == product.id,
-                                ProductionOutputRecord.record_at == record_at,
+                                ProductionOutputRecord.record_at >= day_start,
+                                ProductionOutputRecord.record_at < day_end,
                             )
                             .first()
                         )
-                        if exists_out:
+                        if has_day_out:
                             continue
+                        record_at = datetime(the_day.year, the_day.month, the_day.day, 18, 0, 0)
                         actual = int(plan_qty * (0.88 + (p_idx % 3) * 0.03))
                         defect = 8 + line_idx + p_idx + (day_offset % 5)
                         db.add(
@@ -1097,7 +1105,14 @@ def backfill_recent_operational_data(days: int = 7) -> None:
                         )
                     )
 
-        ensure_rich_work_orders(db, today=today, now=now, target_count=100)
+        # 本月工单约千条级，供数据分析；天数按当月 1 号至今
+        month_days = (today - date(today.year, today.month, 1)).days + 1
+        ensure_rich_work_orders(
+            db,
+            today=today,
+            now=now,
+            target_count=min(1000, max(month_days * 32, 200)),
+        )
         _rebase_live_records_to_today(db, today, now)
 
         db.commit()
@@ -1202,14 +1217,9 @@ def _rebase_live_records_to_today(db, today: date, now: datetime) -> None:
             )
 
 
-# 工单分析用状态分布（合计 100）
-_WORK_ORDER_STATUS_MIX = (
-    ["pending"] * 18
-    + ["in_progress"] * 28
-    + ["completed"] * 24
-    + ["closed"] * 18
-    + ["cancelled"] * 12
-)
+# 月度工单规模（≤1000），贴合产线日排产做数据分析
+MONTHLY_WORK_ORDER_CAP = 1000
+MIN_COMPLETED_PER_DAY = 12
 _WORK_ORDER_PRIORITIES = ["urgent", "high", "high", "normal", "normal", "normal", "low"]
 _WORK_ORDER_ASSIGNEES = [
     "张三",
@@ -1239,69 +1249,81 @@ _WORK_ORDER_REMARKS = [
 ]
 
 
-def _work_order_profile(idx: int, today: date, now: datetime) -> dict:
-    """按序号生成一条可分析的工单字段画像（对齐今天、覆盖多状态）。"""
-    status = _WORK_ORDER_STATUS_MIX[idx % len(_WORK_ORDER_STATUS_MIX)]
+def _dt_on(day: date, hour: int, minute: int = 0) -> datetime:
+    return datetime(day.year, day.month, day.day, hour, minute, 0)
+
+
+def _build_day_work_order_profile(
+    *,
+    idx: int,
+    the_day: date,
+    today: date,
+    now: datetime,
+    status: str,
+) -> dict:
+    """生成单日工单画像：完工/关闭必有实际结束时间，且落在 the_day。"""
     priority = _WORK_ORDER_PRIORITIES[idx % len(_WORK_ORDER_PRIORITIES)]
-    if status in ("pending", "in_progress") and idx % 11 == 0:
+    if status in ("pending", "in_progress") and idx % 9 == 0:
         priority = "urgent"
-    plan_qty = 200 + (idx % 20) * 50 + (idx % 7) * 10
+    plan_qty = 80 + (idx % 25) * 30 + (idx % 5) * 8  # 约 80~830
     hour = 8 + (idx % 10)
     minute = (idx * 7) % 60
 
     if status == "pending":
-        start_off = -(idx % 3)  # 今天或近两日开立
-        end_off = 2 + (idx % 5)
+        start_date = the_day
+        end_date = the_day + timedelta(days=1 + idx % 3)
         actual = 0
         actual_start = None
         actual_end = None
-        created_off = max(start_off + 1, 1)
+        created_at = _dt_on(the_day, 7, minute)
     elif status == "in_progress":
-        start_off = idx % 4  # 0~3 天前开工
-        # 约 1/4 逾期（计划结束早于今天）
-        end_off = -1 - (idx % 2) if idx % 4 == 0 else 1 + (idx % 4)
-        ratio = 0.25 + (idx % 8) * 0.08
+        start_off = min(idx % 3, (the_day - date(the_day.year, the_day.month, 1)).days)
+        start_date = the_day - timedelta(days=start_off)
+        end_date = the_day + timedelta(days=1 + idx % 2)
+        if idx % 5 == 0:
+            end_date = the_day - timedelta(days=1)  # 少量逾期
+        ratio = 0.2 + (idx % 7) * 0.1
         actual = max(int(plan_qty * ratio), 1)
-        actual_start = datetime(
-            today.year, today.month, today.day, hour, minute, 0
-        ) - timedelta(days=start_off)
+        actual_start = _dt_on(start_date, 8, minute)
         actual_end = None
-        created_off = start_off + 1
+        created_at = actual_start - timedelta(hours=2)
     elif status == "completed":
-        start_off = 1 + (idx % 5)
-        end_off = -(idx % 2)  # 今天或昨天计划结束
-        finish_days_ago = abs(end_off)
-        over_under = 1.0 + ((idx % 5) - 2) * 0.03
+        duration = 0 if idx % 3 == 0 else 1 + (idx % 2)
+        start_date = the_day - timedelta(days=duration)
+        end_date = the_day
+        over_under = 0.92 + (idx % 6) * 0.03
         actual = max(int(plan_qty * over_under), 1)
-        actual_start = datetime(
-            today.year, today.month, today.day, 8, minute, 0
-        ) - timedelta(days=start_off)
-        actual_end = datetime(
-            today.year, today.month, today.day, min(hour + 2, 20), minute, 0
-        ) - timedelta(days=finish_days_ago)
-        created_off = start_off + 1
+        actual_start = _dt_on(start_date, 8, minute)
+        actual_end = _dt_on(the_day, min(hour + 2, 20), minute)
+        if actual_end <= actual_start:
+            actual_end = actual_start + timedelta(hours=4)
+        created_at = actual_start - timedelta(hours=1)
     elif status == "closed":
-        start_off = 3 + (idx % 7)
-        end_off = -(1 + idx % 4)
-        actual = plan_qty + (idx % 3) * 5
-        actual_start = datetime(
-            today.year, today.month, today.day, 8, 0, 0
-        ) - timedelta(days=start_off)
-        actual_end = datetime(
-            today.year, today.month, today.day, 16, minute, 0
-        ) - timedelta(days=abs(end_off))
-        created_off = start_off + 2
+        duration = 1 + (idx % 3)
+        start_date = the_day - timedelta(days=duration)
+        end_date = the_day
+        actual = plan_qty + (idx % 4) * 5
+        actual_start = _dt_on(start_date, 8, 0)
+        actual_end = _dt_on(the_day, 16, minute)
+        created_at = actual_start - timedelta(days=1, hours=2)
     else:  # cancelled
-        start_off = idx % 6
-        end_off = 1 + (idx % 3)
-        actual = 0 if idx % 2 == 0 else max(int(plan_qty * 0.1), 1)
-        actual_start = None
-        if actual > 0:
-            actual_start = datetime(
-                today.year, today.month, today.day, 9, minute, 0
-            ) - timedelta(days=start_off)
+        start_date = the_day
+        end_date = the_day + timedelta(days=1)
+        actual = 0 if idx % 2 == 0 else max(int(plan_qty * 0.08), 1)
+        actual_start = _dt_on(the_day, 9, minute) if actual > 0 else None
         actual_end = None
-        created_off = start_off + 1
+        created_at = _dt_on(the_day, 8, minute)
+
+    if status in ("completed", "closed") and actual_end is None:
+        actual_end = _dt_on(the_day, 17, minute)
+        if actual_start is None:
+            actual_start = actual_end - timedelta(hours=6)
+
+    # 今天的更新时间贴近当前；历史日用当日晚间
+    if the_day == today:
+        updated_at = now - timedelta(minutes=idx % 120)
+    else:
+        updated_at = _dt_on(the_day, 20, minute)
 
     return {
         "status": status,
@@ -1310,14 +1332,74 @@ def _work_order_profile(idx: int, today: date, now: datetime) -> dict:
         "actual_quantity": actual,
         "current_process": derive_current_process(status, plan_qty, actual),
         "assignee": _WORK_ORDER_ASSIGNEES[idx % len(_WORK_ORDER_ASSIGNEES)],
-        "start_date": today - timedelta(days=start_off),
-        "end_date": today + timedelta(days=end_off),
+        "start_date": start_date,
+        "end_date": end_date,
         "actual_start_time": actual_start,
         "actual_end_time": actual_end,
         "remark": _WORK_ORDER_REMARKS[idx % len(_WORK_ORDER_REMARKS)],
-        "created_at": now - timedelta(days=created_off, hours=idx % 12),
-        "updated_at": now - timedelta(minutes=idx % 90),
+        "created_at": created_at,
+        "updated_at": updated_at,
     }
+
+
+def _statuses_for_day(the_day: date, today: date, day_count: int) -> list[str]:
+    """按日分配状态：历史日以完工为主，且每天至少 MIN_COMPLETED_PER_DAY 条完工。"""
+    statuses: list[str] = []
+    if the_day < today:
+        n_done = max(MIN_COMPLETED_PER_DAY, int(day_count * 0.55))
+        n_closed = max(2, int(day_count * 0.25))
+        n_cancel = max(1, int(day_count * 0.05))
+        n_wip = 0
+        # 近 2 日保留少量在制结转
+        if (today - the_day).days <= 2:
+            n_wip = max(2, int(day_count * 0.12))
+        # 裁剪到 day_count
+        while n_done + n_closed + n_cancel + n_wip > day_count:
+            if n_closed > 2:
+                n_closed -= 1
+            elif n_cancel > 1:
+                n_cancel -= 1
+            elif n_wip > 0:
+                n_wip -= 1
+            else:
+                n_done = max(MIN_COMPLETED_PER_DAY, n_done - 1)
+        statuses.extend(["completed"] * n_done)
+        statuses.extend(["closed"] * n_closed)
+        statuses.extend(["cancelled"] * n_cancel)
+        statuses.extend(["in_progress"] * n_wip)
+        while len(statuses) < day_count:
+            statuses.append("completed")
+    else:
+        # 今天：必须有完工，同时保留待开工/在制（优先保证三类）
+        n_done = max(MIN_COMPLETED_PER_DAY, min(day_count // 3, int(day_count * 0.35)))
+        remain = day_count - n_done
+        n_wip = max(1, remain // 2)
+        n_pending = max(1, remain - n_wip)
+        # 从 pending/wip 中让出少量关闭/取消
+        n_closed = 1 if n_pending > 2 else 0
+        n_cancel = 1 if n_wip > 2 else 0
+        n_pending = max(1, n_pending - n_closed)
+        n_wip = max(1, n_wip - n_cancel)
+        while n_done + n_wip + n_pending + n_closed + n_cancel > day_count:
+            if n_closed:
+                n_closed -= 1
+            elif n_cancel:
+                n_cancel -= 1
+            elif n_pending > 1:
+                n_pending -= 1
+            elif n_wip > 1:
+                n_wip -= 1
+            else:
+                n_done = max(MIN_COMPLETED_PER_DAY, n_done - 1)
+        statuses.extend(["completed"] * n_done)
+        statuses.extend(["in_progress"] * n_wip)
+        statuses.extend(["pending"] * n_pending)
+        statuses.extend(["closed"] * n_closed)
+        statuses.extend(["cancelled"] * n_cancel)
+        while len(statuses) < day_count:
+            statuses.append("pending")
+        statuses = statuses[:day_count]
+    return statuses
 
 
 def ensure_rich_work_orders(
@@ -1325,11 +1407,16 @@ def ensure_rich_work_orders(
     *,
     today: date | None = None,
     now: datetime | None = None,
-    target_count: int = 100,
+    target_count: int | None = None,
 ) -> None:
-    """补齐并刷新工单至 target_count 条：多状态/优先级/产线，日期对齐今天。可重复调用。"""
+    """按当月重建分析用工单（≤1000）：每日有产量配套完工单，日期对齐今天。可重复调用。"""
     today = today or date.today()
     now = now or datetime.now()
+    month_start = date(today.year, today.month, 1)
+    days = (today - month_start).days + 1
+    target = min(target_count or MONTHLY_WORK_ORDER_CAP, MONTHLY_WORK_ORDER_CAP)
+    target = max(target, days * (MIN_COMPLETED_PER_DAY + 4))
+
     lines = db.query(ProductionLine).order_by(ProductionLine.id).all()
     products = db.query(Product).order_by(Product.id).all()
     if not lines or not products:
@@ -1340,50 +1427,114 @@ def ensure_rich_work_orders(
         if product.default_line_id in products_by_line:
             products_by_line[product.default_line_id].append(product)
 
-    existing = db.query(WorkOrder).order_by(WorkOrder.id).all()
-    # 刷新已有工单画像，保证分析维度齐全且对齐今天
-    for idx, wo in enumerate(existing):
-        line = lines[idx % len(lines)]
-        line_products = products_by_line.get(line.id) or products
-        product = line_products[idx % len(line_products)]
-        profile = _work_order_profile(idx, today, now)
-        wo.product_name = product.product_name
-        wo.product_code = product.product_code
-        wo.production_line = line.name
-        for key, value in profile.items():
-            setattr(wo, key, value)
+    # 解除产量事实对旧演示工单的引用后重建
+    an_ids = [
+        row[0]
+        for row in db.query(WorkOrder.id).filter(WorkOrder.order_no.like("WO-AN-%")).all()
+    ]
+    if an_ids:
+        (
+            db.query(ProductionOutputRecord)
+            .filter(ProductionOutputRecord.work_order_id.in_(an_ids))
+            .update({ProductionOutputRecord.work_order_id: None}, synchronize_session=False)
+        )
+        db.query(WorkOrder).filter(WorkOrder.id.in_(an_ids)).delete(synchronize_session=False)
+        db.flush()
 
-    need = target_count - len(existing)
-    if need <= 0:
-        return
+    # 按日分配条数（周末约 55% 产能），总量压在 target 内
+    day_counts: list[int] = []
+    base = target // days
+    rem = target % days
+    for day_i in range(days):
+        the_day = month_start + timedelta(days=day_i)
+        n = base + (1 if day_i < rem else 0)
+        if the_day.weekday() >= 5:
+            n = max(MIN_COMPLETED_PER_DAY + 3, int(n * 0.55))
+        day_counts.append(n)
+    # 若周末缩减后不足，把差额补到工作日
+    short = target - sum(day_counts)
+    wi = 0
+    while short > 0 and days > 0:
+        the_day = month_start + timedelta(days=wi % days)
+        if the_day.weekday() < 5:
+            day_counts[wi % days] += 1
+            short -= 1
+        wi += 1
+        if wi > days * 20:
+            break
 
-    used_nos = {wo.order_no for wo in existing}
-    next_seq = 1
-    for i in range(need):
-        idx = len(existing) + i
-        while True:
-            order_no = f"WO-AN-{next_seq:03d}"
-            next_seq += 1
-            if order_no not in used_nos:
-                used_nos.add(order_no)
-                break
-        line = lines[idx % len(lines)]
-        line_products = products_by_line.get(line.id) or products
-        product = line_products[idx % len(line_products)]
-        profile = _work_order_profile(idx, today, now)
-        db.add(
-            WorkOrder(
+    ym = today.strftime("%Y%m")
+    seq = 1
+    global_idx = 0
+    created_for_link: list[tuple] = []
+
+    for day_i, day_count in enumerate(day_counts):
+        the_day = month_start + timedelta(days=day_i)
+        statuses = _statuses_for_day(the_day, today, day_count)
+        for local_i, status in enumerate(statuses):
+            line = lines[global_idx % len(lines)]
+            line_products = products_by_line.get(line.id) or products
+            product = line_products[global_idx % len(line_products)]
+            profile = _build_day_work_order_profile(
+                idx=global_idx,
+                the_day=the_day,
+                today=today,
+                now=now,
+                status=status,
+            )
+            order_no = f"WO-AN-{ym}-{seq:04d}"
+            seq += 1
+            wo = WorkOrder(
                 order_no=order_no,
                 product_name=product.product_name,
                 product_code=product.product_code,
                 production_line=line.name,
                 **profile,
             )
+            db.add(wo)
+            if status in ("completed", "closed", "in_progress"):
+                created_for_link.append((the_day, wo, line, product))
+            global_idx += 1
+
+    db.flush()
+
+    # 为每日完工/在制工单挂一条产量事实，强化「每天都有生产数据」
+    for the_day, wo, line, product in created_for_link:
+        if wo.status not in ("completed", "closed", "in_progress"):
+            continue
+        hour = 10 + (wo.id % 8)
+        record_at = _dt_on(the_day, hour, (wo.id * 3) % 60)
+        qty = max(wo.actual_quantity or int(wo.plan_quantity * 0.3), 1)
+        if wo.status == "in_progress":
+            qty = max(wo.actual_quantity, 1)
+        defect = (wo.id % 5)
+        exists = (
+            db.query(ProductionOutputRecord)
+            .filter(
+                ProductionOutputRecord.work_order_id == wo.id,
+                ProductionOutputRecord.record_at == record_at,
+            )
+            .first()
+        )
+        if exists:
+            continue
+        db.add(
+            ProductionOutputRecord(
+                record_at=record_at,
+                production_line_id=line.id,
+                product_id=product.id,
+                work_order_id=wo.id,
+                process_card_no=f"PC-{wo.order_no}",
+                actual_qty=qty,
+                area_output=round(qty * 1.85, 2),
+                defect_qty=defect,
+                incoming_boards=qty + defect + 2,
+            )
         )
 
 
-def seed_rich_work_orders(target_count: int = 100) -> None:
-    """独立入口：补齐丰富工单数据（供脚本/手工触发）。"""
+def seed_rich_work_orders(target_count: int | None = None) -> None:
+    """独立入口：按当月规模重建分析用工单（默认 ≤1000）。"""
     db = SessionLocal()
     try:
         ensure_rich_work_orders(db, target_count=target_count)

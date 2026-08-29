@@ -181,6 +181,7 @@ import {
   List,
   Calendar,
   Tools,
+  Warning,
 } from '@element-plus/icons-vue'
 import { clearToken, fetchCurrentUser } from '../api/auth'
 
@@ -275,6 +276,7 @@ const menuGroups = [
         children: [
           { path: '/reports/wip', title: '在制品报表', icon: Document },
           { path: '/reports/daily-output', title: '日产报表', icon: DataAnalysis },
+          { path: '/reports/quality-anomalies', title: '质量管理', icon: Warning },
         ],
       },
       { path: '/settings', title: '系统设置', icon: Setting },

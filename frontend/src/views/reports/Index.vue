@@ -19,13 +19,18 @@
           <span class="link-title">日产报表</span>
           <span class="link-desc">按日 / 产线 / 产品查看计划与实际产量</span>
         </router-link>
+        <router-link to="/reports/quality-anomalies" class="report-link-card">
+          <el-icon :size="28"><Warning /></el-icon>
+          <span class="link-title">质量管理</span>
+          <span class="link-desc">品质异常明细查询，按状态筛选与分页浏览</span>
+        </router-link>
       </div>
     </el-card>
   </div>
 </template>
 
 <script setup>
-import { DataLine, Document, DataAnalysis } from '@element-plus/icons-vue'
+import { DataLine, Document, DataAnalysis, Warning } from '@element-plus/icons-vue'
 </script>
 
 <style scoped>

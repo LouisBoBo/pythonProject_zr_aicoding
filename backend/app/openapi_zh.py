@@ -351,7 +351,7 @@ API_ZH: dict[tuple[str, str], dict[str, str]] = {
     },
     ("GET", "/api/quality/anomalies"): {
         "summary": "品质异常列表",
-        "description": "查询品质异常工单列表。",
+        "description": "查询品质异常明细；支持 status 筛选与 page/page_size 分页（entity=quality-anomalies）。",
     },
     ("GET", "/api/quality/top-defects"): {
         "summary": "Top 不良项",

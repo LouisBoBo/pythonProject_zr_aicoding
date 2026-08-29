@@ -51,6 +51,16 @@ export async function fetchQualityAnomalies(status = 'open', limit = 20) {
   return authFetch(`/api/quality/anomalies?status=${status}&limit=${limit}`)
 }
 
+export async function fetchQualityAnomaliesList({ status, page = 1, pageSize = 10 } = {}) {
+  const params = new URLSearchParams()
+  params.set('page', String(page))
+  params.set('page_size', String(pageSize))
+  if (status) {
+    params.set('status', status)
+  }
+  return authFetch(`/api/quality/anomalies?${params.toString()}`)
+}
+
 export async function fetchTopDefects(limit = 10) {
   return authFetch(`/api/quality/top-defects?limit=${limit}`)
 }
