@@ -59,7 +59,7 @@ def _to_wip_item(wo: WorkOrder) -> WipReportItem:
     description=(
         "按工单列出在制品数据（wip 口径：未完工且非取消的工单）。"
         "在制数量 = 计划数量 - 实际数量；工序取自 work_orders.current_process，"
-        "为空时按完成进度推导。支持按状态、工序、计划日期范围筛选。"
+        "为空时按完成进度推导（待开工为贴片）。支持按状态、工序、计划日期范围筛选。"
     ),
 )
 def list_wip_report(
