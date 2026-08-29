@@ -24,13 +24,18 @@
           <span class="link-title">质量管理</span>
           <span class="link-desc">品质异常明细查询，按状态筛选与分页浏览</span>
         </router-link>
+        <router-link to="/reports/equipment" class="report-link-card">
+          <el-icon :size="28"><Cpu /></el-icon>
+          <span class="link-title">设备管理</span>
+          <span class="link-desc">设备档案台账查询，按编号/名称/部门/状态筛选</span>
+        </router-link>
       </div>
     </el-card>
   </div>
 </template>
 
 <script setup>
-import { DataLine, Document, DataAnalysis, Warning } from '@element-plus/icons-vue'
+import { Cpu, DataLine, Document, DataAnalysis, Warning } from '@element-plus/icons-vue'
 </script>
 
 <style scoped>

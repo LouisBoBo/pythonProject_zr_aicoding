@@ -191,7 +191,7 @@ API_ZH: dict[tuple[str, str], dict[str, str]] = {
     # ----- 设备台账 -----
     ("GET", "/api/equipment"): {
         "summary": "查询设备台账列表",
-        "description": "分页查询设备台账，支持状态、部门、关键词等筛选。",
+        "description": "分页查询设备台账（entity=equipment），支持 equipment_code/name/department/status/search 筛选。",
     },
     ("GET", "/api/equipment/export"): {
         "summary": "导出设备台账 Excel",

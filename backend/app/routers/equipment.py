@@ -21,6 +21,9 @@ from app.schemas import (
 router = APIRouter(prefix="/api/equipment", tags=["equipment"])
 
 VALID_STATUSES = {"运行", "停机", "维修", "报废"}
+# 导入文件大小上限，防止超大 Excel 占满内存
+MAX_IMPORT_BYTES = 10 * 1024 * 1024
+IMPORT_READ_CHUNK = 1024 * 1024
 
 EXPORT_HEADERS = [
     "设备编号",
@@ -34,6 +37,31 @@ EXPORT_HEADERS = [
     "供应商/制造商",
     "备注",
 ]
+
+
+async def _read_upload_limited(file: UploadFile, max_bytes: int = MAX_IMPORT_BYTES) -> bytes:
+    """分块读取上传文件，超过上限则拒绝，避免整文件读入导致 OOM。"""
+    declared = getattr(file, "size", None)
+    if declared is not None and declared > max_bytes:
+        raise HTTPException(
+            status_code=400,
+            detail=f"文件过大，请上传不超过 {max_bytes // (1024 * 1024)}MB 的 Excel",
+        )
+
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await file.read(IMPORT_READ_CHUNK)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_bytes:
+            raise HTTPException(
+                status_code=400,
+                detail=f"文件过大，请上传不超过 {max_bytes // (1024 * 1024)}MB 的 Excel",
+            )
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 def _get_equipment_or_404(equipment_id: int, db: Session) -> Equipment:
@@ -90,7 +118,7 @@ def _parse_date(value) -> date | None:
 @router.get("", response_model=EquipmentListResponse)
 def list_equipment(
     page: int = Query(1, ge=1),
-    page_size: int = Query(10, ge=1, le=100),
+    page_size: int = Query(10, ge=1, le=1000),
     equipment_code: str | None = Query(None),
     name: str | None = Query(None),
     department: str | None = Query(None),
@@ -247,7 +275,10 @@ async def import_equipment(
     if not file.filename or not file.filename.lower().endswith((".xlsx", ".xls")):
         raise HTTPException(status_code=400, detail="请上传 Excel 文件（.xlsx）")
 
-    content = await file.read()
+    content = await _read_upload_limited(file)
+    if not content:
+        raise HTTPException(status_code=400, detail="上传文件为空")
+
     try:
         wb = load_workbook(BytesIO(content), read_only=True, data_only=True)
     except Exception as exc:
@@ -294,12 +325,13 @@ async def import_equipment(
             supplier=str(row[8]).strip() if len(row) > 8 and row[8] is not None else None,
             remark=str(row[9]).strip() if len(row) > 9 and row[9] is not None else None,
         )
-        db.add(equipment)
+        # 使用 savepoint：单行冲突只回滚本行，不影响已成功 flush 的其他行
         try:
-            db.flush()
+            with db.begin_nested():
+                db.add(equipment)
+                db.flush()
             created += 1
         except IntegrityError:
-            db.rollback()
             skipped += 1
             errors.append(f"第 {idx} 行：设备编号 {code} 已存在")
 

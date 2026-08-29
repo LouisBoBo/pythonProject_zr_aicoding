@@ -277,6 +277,7 @@ const menuGroups = [
           { path: '/reports/wip', title: '在制品报表', icon: Document },
           { path: '/reports/daily-output', title: '日产报表', icon: DataAnalysis },
           { path: '/reports/quality-anomalies', title: '质量管理', icon: Warning },
+          { path: '/reports/equipment', title: '设备管理', icon: Cpu },
         ],
       },
       { path: '/settings', title: '系统设置', icon: Setting },
