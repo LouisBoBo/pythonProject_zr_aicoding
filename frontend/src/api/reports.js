@@ -74,3 +74,119 @@ export async function fetchDailyOutputReport({
 export async function fetchDailyOutputLines() {
   return authFetch('/api/reports/daily-output/lines')
 }
+
+async function authFetchBlob(url, options = {}) {
+  const token = getToken()
+  if (!token) {
+    throw new Error('未登录')
+  }
+
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...options.headers,
+    },
+  })
+
+  if (!response.ok) {
+    if (response.status === 401 || response.status === 403) {
+      clearToken()
+    }
+    const error = await response.json().catch(() => ({}))
+    const detail = error.detail
+    const message = typeof detail === 'string' ? detail : '请求失败'
+    throw new Error(message)
+  }
+
+  return response.blob()
+}
+
+export async function fetchEmployeeWorkHoursReport({
+  page = 1,
+  pageSize = 10,
+  dateFrom,
+  dateTo,
+  department,
+  employeeNo,
+  projectName,
+  dimension = 'detail',
+} = {}) {
+  const params = new URLSearchParams({
+    page: String(page),
+    page_size: String(pageSize),
+    dimension,
+  })
+  if (dateFrom) params.set('date_from', dateFrom)
+  if (dateTo) params.set('date_to', dateTo)
+  if (department) params.set('department', department)
+  if (employeeNo) params.set('employee_no', employeeNo)
+  if (projectName) params.set('project_name', projectName)
+  return authFetch(`/api/reports/employee-work-hours?${params}`)
+}
+
+export async function fetchEmployeeWorkHourFilters() {
+  return authFetch('/api/reports/employee-work-hours/filters')
+}
+
+export async function exportEmployeeWorkHoursReport({
+  dateFrom,
+  dateTo,
+  department,
+  employeeNo,
+  projectName,
+  dimension = 'detail',
+} = {}) {
+  const params = new URLSearchParams({ dimension })
+  if (dateFrom) params.set('date_from', dateFrom)
+  if (dateTo) params.set('date_to', dateTo)
+  if (department) params.set('department', department)
+  if (employeeNo) params.set('employee_no', employeeNo)
+  if (projectName) params.set('project_name', projectName)
+  return authFetchBlob(`/api/reports/employee-work-hours/export?${params}`)
+}
+
+export async function fetchEquipmentRepairReport({
+  page = 1,
+  pageSize = 10,
+  keyword,
+  status,
+  dateFrom,
+  dateTo,
+  equipmentCode,
+  faultCategory,
+} = {}) {
+  const params = new URLSearchParams({
+    page: String(page),
+    page_size: String(pageSize),
+  })
+  if (keyword) params.set('keyword', keyword)
+  if (status) params.set('status', status)
+  if (dateFrom) params.set('date_from', dateFrom)
+  if (dateTo) params.set('date_to', dateTo)
+  if (equipmentCode) params.set('equipment_code', equipmentCode)
+  if (faultCategory) params.set('fault_category', faultCategory)
+  return authFetch(`/api/reports/equipment-repairs?${params}`)
+}
+
+export async function fetchEquipmentRepairReportDetail(id) {
+  return authFetch(`/api/reports/equipment-repairs/${id}`)
+}
+
+export async function exportEquipmentRepairReport({
+  keyword,
+  status,
+  dateFrom,
+  dateTo,
+  equipmentCode,
+  faultCategory,
+} = {}) {
+  const params = new URLSearchParams()
+  if (keyword) params.set('keyword', keyword)
+  if (status) params.set('status', status)
+  if (dateFrom) params.set('date_from', dateFrom)
+  if (dateTo) params.set('date_to', dateTo)
+  if (equipmentCode) params.set('equipment_code', equipmentCode)
+  if (faultCategory) params.set('fault_category', faultCategory)
+  return authFetchBlob(`/api/reports/equipment-repairs/export?${params}`)
+}

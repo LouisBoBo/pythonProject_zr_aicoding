@@ -60,6 +60,12 @@
                 >
                   <el-icon class="nav-icon"><component :is="item.icon" /></el-icon>
                   <span v-if="!sidebarCollapsed" class="nav-label">{{ item.title }}</span>
+                  <el-badge
+                    v-if="item.badge === 'messages' && unreadCount > 0"
+                    :value="unreadCount"
+                    :max="99"
+                    :class="sidebarCollapsed ? 'nav-badge-collapsed' : 'nav-badge'"
+                  />
                 </router-link>
               </li>
             </template>
@@ -181,9 +187,11 @@ import {
   List,
   Calendar,
   Tools,
+  Timer,
   Warning,
 } from '@element-plus/icons-vue'
 import { clearToken, fetchCurrentUser } from '../api/auth'
+import { fetchUnreadCount } from '../api/messages'
 
 const router = useRouter()
 const route = useRoute()
@@ -191,6 +199,7 @@ const route = useRoute()
 const sidebarCollapsed = ref(false)
 const searchKeyword = ref('')
 const user = ref(null)
+const unreadCount = ref(0)
 
 const expandedGroups = reactive({
   overview: true,
@@ -278,10 +287,12 @@ const menuGroups = [
           { path: '/reports/daily-output', title: '日产报表', icon: DataAnalysis },
           { path: '/reports/quality-anomalies', title: '质量管理', icon: Warning },
           { path: '/reports/equipment', title: '设备管理', icon: Cpu },
+          { path: '/reports/equipment-repairs', title: '设备维修', icon: Tools },
+          { path: '/reports/employee-work-hours', title: '员工工时', icon: Timer },
         ],
       },
       { path: '/settings', title: '系统设置', icon: Setting },
-      { path: '/messages', title: '消息中心', icon: Bell },
+      { path: '/messages', title: '消息中心', icon: Bell, badge: 'messages' },
       { path: '/help', title: '帮助文档', icon: QuestionFilled },
     ],
   },
@@ -372,9 +383,19 @@ function handleUserCommand(command) {
   }
 }
 
+async function loadUnreadCount() {
+  try {
+    const data = await fetchUnreadCount()
+    unreadCount.value = data.count ?? 0
+  } catch {
+    unreadCount.value = 0
+  }
+}
+
 onMounted(async () => {
   try {
     user.value = await fetchCurrentUser()
+    await loadUnreadCount()
   } catch {
     router.push('/login')
   }
@@ -482,6 +503,7 @@ onMounted(async () => {
   font-size: 14px;
   transition: all 0.2s;
   border-left: 3px solid transparent;
+  position: relative;
 }
 
 .sidebar.collapsed .nav-item {
@@ -507,6 +529,27 @@ onMounted(async () => {
 
 .nav-label {
   white-space: nowrap;
+  flex: 1;
+}
+
+.nav-badge {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.nav-badge :deep(.el-badge__content) {
+  border: none;
+}
+
+.nav-badge-collapsed {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+}
+
+.nav-badge-collapsed :deep(.el-badge__content) {
+  border: none;
+  transform: scale(0.85);
 }
 
 .nav-submenu {

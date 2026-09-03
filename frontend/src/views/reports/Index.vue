@@ -29,13 +29,23 @@
           <span class="link-title">设备管理</span>
           <span class="link-desc">设备档案台账查询，按编号/名称/部门/状态筛选</span>
         </router-link>
+        <router-link to="/reports/equipment-repairs" class="report-link-card">
+          <el-icon :size="28"><Tools /></el-icon>
+          <span class="link-title">设备维修</span>
+          <span class="link-desc">维修工单查询、详情查看与 Excel 导出</span>
+        </router-link>
+        <router-link to="/reports/employee-work-hours" class="report-link-card">
+          <el-icon :size="28"><Timer /></el-icon>
+          <span class="link-title">员工工时</span>
+          <span class="link-desc">按员工/项目/部门统计工时，支持多维度汇总与 Excel 导出</span>
+        </router-link>
       </div>
     </el-card>
   </div>
 </template>
 
 <script setup>
-import { Cpu, DataLine, Document, DataAnalysis, Warning } from '@element-plus/icons-vue'
+import { Cpu, DataLine, Document, DataAnalysis, Timer, Tools, Warning } from '@element-plus/icons-vue'
 </script>
 
 <style scoped>

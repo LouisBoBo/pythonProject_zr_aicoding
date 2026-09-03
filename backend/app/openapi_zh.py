@@ -24,6 +24,7 @@ OPENAPI_TAGS: list[dict] = [
     {"name": "品质管理", "description": "品质 KPI、趋势、不良分布与异常"},
     {"name": "报表中心", "description": "MES 报表查询与导出"},
     {"name": "仓储看板", "description": "库存 KPI、出入库趋势、库位与物料明细"},
+    {"name": "消息中心", "description": "系统通知、业务告警与公告查询"},
 ]
 
 # (HTTP方法大写, 路径) -> {summary, description}
@@ -424,6 +425,63 @@ API_ZH: dict[tuple[str, str], dict[str, str]] = {
         "summary": "日产报表产线选项",
         "description": "返回产线名称列表，供日产报表筛选下拉使用。",
     },
+    ("GET", "/api/reports/employee-work-hours"): {
+        "summary": "员工工时报表",
+        "description": (
+            "查询员工工时，支持日期范围、部门、员工、项目筛选与分页。"
+            "统计维度：detail（明细）、employee_date（按员工+日期）、"
+            "employee_month（按员工+月份）、project（按项目）、department（按部门）。"
+        ),
+    },
+    ("GET", "/api/reports/employee-work-hours/filters"): {
+        "summary": "员工工时报表筛选选项",
+        "description": "返回部门、员工、项目下拉选项。",
+    },
+    ("GET", "/api/reports/employee-work-hours/export"): {
+        "summary": "导出员工工时报表 Excel",
+        "description": "按当前筛选条件与统计维度导出 Excel 文件。",
+    },
+    # ----- 消息中心 -----
+    ("GET", "/api/messages/unread-count"): {
+        "summary": "未读消息数量",
+        "description": "返回当前用户未读消息总数，供侧边栏角标使用。",
+    },
+    ("GET", "/api/messages/stats"): {
+        "summary": "消息未读统计",
+        "description": "按分类返回未读消息数量（全部、系统通知、业务告警、公告通知）。",
+    },
+    ("GET", "/api/messages"): {
+        "summary": "查询消息列表",
+        "description": "分页查询消息，支持 page、size 及按分类、等级（high/medium/low）、阅读状态、关键词筛选。",
+    },
+    ("POST", "/api/messages"): {
+        "summary": "新建消息",
+        "description": "创建系统通知、业务告警或公告消息。",
+    },
+    ("GET", "/api/messages/{message_id}"): {
+        "summary": "获取消息详情",
+        "description": "按 ID 返回单条消息的完整内容。",
+    },
+    ("PUT", "/api/messages/{message_id}"): {
+        "summary": "更新消息",
+        "description": "编辑消息标题、内容、类型、优先级、来源与跳转链接。",
+    },
+    ("DELETE", "/api/messages/{message_id}"): {
+        "summary": "删除消息",
+        "description": "按 ID 删除单条消息。",
+    },
+    ("POST", "/api/messages/{message_id}/read"): {
+        "summary": "标记消息已读",
+        "description": "将指定消息标记为已读状态。",
+    },
+    ("PATCH", "/api/messages/{message_id}/read"): {
+        "summary": "标记消息已读（PATCH）",
+        "description": "将指定消息标记为已读状态，兼容旧客户端。",
+    },
+    ("PATCH", "/api/messages/read-all"): {
+        "summary": "全部标记已读",
+        "description": "批量将未读消息标记为已读，可按分类筛选。",
+    },
 }
 
 # 路由模块 tags 中文映射（用于把代码里的英文 tag 替换进 OpenAPI）
@@ -444,6 +502,7 @@ TAG_ZH_MAP: dict[str, str] = {
     "quality": "品质管理",
     "reports": "报表中心",
     "warehouse": "仓储管理",
+    "messages": "消息中心",
 }
 
 

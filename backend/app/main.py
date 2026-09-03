@@ -28,6 +28,8 @@ from app.models import (
     InventoryTransaction,
     Material,
     MaterialInbound,
+    Message,
+    EmployeeWorkHour,
     QualityAnomaly,
     QualityDefectDetail,
     QualityMetrics,
@@ -47,6 +49,7 @@ from app.routers import (
     kanban_boards,
     kanban_general,
     kanban_production,
+    messages,
     production,
     quality,
     reports,
@@ -795,6 +798,245 @@ def seed_quality_data():
         db.close()
 
 
+def seed_message_data():
+    db = SessionLocal()
+    try:
+        if db.query(Message).first():
+            return
+
+        now = datetime.utcnow()
+        samples = [
+            Message(
+                title="系统维护通知",
+                content="MES 系统将于本周六 02:00–04:00 进行例行维护，期间部分功能可能短暂不可用，请提前保存数据。",
+                category="system",
+                priority="normal",
+                source="系统管理",
+                is_read=False,
+                created_at=now - timedelta(hours=1),
+            ),
+            Message(
+                title="登录安全提醒",
+                content="检测到您的账号在新设备登录，如非本人操作请及时修改密码并联系管理员。",
+                category="system",
+                priority="high",
+                source="系统管理",
+                is_read=True,
+                created_at=now - timedelta(days=1),
+            ),
+            Message(
+                title="工单 WO-20250901-003 已逾期",
+                content="生产工单 WO-20250901-003 计划完工日期已过，当前状态仍为进行中，请及时跟进处理。",
+                category="alert",
+                priority="urgent",
+                source="生产管理",
+                link="/work-orders",
+                is_read=False,
+                created_at=now - timedelta(hours=3),
+            ),
+            Message(
+                title="设备 EQ-2024-004 维修工单待处理",
+                content="自动包装线传送带故障报修单 RE-20250901-0002 已提交，紧急程度：紧急，请安排维修人员处理。",
+                category="alert",
+                priority="urgent",
+                source="设备管理",
+                link="/equipment/repairs",
+                is_read=False,
+                created_at=now - timedelta(hours=5),
+            ),
+            Message(
+                title="品质异常：SMT-1线虚焊超标",
+                content="SMT-1线焊接工序检测到虚焊缺陷率超过阈值，异常等级：严重，请品质工程师介入分析。",
+                category="alert",
+                priority="high",
+                source="品质管理",
+                link="/reports/quality-anomalies",
+                is_read=False,
+                created_at=now - timedelta(hours=8),
+            ),
+            Message(
+                title="物料库存低于安全库存",
+                content="物料 PCB-A100 当前库存 120 件，低于安全库存 200 件，请及时安排补货入库。",
+                category="alert",
+                priority="normal",
+                source="仓储管理",
+                link="/warehouse/inventory",
+                is_read=True,
+                created_at=now - timedelta(days=1, hours=2),
+            ),
+            Message(
+                title="关于 9 月生产计划调整的通知",
+                content="因客户订单变更，9 月 SMT-2 线生产计划已更新，请各班组查阅最新排产并确认物料齐套情况。",
+                category="announcement",
+                priority="normal",
+                source="计划部",
+                is_read=False,
+                created_at=now - timedelta(days=2),
+            ),
+            Message(
+                title="MES 系统 V1.2 版本更新说明",
+                content="本次更新新增消息中心、设备保养到期预警及仓储入库流程优化，详细变更请查阅帮助文档。",
+                category="announcement",
+                priority="low",
+                source="信息中心",
+                link="/help",
+                is_read=True,
+                created_at=now - timedelta(days=3),
+            ),
+        ]
+        db.add_all(samples)
+        db.commit()
+    finally:
+        db.close()
+
+
+def seed_employee_work_hours_data():
+    db = SessionLocal()
+    try:
+        if db.query(EmployeeWorkHour).first():
+            return
+
+        today = date.today()
+        samples = [
+            EmployeeWorkHour(
+                employee_no="E1001",
+                employee_name="张三",
+                department="生产一部",
+                project_name="PCB-A 量产项目",
+                task_name="贴片工序",
+                work_date=today - timedelta(days=1),
+                work_hours=8.0,
+                overtime_hours=1.5,
+                approval_status="approved",
+            ),
+            EmployeeWorkHour(
+                employee_no="E1001",
+                employee_name="张三",
+                department="生产一部",
+                project_name="PCB-A 量产项目",
+                task_name="AOI 复检",
+                work_date=today - timedelta(days=2),
+                work_hours=7.5,
+                overtime_hours=0.0,
+                approval_status="approved",
+            ),
+            EmployeeWorkHour(
+                employee_no="E1002",
+                employee_name="李四",
+                department="生产一部",
+                project_name="PCB-B 试产项目",
+                task_name="焊接调试",
+                work_date=today - timedelta(days=1),
+                work_hours=8.0,
+                overtime_hours=2.0,
+                approval_status="pending",
+            ),
+            EmployeeWorkHour(
+                employee_no="E1002",
+                employee_name="李四",
+                department="生产一部",
+                project_name="PCB-B 试产项目",
+                task_name="功能测试",
+                work_date=today - timedelta(days=3),
+                work_hours=8.0,
+                overtime_hours=0.0,
+                approval_status="approved",
+            ),
+            EmployeeWorkHour(
+                employee_no="E1003",
+                employee_name="王五",
+                department="生产二部",
+                project_name="PCB-A 量产项目",
+                task_name="包装入库",
+                work_date=today - timedelta(days=2),
+                work_hours=8.0,
+                overtime_hours=0.5,
+                approval_status="approved",
+            ),
+            EmployeeWorkHour(
+                employee_no="E1003",
+                employee_name="王五",
+                department="生产二部",
+                project_name="仓储支援",
+                task_name="物料盘点",
+                work_date=today - timedelta(days=5),
+                work_hours=6.0,
+                overtime_hours=0.0,
+                approval_status="rejected",
+            ),
+            EmployeeWorkHour(
+                employee_no="E2001",
+                employee_name="赵六",
+                department="研发部",
+                project_name="新工艺验证",
+                task_name="方案评审",
+                work_date=today - timedelta(days=1),
+                work_hours=7.0,
+                overtime_hours=0.0,
+                approval_status="approved",
+            ),
+            EmployeeWorkHour(
+                employee_no="E2001",
+                employee_name="赵六",
+                department="研发部",
+                project_name="新工艺验证",
+                task_name="实验记录",
+                work_date=today - timedelta(days=4),
+                work_hours=8.0,
+                overtime_hours=1.0,
+                approval_status="pending",
+            ),
+            EmployeeWorkHour(
+                employee_no="E2002",
+                employee_name="孙七",
+                department="研发部",
+                project_name="MES 二期",
+                task_name="需求分析",
+                work_date=today - timedelta(days=2),
+                work_hours=8.0,
+                overtime_hours=0.0,
+                approval_status="approved",
+            ),
+            EmployeeWorkHour(
+                employee_no="E3001",
+                employee_name="周八",
+                department="品质部",
+                project_name="PCB-A 量产项目",
+                task_name="来料检验",
+                work_date=today - timedelta(days=1),
+                work_hours=8.0,
+                overtime_hours=0.0,
+                approval_status="approved",
+            ),
+            EmployeeWorkHour(
+                employee_no="E3001",
+                employee_name="周八",
+                department="品质部",
+                project_name="PCB-B 试产项目",
+                task_name="出货检验",
+                work_date=today - timedelta(days=6),
+                work_hours=7.5,
+                overtime_hours=0.0,
+                approval_status="approved",
+            ),
+            EmployeeWorkHour(
+                employee_no="E1001",
+                employee_name="张三",
+                department="生产一部",
+                project_name="PCB-C 新品导入",
+                task_name="试产跟进",
+                work_date=today - timedelta(days=10),
+                work_hours=8.0,
+                overtime_hours=0.0,
+                approval_status="approved",
+            ),
+        ]
+        db.add_all(samples)
+        db.commit()
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
@@ -809,6 +1051,8 @@ async def lifespan(app: FastAPI):
     seed_equipment_maintenance_data()
     seed_equipment_repair_data()
     seed_quality_data()
+    seed_message_data()
+    seed_employee_work_hours_data()
     seed_analytics_data()
     backfill_recent_operational_data()
     ensure_inventory_stock_backfill()
@@ -870,6 +1114,7 @@ app.include_router(device_dashboard.router)
 app.include_router(quality.router)
 app.include_router(reports.router)
 app.include_router(warehouse.router)
+app.include_router(messages.router)
 
 
 @app.get("/api/health", tags=["系统"])

@@ -697,6 +697,46 @@ class ShipmentRecord(Base):
     sales_order: Mapped["SalesOrder"] = relationship(back_populates="shipments")
 
 
+class Message(Base):
+    """消息中心"""
+
+    __tablename__ = "messages"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    category: Mapped[str] = mapped_column(String(30), nullable=False, default="system")
+    priority: Mapped[str] = mapped_column(String(20), nullable=False, default="normal")
+    source: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    link: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    is_read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.utcnow, index=True
+    )
+
+
+class EmployeeWorkHour(Base):
+    """员工工时填报记录"""
+
+    __tablename__ = "employee_work_hours"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    employee_no: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    employee_name: Mapped[str] = mapped_column(String(50), nullable=False)
+    department: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    project_name: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    task_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    work_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    work_hours: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False, default=0)
+    overtime_hours: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False, default=0)
+    approval_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="pending"
+    )  # pending / approved / rejected
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.utcnow
+    )
+
+
 class DashboardTodo(Base):
     """工作台待办"""
 

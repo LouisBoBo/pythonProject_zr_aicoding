@@ -22,6 +22,8 @@ import WipReportView from '../views/reports/WipReportView.vue'
 import DailyOutputReportView from '../views/reports/DailyOutputReportView.vue'
 import QualityAnomaliesReportView from '../views/reports/QualityAnomaliesReportView.vue'
 import EquipmentReportView from '../views/reports/EquipmentReportView.vue'
+import EmployeeWorkHoursReportView from '../views/reports/EmployeeWorkHoursReportView.vue'
+import EquipmentRepairReportView from '../views/reports/EquipmentRepairReportView.vue'
 import SettingsIndex from '../views/settings/Index.vue'
 import MessagesIndex from '../views/messages/Index.vue'
 import HelpIndex from '../views/help/Index.vue'
@@ -136,8 +138,21 @@ const router = createRouter({
           component: EquipmentReportView,
           meta: { title: '设备管理', ...authRequired },
         },
+        {
+          path: 'reports/employee-work-hours',
+          name: 'reports-employee-work-hours',
+          component: EmployeeWorkHoursReportView,
+          meta: { title: '员工工时', ...authRequired },
+        },
+        {
+          path: 'reports/equipment-repairs',
+          name: 'reports-equipment-repairs',
+          component: EquipmentRepairReportView,
+          meta: { title: '设备维修', ...authRequired },
+        },
         { path: 'settings', name: 'settings', component: SettingsIndex, meta: { title: '系统设置', ...authRequired } },
         { path: 'messages', name: 'messages', component: MessagesIndex, meta: { title: '消息中心', ...authRequired } },
+        { path: 'messages/:tab', redirect: '/messages' },
         { path: 'help', name: 'help', component: HelpIndex, meta: { title: '帮助文档', ...authRequired } },
         {
           path: 'work-orders/new',

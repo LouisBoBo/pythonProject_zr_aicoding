@@ -2,7 +2,9 @@ from typing import Literal
 
 from datetime import date, datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
+
+from app.message_utils import message_level_from_category
 
 ENTERPRISE_CODES = ("江西中软", "江西中软电子有限公司", "前海中软", "测试企业")
 EnterpriseCode = Literal["江西中软", "江西中软电子有限公司", "前海中软", "测试企业"]
@@ -215,6 +217,43 @@ class DailyOutputReportListResponse(BaseModel):
 
 class DailyOutputLinesResponse(BaseModel):
     lines: list[str] = Field(description="可选产线名称列表（用于筛选）")
+
+
+class EmployeeWorkHourReportItem(BaseModel):
+    """员工工时报表行。"""
+
+    employee_name: str = Field(description="员工姓名")
+    employee_no: str = Field(description="工号")
+    department: str = Field(description="所属部门")
+    project_name: str | None = Field(default=None, description="项目名称")
+    task_name: str | None = Field(default=None, description="任务名称")
+    work_date: date | None = Field(default=None, description="日期")
+    work_month: str | None = Field(default=None, description="月份（YYYY-MM）")
+    work_hours: float = Field(description="工时数")
+    overtime_hours: float = Field(description="加班工时")
+    approval_status: str | None = Field(default=None, description="审批/状态")
+    record_count: int | None = Field(default=None, description="明细条数（汇总维度）")
+
+
+class EmployeeWorkHourReportListResponse(BaseModel):
+    items: list[EmployeeWorkHourReportItem]
+    total: int
+    page: int
+    page_size: int
+    dimension: str = Field(description="统计维度")
+    work_hours_sum: float = Field(description="工时合计")
+    overtime_hours_sum: float = Field(description="加班工时合计")
+
+
+class EmployeeWorkHourFilterEmployee(BaseModel):
+    employee_no: str
+    employee_name: str
+
+
+class EmployeeWorkHourFiltersResponse(BaseModel):
+    departments: list[str] = Field(description="部门选项")
+    employees: list[EmployeeWorkHourFilterEmployee] = Field(description="员工选项")
+    projects: list[str] = Field(description="项目选项")
 
 
 KanbanBoardCategory = Literal["production", "quality", "equipment", "warehouse", "general"]
@@ -1263,3 +1302,76 @@ class MaterialInboundCreate(BaseModel):
     inbound_date: date
     handler: str | None = None
     status: str = "completed"
+
+
+MessageLevel = Literal["high", "medium", "low"]
+MessageCategory = Literal["system", "alert", "announcement"]
+MessagePriority = Literal["normal", "high", "urgent"]
+
+
+class MessageCreate(BaseModel):
+    """新建消息"""
+
+    title: str = Field(..., min_length=1, max_length=200)
+    content: str = Field(..., min_length=1)
+    category: MessageCategory = "system"
+    priority: MessagePriority = "normal"
+    source: str | None = Field(None, max_length=50)
+    link: str | None = Field(None, max_length=200)
+
+
+class MessageUpdate(BaseModel):
+    """更新消息"""
+
+    title: str | None = Field(None, min_length=1, max_length=200)
+    content: str | None = Field(None, min_length=1)
+    category: MessageCategory | None = None
+    priority: MessagePriority | None = None
+    source: str | None = Field(None, max_length=50)
+    link: str | None = Field(None, max_length=200)
+
+
+class MessageResponse(BaseModel):
+    """消息列表行"""
+
+    id: int
+    title: str
+    content: str
+    category: str
+    priority: str
+    source: str | None = None
+    link: str | None = None
+    is_read: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def level(self) -> MessageLevel:
+        """按消息类型映射等级：业务告警=高，系统通知=中，公告通知=低。"""
+        return message_level_from_category(self.category)  # type: ignore[return-value]
+
+
+class MessageListResponse(BaseModel):
+    """消息分页列表"""
+
+    items: list[MessageResponse]
+    total: int
+    page: int
+    size: int
+
+
+class MessageUnreadCountResponse(BaseModel):
+    """未读消息数量"""
+
+    count: int
+
+
+class MessageStatsResponse(BaseModel):
+    """消息未读统计"""
+
+    total: int
+    system: int
+    alert: int
+    announcement: int
