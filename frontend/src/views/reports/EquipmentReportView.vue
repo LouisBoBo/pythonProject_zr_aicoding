@@ -14,7 +14,7 @@
 
     <section class="eq-filter-bar">
       <el-form :model="filters" inline class="filter-form">
-        <el-form-item label="关键字">
+        <el-form-item label="设备">
           <el-select
             v-model="filters.equipmentCode"
             placeholder="全部"
