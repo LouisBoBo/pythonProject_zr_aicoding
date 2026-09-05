@@ -8,6 +8,7 @@ import WorkbenchIndex from '../views/workbench/Index.vue'
 import QualityIndex from '../views/quality/Index.vue'
 import QualityDashboardView from '../views/quality/DashboardView.vue'
 import ProductionIndex from '../views/production/Index.vue'
+import MaterialOutboundView from '../views/warehouse/MaterialOutboundView.vue'
 import EquipmentInspection from '../views/equipment/InspectionView.vue'
 import EquipmentLedgerView from '../views/equipment/EquipmentLedgerView.vue'
 import EquipmentDetailView from '../views/equipment/EquipmentDetailView.vue'
@@ -116,6 +117,12 @@ const router = createRouter({
           name: 'warehouse-inbound',
           component: MaterialInboundListView,
           meta: { title: '物料入库', ...authRequired },
+        },
+        {
+          path: 'warehouse/outbound',
+          name: 'warehouse-material-outbound',
+          component: MaterialOutboundView,
+          meta: { title: '物料出库', ...authRequired },
         },
         { path: 'warehouse/:id', redirect: '/warehouse/inventory' },
         { path: 'reports', name: 'reports', component: ReportsIndex, meta: { title: '报表中心', ...authRequired } },

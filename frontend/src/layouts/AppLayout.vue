@@ -270,6 +270,7 @@ const menuGroups = [
         children: [
           { path: '/warehouse/inventory', title: '物料库存', icon: Box },
           { path: '/warehouse/inbound', title: '物料入库', icon: List },
+          { path: '/warehouse/outbound', title: '物料出库', icon: Box },
         ],
       },
     ],
@@ -319,7 +320,8 @@ const showPageTab = computed(
     route.path === '/home' ||
     route.path === '/' ||
     route.path === '/production' ||
-    route.path.startsWith('/production-plan'),
+    route.path.startsWith('/production-plan') ||
+    route.path === '/warehouse/outbound',
 )
 
 function handleTabChange(path) {
