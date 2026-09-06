@@ -6,8 +6,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
-from app.database import get_db
-from app.material_outbound_store import MaterialOutbound
+from app.database import engine, get_db
+from app.material_outbound_store import MaterialOutbound, ensure_material_outbounds_schema
 from app.models import (
     InventoryBalance,
     InventoryStock,
@@ -34,6 +34,8 @@ from app.schemas_material_outbound import (
 from app.work_order_utils import derive_current_process, ensure_work_order_timestamps
 
 router = APIRouter(prefix="/api/work-orders", tags=["work-orders"])
+
+ensure_material_outbounds_schema(engine)
 
 OUTBOUND_TYPE_PRODUCTION_PICK = "production_pick"
 OUTBOUND_TYPE_LABEL = {OUTBOUND_TYPE_PRODUCTION_PICK: "生产领料出库"}

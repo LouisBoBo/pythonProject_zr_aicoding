@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Text, inspect, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -47,3 +47,21 @@ class MaterialOutbound(Base):
     material: Mapped["Material"] = relationship()  # type: ignore[name-defined]
     warehouse: Mapped["Warehouse"] = relationship()  # type: ignore[name-defined]
     location: Mapped["WarehouseLocation | None"] = relationship()  # type: ignore[name-defined]
+
+
+def ensure_material_outbounds_schema(bind_engine) -> None:
+    """为已有 material_outbounds 表补齐 ORM 新增列（SQLite 轻量迁移）。"""
+    inspector = inspect(bind_engine)
+    if not inspector.has_table("material_outbounds"):
+        return
+
+    columns = {col["name"] for col in inspector.get_columns("material_outbounds")}
+    with bind_engine.begin() as conn:
+        if "batch_no" not in columns:
+            conn.execute(text("ALTER TABLE material_outbounds ADD COLUMN batch_no VARCHAR(50)"))
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_material_outbounds_batch_no "
+                "ON material_outbounds (batch_no)"
+            )
+        )
