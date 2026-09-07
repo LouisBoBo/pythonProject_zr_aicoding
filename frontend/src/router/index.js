@@ -10,6 +10,7 @@ import QualityDashboardView from '../views/quality/DashboardView.vue'
 import QualityManagementIndex from '../views/quality-management/Index.vue'
 import ProductionIndex from '../views/production/Index.vue'
 import InspectionRecordsView from '../views/production/InspectionRecordsView.vue'
+import InspectionTasksView from '../views/production/InspectionTasksView.vue'
 import MaterialOutboundView from '../views/warehouse/MaterialOutboundView.vue'
 import EquipmentInspection from '../views/equipment/InspectionView.vue'
 import EquipmentLedgerView from '../views/equipment/EquipmentLedgerView.vue'
@@ -73,6 +74,12 @@ const router = createRouter({
           name: 'quality-inspection-records',
           component: InspectionRecordsView,
           meta: { title: '检验记录', ...authRequired },
+        },
+        {
+          path: 'quality-management/inspection-tasks',
+          name: 'quality-inspection-tasks',
+          component: InspectionTasksView,
+          meta: { title: '检验任务', ...authRequired },
         },
         { path: 'production', name: 'production', component: ProductionIndex, meta: { title: '生产概览', ...authRequired } },
         { path: 'production-plan/:id?', name: 'production-plan', component: ProductionIndex, meta: { title: '生产概览', ...authRequired } },

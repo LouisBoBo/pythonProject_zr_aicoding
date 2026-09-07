@@ -1,13 +1,16 @@
 from datetime import date, datetime, timedelta
 
-from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
 from app.database import SessionLocal, engine, get_db
-from app.models import QualityAnomaly, QualityDefectDetail, QualityMetrics, User
+from app.models import QualityAnomaly, QualityDefectDetail, QualityMetrics, User, WorkOrder
 from app.quality_inspection_record_store import (
+    TASK_STATUS_FAILED,
+    TASK_STATUS_PASSED,
+    TASK_STATUS_PENDING,
     QualityInspectionRecord,
     ensure_quality_inspection_records_schema,
     seed_quality_inspection_records,
@@ -29,6 +32,9 @@ from app.schemas import (
 from app.schemas_quality_inspection import (
     QualityInspectionRecordListResponse,
     QualityInspectionRecordResponse,
+    QualityInspectionTaskListResponse,
+    QualityInspectionTaskResponse,
+    QualityInspectionTaskStatusUpdate,
 )
 
 router = APIRouter(prefix="/api/quality", tags=["quality"])
@@ -45,6 +51,12 @@ def _bootstrap_quality_inspection_records() -> None:
 
 
 _bootstrap_quality_inspection_records()
+
+TASK_STATUS_TRANSITIONS: dict[str, set[str]] = {
+    TASK_STATUS_PENDING: {TASK_STATUS_PASSED, TASK_STATUS_FAILED},
+    TASK_STATUS_PASSED: set(),
+    TASK_STATUS_FAILED: set(),
+}
 
 LINES = ["SMT-1线", "SMT-2线", "DIP线", "组装线", "测试线"]
 PROCESSES = ["贴片", "焊接", "AOI检测", "功能测试", "包装"]
@@ -406,8 +418,10 @@ def list_quality_inspection_records(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    """分页查询品质检验记录。"""
-    query = db.query(QualityInspectionRecord)
+    """分页查询品质检验记录（不含待检任务）。"""
+    query = db.query(QualityInspectionRecord).filter(
+        QualityInspectionRecord.status.in_([TASK_STATUS_PASSED, TASK_STATUS_FAILED])
+    )
     if inspection_no:
         query = query.filter(QualityInspectionRecord.inspection_no.ilike(f"%{inspection_no}%"))
     if inspection_type:
@@ -446,3 +460,98 @@ def list_quality_inspection_records(
         page=page,
         page_size=page_size,
     )
+
+
+def _get_inspection_task_or_404(task_id: int, db: Session) -> QualityInspectionRecord:
+    task = db.query(QualityInspectionRecord).filter(QualityInspectionRecord.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="检验任务不存在")
+    return task
+
+
+def _backfill_product_code(db: Session, row: QualityInspectionRecord) -> None:
+    if row.product_code or not row.work_order_id:
+        return
+    wo = db.query(WorkOrder).filter(WorkOrder.id == row.work_order_id).first()
+    if wo and wo.product_code:
+        row.product_code = wo.product_code
+
+
+@router.get("/inspection-tasks", response_model=QualityInspectionTaskListResponse)
+def list_quality_inspection_tasks(
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(10, ge=1, le=100, description="每页条数"),
+    inspection_no: str | None = Query(None, description="检验单号"),
+    inspection_type: str | None = Query(None, description="检验类型：incoming/process/final"),
+    status: str | None = Query(None, description="任务状态：pending/passed/failed"),
+    work_order_no: str | None = Query(None, description="工单号"),
+    product_code: str | None = Query(None, description="产品编码"),
+    batch_no: str | None = Query(None, description="批次号"),
+    material_code: str | None = Query(None, description="物料编码"),
+    inspector: str | None = Query(None, description="检验人"),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """分页查询检验任务。"""
+    query = db.query(QualityInspectionRecord)
+    if inspection_no:
+        query = query.filter(QualityInspectionRecord.inspection_no.ilike(f"%{inspection_no}%"))
+    if inspection_type:
+        query = query.filter(QualityInspectionRecord.inspection_type == inspection_type)
+    if status:
+        query = query.filter(QualityInspectionRecord.status == status)
+    if work_order_no:
+        query = query.filter(QualityInspectionRecord.work_order_no.ilike(f"%{work_order_no}%"))
+    if product_code:
+        query = query.filter(QualityInspectionRecord.product_code.ilike(f"%{product_code}%"))
+    if batch_no:
+        query = query.filter(QualityInspectionRecord.batch_no.ilike(f"%{batch_no}%"))
+    if material_code:
+        query = query.filter(QualityInspectionRecord.material_code.ilike(f"%{material_code}%"))
+    if inspector:
+        query = query.filter(QualityInspectionRecord.inspector.ilike(f"%{inspector}%"))
+
+    total = query.count()
+    rows = (
+        query.order_by(
+            case((QualityInspectionRecord.status == TASK_STATUS_PENDING, 0), else_=1),
+            QualityInspectionRecord.created_at.desc(),
+            QualityInspectionRecord.id.desc(),
+        )
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    for row in rows:
+        _backfill_product_code(db, row)
+
+    return QualityInspectionTaskListResponse(
+        items=[QualityInspectionTaskResponse.model_validate(r) for r in rows],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@router.patch("/inspection-tasks/{task_id}/status", response_model=QualityInspectionTaskResponse)
+def update_quality_inspection_task_status(
+    task_id: int,
+    payload: QualityInspectionTaskStatusUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """检验任务状态流转：待检 → 合格 / 不合格。"""
+    task = _get_inspection_task_or_404(task_id, db)
+    allowed = TASK_STATUS_TRANSITIONS.get(task.status, set())
+    if payload.status not in allowed:
+        raise HTTPException(status_code=400, detail=f"无法从 {task.status} 流转到 {payload.status}")
+
+    task.status = payload.status
+    task.inspection_result = "pass" if payload.status == TASK_STATUS_PASSED else "fail"
+    if task.inspector == "待分配":
+        task.inspector = current_user.username
+    task.inspected_at = datetime.utcnow()
+    _backfill_product_code(db, task)
+    db.commit()
+    db.refresh(task)
+    return QualityInspectionTaskResponse.model_validate(task)

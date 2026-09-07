@@ -237,6 +237,7 @@ const menuGroups = [
         icon: Warning,
         children: [
           { path: '/quality-management', title: '品质概览', icon: Warning },
+          { path: '/quality-management/inspection-tasks', title: '检验任务', icon: Document },
           { path: '/quality-management/inspection-records', title: '检验记录', icon: List },
         ],
       },
@@ -385,7 +386,7 @@ function isChildActive(path) {
   if (path === '/equipment/ledger' && route.path.startsWith('/equipment/ledger/')) {
     return true
   }
-  if (path === '/quality-management' && route.path.startsWith('/quality-management/inspection-records')) {
+  if (path === '/quality-management' && route.path.startsWith('/quality-management/inspection-')) {
     return false
   }
   return true
