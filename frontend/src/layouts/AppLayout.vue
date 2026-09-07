@@ -230,6 +230,7 @@ const menuGroups = [
     title: '业务管理',
     items: [
       { path: '/quality', title: '品质分析', icon: DataAnalysis },
+      { path: '/quality-management', title: '品质管理', icon: Warning },
       {
         key: 'production',
         title: '生产管理',

@@ -7,6 +7,7 @@ import FavoritesIndex from '../views/favorites/Index.vue'
 import WorkbenchIndex from '../views/workbench/Index.vue'
 import QualityIndex from '../views/quality/Index.vue'
 import QualityDashboardView from '../views/quality/DashboardView.vue'
+import QualityManagementIndex from '../views/quality-management/Index.vue'
 import ProductionIndex from '../views/production/Index.vue'
 import MaterialOutboundView from '../views/warehouse/MaterialOutboundView.vue'
 import EquipmentInspection from '../views/equipment/InspectionView.vue'
@@ -60,6 +61,12 @@ const router = createRouter({
         { path: 'quality', name: 'quality', component: QualityIndex, meta: { title: '品质分析', ...authRequired } },
         { path: 'quality/dashboard', name: 'quality-dashboard', component: QualityDashboardView, meta: { title: '品质看板', ...authRequired } },
         { path: 'quality/:id', name: 'quality-detail', component: QualityIndex, meta: { title: '品质分析', ...authRequired } },
+        {
+          path: 'quality-management',
+          name: 'quality-management',
+          component: QualityManagementIndex,
+          meta: { title: '品质管理', ...authRequired },
+        },
         { path: 'production', name: 'production', component: ProductionIndex, meta: { title: '生产概览', ...authRequired } },
         { path: 'production-plan/:id?', name: 'production-plan', component: ProductionIndex, meta: { title: '生产概览', ...authRequired } },
         { path: 'equipment', redirect: '/equipment/ledger' },
