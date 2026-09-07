@@ -5,8 +5,13 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
-from app.database import get_db
+from app.database import SessionLocal, engine, get_db
 from app.models import QualityAnomaly, QualityDefectDetail, QualityMetrics, User
+from app.quality_inspection_record_store import (
+    QualityInspectionRecord,
+    ensure_quality_inspection_records_schema,
+    seed_quality_inspection_records,
+)
 from app.schemas import (
     QualityAnomalyItem,
     QualityAnomalyListResponse,
@@ -21,8 +26,25 @@ from app.schemas import (
     QualityTrendPoint,
     QualityTrendResponse,
 )
+from app.schemas_quality_inspection import (
+    QualityInspectionRecordListResponse,
+    QualityInspectionRecordResponse,
+)
 
 router = APIRouter(prefix="/api/quality", tags=["quality"])
+
+ensure_quality_inspection_records_schema(engine)
+
+
+def _bootstrap_quality_inspection_records() -> None:
+    db = SessionLocal()
+    try:
+        seed_quality_inspection_records(db)
+    finally:
+        db.close()
+
+
+_bootstrap_quality_inspection_records()
 
 LINES = ["SMT-1线", "SMT-2线", "DIP线", "组装线", "测试线"]
 PROCESSES = ["贴片", "焊接", "AOI检测", "功能测试", "包装"]
@@ -365,3 +387,62 @@ def get_top_defects(
         for idx, r in enumerate(rows)
     ]
     return QualityTopDefectResponse(items=items)
+
+
+@router.get("/inspection-records", response_model=QualityInspectionRecordListResponse)
+def list_quality_inspection_records(
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(10, ge=1, le=100, description="每页条数"),
+    inspection_no: str | None = Query(None, description="检验单号"),
+    inspection_type: str | None = Query(None, description="检验类型：incoming/process/final"),
+    inspection_result: str | None = Query(None, description="检验结果：pass/fail/conditional"),
+    work_order_no: str | None = Query(None, description="关联工单号"),
+    batch_no: str | None = Query(None, description="批次号"),
+    material_code: str | None = Query(None, description="物料编码"),
+    material_name: str | None = Query(None, description="物料名称"),
+    inspector: str | None = Query(None, description="检验人"),
+    date_from: date | None = Query(None, description="检验时间起"),
+    date_to: date | None = Query(None, description="检验时间止"),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """分页查询品质检验记录。"""
+    query = db.query(QualityInspectionRecord)
+    if inspection_no:
+        query = query.filter(QualityInspectionRecord.inspection_no.ilike(f"%{inspection_no}%"))
+    if inspection_type:
+        query = query.filter(QualityInspectionRecord.inspection_type == inspection_type)
+    if inspection_result:
+        query = query.filter(QualityInspectionRecord.inspection_result == inspection_result)
+    if work_order_no:
+        query = query.filter(QualityInspectionRecord.work_order_no.ilike(f"%{work_order_no}%"))
+    if batch_no:
+        query = query.filter(QualityInspectionRecord.batch_no.ilike(f"%{batch_no}%"))
+    if material_code:
+        query = query.filter(QualityInspectionRecord.material_code.ilike(f"%{material_code}%"))
+    if material_name:
+        query = query.filter(QualityInspectionRecord.material_name.ilike(f"%{material_name}%"))
+    if inspector:
+        query = query.filter(QualityInspectionRecord.inspector.ilike(f"%{inspector}%"))
+    if date_from:
+        query = query.filter(
+            QualityInspectionRecord.inspected_at >= datetime.combine(date_from, datetime.min.time())
+        )
+    if date_to:
+        query = query.filter(
+            QualityInspectionRecord.inspected_at <= datetime.combine(date_to, datetime.max.time())
+        )
+
+    total = query.count()
+    rows = (
+        query.order_by(QualityInspectionRecord.inspected_at.desc(), QualityInspectionRecord.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return QualityInspectionRecordListResponse(
+        items=[QualityInspectionRecordResponse.model_validate(r) for r in rows],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )

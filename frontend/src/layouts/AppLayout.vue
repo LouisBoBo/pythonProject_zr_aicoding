@@ -209,6 +209,7 @@ const expandedGroups = reactive({
 
 const expandedSubmenus = reactive({
   production: true,
+  'quality-management': true,
   kanban: true,
   equipment: true,
   warehouse: true,
@@ -230,7 +231,15 @@ const menuGroups = [
     title: '业务管理',
     items: [
       { path: '/quality', title: '品质分析', icon: DataAnalysis },
-      { path: '/quality-management', title: '品质管理', icon: Warning },
+      {
+        key: 'quality-management',
+        title: '品质管理',
+        icon: Warning,
+        children: [
+          { path: '/quality-management', title: '品质概览', icon: Warning },
+          { path: '/quality-management/inspection-records', title: '检验记录', icon: List },
+        ],
+      },
       {
         key: 'production',
         title: '生产管理',
@@ -375,6 +384,9 @@ function isChildActive(path) {
   }
   if (path === '/equipment/ledger' && route.path.startsWith('/equipment/ledger/')) {
     return true
+  }
+  if (path === '/quality-management' && route.path.startsWith('/quality-management/inspection-records')) {
+    return false
   }
   return true
 }
