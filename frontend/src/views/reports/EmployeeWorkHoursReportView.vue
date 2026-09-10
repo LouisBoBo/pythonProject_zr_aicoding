@@ -175,7 +175,7 @@ import {
   exportEmployeeWorkHoursReport,
   fetchEmployeeWorkHourFilters,
   fetchEmployeeWorkHoursReport,
-} from '../../api/reports'
+} from '../../api/reports/employeeWorkHours.js'
 
 const DIMENSION_LABELS = {
   detail: '明细（员工+任务）',

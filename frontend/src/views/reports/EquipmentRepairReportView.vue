@@ -197,7 +197,7 @@ import {
   exportEquipmentRepairReport,
   fetchEquipmentRepairReport,
   fetchEquipmentRepairReportDetail,
-} from '../../api/reports'
+} from '../../api/reports/equipmentRepair.js'
 
 const faultCategories = ['机械故障', '电气故障', '液压故障', '软件故障', '其他']
 

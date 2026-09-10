@@ -40,7 +40,6 @@ from app.models import (
 from app.routers import (
     auth,
     dashboard,
-    device_dashboard,
     devices,
     equipment,
     equipment_maintenance,
@@ -850,7 +849,7 @@ def seed_message_data():
                 category="alert",
                 priority="high",
                 source="品质管理",
-                link="/reports/quality-anomalies",
+                link="/quality/dashboard",
                 is_read=False,
                 created_at=now - timedelta(hours=8),
             ),
@@ -1110,7 +1109,6 @@ app.include_router(inspection.router)
 app.include_router(equipment.router)
 app.include_router(equipment_maintenance.router)
 app.include_router(equipment_repair.router)
-app.include_router(device_dashboard.router)
 app.include_router(quality.router)
 app.include_router(reports.router)
 app.include_router(warehouse.router)

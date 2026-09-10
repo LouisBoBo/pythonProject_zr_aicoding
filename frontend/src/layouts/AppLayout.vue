@@ -192,6 +192,8 @@ import {
 } from '@element-plus/icons-vue'
 import { clearToken, fetchCurrentUser } from '../api/auth'
 import { fetchUnreadCount } from '../api/messages'
+import { REPORT_ICON_MAP } from '../config/reportIcons.js'
+import { getReportMenuEntries } from '../router/reportRoutes.js'
 
 const router = useRouter()
 const route = useRoute()
@@ -216,99 +218,105 @@ const expandedSubmenus = reactive({
   reports: true,
 })
 
-const menuGroups = [
-  {
-    key: 'overview',
-    title: '概览',
-    items: [
-      { path: '/home', title: '首页', icon: HomeFilled },
-      { path: '/favorites', title: '收藏夹', icon: Star },
-      { path: '/workbench', title: '工作台', icon: Monitor },
+function buildReportMenuItem() {
+  const children = getReportMenuEntries().map((entry) => ({
+    path: entry.path,
+    title: entry.title,
+    icon: REPORT_ICON_MAP[entry.icon] || Document,
+  }))
+  if (!children.length) return null
+  return {
+    key: 'reports',
+    title: '报表中心',
+    icon: DataLine,
+    children: [
+      { path: '/reports', title: '报表首页', icon: DataLine },
+      ...children,
     ],
-  },
-  {
-    key: 'business',
-    title: '业务管理',
-    items: [
-      { path: '/quality', title: '品质分析', icon: DataAnalysis },
-      {
-        key: 'quality-management',
-        title: '品质管理',
-        icon: Warning,
-        children: [
-          { path: '/quality-management', title: '品质概览', icon: Warning },
-          { path: '/quality-management/inspection-tasks', title: '检验任务', icon: Document },
-          { path: '/quality-management/inspection-records', title: '检验记录', icon: List },
-        ],
-      },
-      {
-        key: 'production',
-        title: '生产管理',
-        icon: SetUp,
-        children: [
-          { path: '/production', title: '生产概览', icon: SetUp },
-          { path: '/work-orders', title: '生产工单', icon: Document },
-        ],
-      },
-      {
-        key: 'kanban',
-        title: '看板管理',
-        icon: Grid,
-        children: [
-          { path: '/kanban/production', title: '生产看板', icon: SetUp },
-          { path: '/quality/dashboard', title: '品质看板', icon: DataAnalysis },
-          { path: '/kanban/equipment', title: '设备看板', icon: Cpu },
-          { path: '/kanban/warehouse', title: '仓储看板', icon: Box },
-          { path: '/kanban/general', title: '综合看板', icon: DataLine },
-        ],
-      },
-      {
-        key: 'equipment',
-        title: '设备管理',
-        icon: Cpu,
-        children: [
-          { path: '/equipment/ledger', title: '设备台账', icon: Cpu },
-          { path: '/equipment/inspection', title: '设备点检', icon: List },
-          { path: '/equipment/maintenance-plans', title: '保养计划', icon: Calendar },
-          { path: '/equipment/maintenance-orders', title: '保养工单', icon: Tools },
-          { path: '/equipment/repairs', title: '维修管理', icon: SetUp },
-        ],
-      },
-      {
-        key: 'warehouse',
-        title: '仓储管理',
-        icon: Box,
-        children: [
-          { path: '/warehouse/inventory', title: '物料库存', icon: Box },
-          { path: '/warehouse/inbound', title: '物料入库', icon: List },
-          { path: '/warehouse/outbound', title: '物料出库', icon: Box },
-        ],
-      },
-    ],
-  },
-  {
-    key: 'system',
-    title: '系统',
-    items: [
-      {
-        key: 'reports',
-        title: '报表中心',
-        icon: DataLine,
-        children: [
-          { path: '/reports/wip', title: '在制品报表', icon: Document },
-          { path: '/reports/daily-output', title: '日产报表', icon: DataAnalysis },
-          { path: '/reports/quality-anomalies', title: '质量管理', icon: Warning },
-          { path: '/reports/equipment', title: '设备管理', icon: Cpu },
-          { path: '/reports/equipment-repairs', title: '设备维修', icon: Tools },
-          { path: '/reports/employee-work-hours', title: '员工工时', icon: Timer },
-        ],
-      },
-      { path: '/settings', title: '系统设置', icon: Setting },
-      { path: '/messages', title: '消息中心', icon: Bell, badge: 'messages' },
-      { path: '/help', title: '帮助文档', icon: QuestionFilled },
-    ],
-  },
-]
+  }
+}
+
+const menuGroups = computed(() => {
+  const reportMenu = buildReportMenuItem()
+  const systemItems = [
+    ...(reportMenu ? [reportMenu] : []),
+    { path: '/settings', title: '系统设置', icon: Setting },
+    { path: '/messages', title: '消息中心', icon: Bell, badge: 'messages' },
+    { path: '/help', title: '帮助文档', icon: QuestionFilled },
+  ]
+  return [
+    {
+      key: 'overview',
+      title: '概览',
+      items: [
+        { path: '/home', title: '首页', icon: HomeFilled },
+        { path: '/favorites', title: '收藏夹', icon: Star },
+        { path: '/workbench', title: '工作台', icon: Monitor },
+      ],
+    },
+    {
+      key: 'business',
+      title: '业务管理',
+      items: [
+        { path: '/quality', title: '品质分析', icon: DataAnalysis },
+        {
+          key: 'quality-management',
+          title: '品质管理',
+          icon: Warning,
+          children: [
+            { path: '/quality-management', title: '品质概览', icon: Warning },
+            { path: '/quality-management/inspection-tasks', title: '检验任务', icon: Document },
+            { path: '/quality-management/inspection-records', title: '检验记录', icon: List },
+          ],
+        },
+        {
+          key: 'production',
+          title: '生产管理',
+          icon: SetUp,
+          children: [
+            { path: '/production', title: '生产概览', icon: SetUp },
+            { path: '/work-orders', title: '生产工单', icon: Document },
+          ],
+        },
+        {
+          key: 'kanban',
+          title: '看板管理',
+          icon: Grid,
+          children: [
+            { path: '/kanban/production', title: '生产看板', icon: SetUp },
+            { path: '/quality/dashboard', title: '品质看板', icon: DataAnalysis },
+          ],
+        },
+        {
+          key: 'equipment',
+          icon: Cpu,
+          children: [
+            { path: '/equipment/ledger', title: '设备台账', icon: Cpu },
+            { path: '/equipment/inspection', title: '设备点检', icon: List },
+            { path: '/equipment/maintenance-plans', title: '保养计划', icon: Calendar },
+            { path: '/equipment/maintenance-orders', title: '保养工单', icon: Tools },
+            { path: '/equipment/repairs', title: '维修管理', icon: SetUp },
+          ],
+        },
+        {
+          key: 'warehouse',
+          title: '仓储管理',
+          icon: Box,
+          children: [
+            { path: '/warehouse/inventory', title: '物料库存', icon: Box },
+            { path: '/warehouse/inbound', title: '物料入库', icon: List },
+            { path: '/warehouse/outbound', title: '物料出库', icon: Box },
+          ],
+        },
+      ],
+    },
+    {
+      key: 'system',
+      title: '系统',
+      items: systemItems,
+    },
+  ]
+})
 
 const currentTitle = computed(() => route.meta.title || '首页')
 

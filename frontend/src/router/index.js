@@ -22,29 +22,19 @@ import RepairDetail from '../views/equipment/RepairDetail.vue'
 import MaterialInventoryView from '../views/warehouse/MaterialInventoryView.vue'
 import MaterialInboundListView from '../views/warehouse/MaterialInboundListView.vue'
 import ReportsIndex from '../views/reports/Index.vue'
-import WipReportView from '../views/reports/WipReportView.vue'
-import DailyOutputReportView from '../views/reports/DailyOutputReportView.vue'
-import QualityAnomaliesReportView from '../views/reports/QualityAnomaliesReportView.vue'
-import EquipmentReportView from '../views/reports/EquipmentReportView.vue'
-import EmployeeWorkHoursReportView from '../views/reports/EmployeeWorkHoursReportView.vue'
-import EquipmentRepairReportView from '../views/reports/EquipmentRepairReportView.vue'
+import { buildReportRoutes } from './reportRoutes.js'
 import SettingsIndex from '../views/settings/Index.vue'
 import MessagesIndex from '../views/messages/Index.vue'
 import HelpIndex from '../views/help/Index.vue'
 import WorkOrdersView from '../views/WorkOrdersView.vue'
 import KanbanBoardsView from '../views/KanbanBoardsView.vue'
 import ProductionKanbanView from '../views/kanban/ProductionKanbanView.vue'
-import ComprehensiveKanbanView from '../views/kanban/ComprehensiveKanbanView.vue'
-import DeviceDashboard from '../views/board/DeviceDashboard.vue'
 import WarehouseDashboard from '../views/board/WarehouseDashboard.vue'
 const authRequired = { requiresAuth: true }
 
 const kanbanRoutes = [
   { path: 'production', title: '生产看板', category: 'production' },
   { path: 'quality', title: '品质看板', category: 'quality' },
-  { path: 'equipment', title: '设备看板', category: 'equipment' },
-  { path: 'warehouse', title: '仓储看板', category: 'warehouse' },
-  { path: 'general', title: '综合看板', category: 'general' },
 ]
 
 const router = createRouter({
@@ -147,37 +137,8 @@ const router = createRouter({
         },
         { path: 'warehouse/:id', redirect: '/warehouse/inventory' },
         { path: 'reports', name: 'reports', component: ReportsIndex, meta: { title: '报表中心', ...authRequired } },
-        { path: 'reports/wip', name: 'reports-wip', component: WipReportView, meta: { title: '在制品报表', ...authRequired } },
-        {
-          path: 'reports/daily-output',
-          name: 'reports-daily-output',
-          component: DailyOutputReportView,
-          meta: { title: '日产报表', ...authRequired },
-        },
-        {
-          path: 'reports/quality-anomalies',
-          name: 'reports-quality-anomalies',
-          component: QualityAnomaliesReportView,
-          meta: { title: '质量管理', ...authRequired },
-        },
-        {
-          path: 'reports/equipment',
-          name: 'reports-equipment',
-          component: EquipmentReportView,
-          meta: { title: '设备管理', ...authRequired },
-        },
-        {
-          path: 'reports/employee-work-hours',
-          name: 'reports-employee-work-hours',
-          component: EmployeeWorkHoursReportView,
-          meta: { title: '员工工时', ...authRequired },
-        },
-        {
-          path: 'reports/equipment-repairs',
-          name: 'reports-equipment-repairs',
-          component: EquipmentRepairReportView,
-          meta: { title: '设备维修', ...authRequired },
-        },
+        ...buildReportRoutes(authRequired),
+        { path: 'reports/:pathMatch(.*)*', redirect: { name: 'reports' } },
         { path: 'settings', name: 'settings', component: SettingsIndex, meta: { title: '系统设置', ...authRequired } },
         { path: 'messages', name: 'messages', component: MessagesIndex, meta: { title: '消息中心', ...authRequired } },
         { path: 'messages/:tab', redirect: '/messages' },
@@ -205,9 +166,7 @@ const router = createRouter({
           component:
             path === 'production' ? ProductionKanbanView
             : path === 'quality' ? QualityDashboardView
-            : path === 'equipment' ? DeviceDashboard
             : path === 'warehouse' ? WarehouseDashboard
-            : path === 'general' ? ComprehensiveKanbanView
             : KanbanBoardsView,
           meta: { title, category, ...authRequired },
         })),

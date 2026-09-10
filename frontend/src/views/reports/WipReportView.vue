@@ -91,7 +91,7 @@
 import { onMounted, reactive, ref } from 'vue'
 import { Download } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { fetchWipProcesses, fetchWipReport } from '../../api/reports'
+import { fetchWipProcesses, fetchWipReport } from '../../api/reports/wip.js'
 
 const loading = ref(false)
 const items = ref([])

@@ -88,7 +88,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { Download } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { fetchDailyOutputLines, fetchDailyOutputReport } from '../../api/reports'
+import { fetchDailyOutputLines, fetchDailyOutputReport } from '../../api/reports/dailyOutput.js'
 
 function defaultDateRange() {
   const end = new Date()
