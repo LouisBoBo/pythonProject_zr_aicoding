@@ -26,7 +26,7 @@ export const REPORT_CATALOG = [
     title: '日产报表',
     description: '按日 / 产线 / 产品查看计划与实际产量',
     icon: 'DataAnalysis',
-    menu: false,
+    menu: true,
     hub: true,
     enabled: true,
   },

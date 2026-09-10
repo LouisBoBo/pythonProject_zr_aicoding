@@ -2,8 +2,24 @@
   <div class="daily-output-page">
     <el-card shadow="never" class="search-card">
       <el-form :model="filters" inline class="search-form">
+        <el-form-item label="日期模式">
+          <el-radio-group v-model="dateMode" @change="handleDateModeChange">
+            <el-radio-button value="single">单日</el-radio-button>
+            <el-radio-button value="range">区间</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
         <el-form-item label="生产日期">
           <el-date-picker
+            v-if="dateMode === 'single'"
+            v-model="singleDate"
+            type="date"
+            placeholder="选择日期"
+            value-format="YYYY-MM-DD"
+            clearable
+            style="width: 160px"
+          />
+          <el-date-picker
+            v-else
             v-model="dateRange"
             type="daterange"
             range-separator="至"
@@ -13,6 +29,16 @@
             clearable
             style="width: 260px"
           />
+        </el-form-item>
+        <el-form-item label="车间">
+          <el-select
+            v-model="filters.workshop"
+            placeholder="全部"
+            clearable
+            style="width: 140px"
+          >
+            <el-option v-for="ws in workshopOptions" :key="ws" :label="ws" :value="ws" />
+          </el-select>
         </el-form-item>
         <el-form-item label="产线">
           <el-select
@@ -35,36 +61,37 @@
       <div class="table-toolbar">
         <div class="toolbar-left">
           <span class="table-title">日产报表</span>
-          <el-tag size="small" type="info">按日 / 产线 / 产品聚合</el-tag>
+          <el-tag size="small" type="info">按日 / 车间 / 产线聚合</el-tag>
         </div>
         <div class="toolbar-right">
           <span class="sum-text">计划合计 {{ planSum }}</span>
           <span class="sum-text">实际合计 {{ actualSum }}</span>
           <span class="sum-text">不良合计 {{ defectSum }}</span>
+          <span class="sum-text">工时合计 {{ formatHours(workHoursSum) }}</span>
           <el-button :icon="Download" @click="handleExport">导出</el-button>
         </div>
       </div>
 
       <el-table v-loading="loading" :data="items" stripe border style="width: 100%">
         <el-table-column prop="report_date" label="生产日期" width="120" />
+        <el-table-column prop="workshop" label="车间" min-width="100">
+          <template #default="{ row }">{{ row.workshop || '—' }}</template>
+        </el-table-column>
         <el-table-column prop="production_line" label="产线" min-width="110" />
-        <el-table-column prop="product_code" label="产品编码" min-width="120">
-          <template #default="{ row }">{{ row.product_code || '—' }}</template>
-        </el-table-column>
-        <el-table-column prop="product_name" label="产品名称" min-width="140">
-          <template #default="{ row }">{{ row.product_name || '—' }}</template>
-        </el-table-column>
         <el-table-column prop="plan_qty" label="计划产量" width="100" align="right" />
         <el-table-column prop="actual_qty" label="实际产量" width="100" align="right" />
-        <el-table-column prop="defect_qty" label="不良数" width="90" align="right" />
         <el-table-column prop="achievement_rate" label="达成率" width="100" align="right">
           <template #default="{ row }">{{ formatRate(row.achievement_rate) }}</template>
         </el-table-column>
+        <el-table-column prop="defect_qty" label="不良数" width="90" align="right" />
         <el-table-column prop="defect_rate" label="不良率" width="100" align="right">
           <template #default="{ row }">{{ formatRate(row.defect_rate) }}</template>
         </el-table-column>
-        <el-table-column prop="area_output" label="面积产出" width="110" align="right">
-          <template #default="{ row }">{{ Number(row.area_output || 0).toFixed(2) }}</template>
+        <el-table-column prop="work_hours" label="工时" width="90" align="right">
+          <template #default="{ row }">{{ formatHours(row.work_hours) }}</template>
+        </el-table-column>
+        <el-table-column prop="production_staff" label="生产人员" min-width="140">
+          <template #default="{ row }">{{ row.production_staff || '—' }}</template>
         </el-table-column>
       </el-table>
 
@@ -88,7 +115,15 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { Download } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { fetchDailyOutputLines, fetchDailyOutputReport } from '../../api/reports/dailyOutput.js'
+import { fetchDailyOutputFilters, fetchDailyOutputReport } from '../../api/reports/dailyOutput.js'
+
+function todayStr() {
+  const d = new Date()
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
 
 function defaultDateRange() {
   const end = new Date()
@@ -109,17 +144,29 @@ const total = ref(0)
 const page = ref(1)
 const pageSize = ref(10)
 const lineOptions = ref([])
+const workshopOptions = ref([])
 const planSum = ref(0)
 const actualSum = ref(0)
 const defectSum = ref(0)
+const workHoursSum = ref(0)
+const dateMode = ref('range')
+const singleDate = ref(todayStr())
 const dateRange = ref(defaultDateRange())
 
 const filters = reactive({
   productionLine: '',
+  workshop: '',
 })
 
-const dateFrom = computed(() => (dateRange.value && dateRange.value[0]) || '')
-const dateTo = computed(() => (dateRange.value && dateRange.value[1]) || '')
+const dateFrom = computed(() => {
+  if (dateMode.value === 'single') return singleDate.value || ''
+  return (dateRange.value && dateRange.value[0]) || ''
+})
+
+const dateTo = computed(() => {
+  if (dateMode.value === 'single') return singleDate.value || ''
+  return (dateRange.value && dateRange.value[1]) || ''
+})
 
 function formatRate(value) {
   const n = Number(value)
@@ -127,12 +174,29 @@ function formatRate(value) {
   return `${n.toFixed(2)}%`
 }
 
-async function loadLines() {
+function formatHours(value) {
+  const n = Number(value)
+  if (Number.isNaN(n)) return '—'
+  return n.toFixed(1)
+}
+
+function handleDateModeChange() {
+  if (dateMode.value === 'single' && !singleDate.value) {
+    singleDate.value = todayStr()
+  }
+  if (dateMode.value === 'range' && (!dateRange.value || !dateRange.value.length)) {
+    dateRange.value = defaultDateRange()
+  }
+}
+
+async function loadFilters() {
   try {
-    const resp = await fetchDailyOutputLines()
+    const resp = await fetchDailyOutputFilters()
     lineOptions.value = resp.lines || []
+    workshopOptions.value = resp.workshops || []
   } catch {
     lineOptions.value = []
+    workshopOptions.value = []
   }
 }
 
@@ -145,12 +209,14 @@ async function loadReport() {
       dateFrom: dateFrom.value || undefined,
       dateTo: dateTo.value || undefined,
       productionLine: filters.productionLine || undefined,
+      workshop: filters.workshop || undefined,
     })
     items.value = resp.items || []
     total.value = resp.total || 0
     planSum.value = resp.plan_qty_sum || 0
     actualSum.value = resp.actual_qty_sum || 0
     defectSum.value = resp.defect_qty_sum || 0
+    workHoursSum.value = resp.work_hours_sum || 0
   } catch (err) {
     ElMessage.error(err.message || '加载报表失败')
     items.value = []
@@ -158,6 +224,7 @@ async function loadReport() {
     planSum.value = 0
     actualSum.value = 0
     defectSum.value = 0
+    workHoursSum.value = 0
   } finally {
     loading.value = false
   }
@@ -169,8 +236,11 @@ function handleSearch() {
 }
 
 function handleReset() {
+  dateMode.value = 'range'
+  singleDate.value = todayStr()
   dateRange.value = defaultDateRange()
   filters.productionLine = ''
+  filters.workshop = ''
   page.value = 1
   loadReport()
 }
@@ -180,7 +250,7 @@ function handleExport() {
 }
 
 onMounted(async () => {
-  await loadLines()
+  await loadFilters()
   await loadReport()
 })
 </script>

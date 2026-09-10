@@ -136,7 +136,6 @@ const router = createRouter({
           meta: { title: '物料出库', ...authRequired },
         },
         { path: 'warehouse/:id', redirect: '/warehouse/inventory' },
-        { path: 'reports', name: 'reports', component: ReportsIndex, meta: { title: '报表中心', ...authRequired } },
         ...buildReportRoutes(authRequired),
         { path: 'reports/:pathMatch(.*)*', redirect: { name: 'reports' } },
         { path: 'settings', name: 'settings', component: SettingsIndex, meta: { title: '系统设置', ...authRequired } },

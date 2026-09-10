@@ -13,3 +13,5 @@ dist/
 # IDE
 .idea/
 .vscode/
+.dev-logs/
+frontend/.vite/

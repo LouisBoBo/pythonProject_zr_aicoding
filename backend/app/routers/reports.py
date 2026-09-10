@@ -1,9 +1,11 @@
+from collections import defaultdict
 from datetime import date, datetime, timedelta
 from io import BytesIO
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from openpyxl import Workbook
+from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -13,7 +15,6 @@ from app.models import (
     EmployeeWorkHour,
     Equipment,
     EquipmentRepair,
-    Product,
     ProductionLine,
     ProductionOutputRecord,
     ProductionPlan,
@@ -23,7 +24,6 @@ from app.models import (
 from app.schemas import (
     DailyOutputLinesResponse,
     DailyOutputReportItem,
-    DailyOutputReportListResponse,
     EmployeeWorkHourFilterEmployee,
     EmployeeWorkHourFiltersResponse,
     EmployeeWorkHourReportItem,
@@ -46,6 +46,30 @@ from app.work_order_utils import (
 router = APIRouter(prefix="/api/reports", tags=["报表中心"])
 
 WIP_METRIC = "wip"
+
+
+class DailyOutputReportItemOut(DailyOutputReportItem):
+    """日产报表响应行（扩展车间、工时、生产人员）。"""
+
+    workshop: str | None = Field(default=None, description="车间")
+    work_hours: float = Field(default=0, description="工时（小时）")
+    production_staff: str | None = Field(default=None, description="生产人员（逗号分隔）")
+
+
+class DailyOutputReportListResponseOut(BaseModel):
+    items: list[DailyOutputReportItemOut]
+    total: int
+    page: int
+    page_size: int
+    plan_qty_sum: int = Field(description="当前筛选条件下计划产量合计")
+    actual_qty_sum: int = Field(description="当前筛选条件下实际产量合计")
+    defect_qty_sum: int = Field(description="当前筛选条件下不良数量合计")
+    work_hours_sum: float = Field(default=0, description="当前筛选条件下工时合计")
+
+
+class DailyOutputFiltersResponse(BaseModel):
+    lines: list[str] = Field(description="可选产线名称列表")
+    workshops: list[str] = Field(description="可选车间名称列表")
 
 
 def _to_wip_item(wo: WorkOrder) -> WipReportItem:
@@ -130,14 +154,95 @@ def _as_date(value) -> date:
     return date.fromisoformat(str(value)[:10])
 
 
+def _resolve_daily_output_line_ids(
+    db: Session,
+    *,
+    production_line: str | None,
+    workshop: str | None,
+) -> list[int] | None:
+    """按产线/车间解析产线 ID；无匹配时返回空列表，未指定筛选时返回 None。"""
+    if not production_line and not workshop:
+        return None
+    query = db.query(ProductionLine)
+    if production_line:
+        query = query.filter(ProductionLine.name == production_line)
+    if workshop:
+        query = query.filter(ProductionLine.workshop == workshop)
+    line_ids = [ln.id for ln in query.all()]
+    return line_ids
+
+
+def _build_work_hour_staff_maps(
+    db: Session,
+    *,
+    date_from: date,
+    date_to: date,
+) -> tuple[dict[tuple[date, str], float], dict[tuple[date, str], set[str]], dict[date, float], dict[date, set[str]]]:
+    """构建 (日期, 部门/车间) 与日期维度的工时、人员映射。"""
+    workshop_hours: dict[tuple[date, str], float] = defaultdict(float)
+    workshop_staff: dict[tuple[date, str], set[str]] = defaultdict(set)
+    date_hours: dict[date, float] = defaultdict(float)
+    date_staff: dict[date, set[str]] = defaultdict(set)
+
+    rows = (
+        db.query(EmployeeWorkHour)
+        .filter(
+            EmployeeWorkHour.work_date >= date_from,
+            EmployeeWorkHour.work_date <= date_to,
+        )
+        .all()
+    )
+    for row in rows:
+        work_date = _as_date(row.work_date)
+        hours = float(row.work_hours or 0)
+        dept = (row.department or "").strip()
+        date_hours[work_date] += hours
+        date_staff[work_date].add(row.employee_name)
+        if dept:
+            key = (work_date, dept)
+            workshop_hours[key] += hours
+            workshop_staff[key].add(row.employee_name)
+
+    return workshop_hours, workshop_staff, date_hours, date_staff
+
+
+def _lookup_work_hour_staff(
+    report_date: date,
+    workshop: str | None,
+    *,
+    workshop_hours: dict[tuple[date, str], float],
+    workshop_staff: dict[tuple[date, str], set[str]],
+    date_hours: dict[date, float],
+    date_staff: dict[date, set[str]],
+) -> tuple[float, str | None]:
+    """优先按车间匹配工时记录，否则回退到当日汇总。"""
+    hours = 0.0
+    names: set[str] = set()
+    if workshop:
+        hours = workshop_hours.get((report_date, workshop), 0.0)
+        names = workshop_staff.get((report_date, workshop), set())
+    if not hours and not names:
+        hours = date_hours.get(report_date, 0.0)
+        names = date_staff.get(report_date, set())
+    staff = "、".join(sorted(names)) if names else None
+    return round(hours, 2), staff
+
+
 def _build_daily_output_rows(
     db: Session,
     *,
     date_from: date,
     date_to: date,
     production_line: str | None,
-) -> list[DailyOutputReportItem]:
-    """按日 / 产线 / 产品聚合产量事实与计划。"""
+    workshop: str | None,
+) -> list[DailyOutputReportItemOut]:
+    """按日 / 车间 / 产线聚合产量事实与计划，并关联工时与生产人员。"""
+    line_ids = _resolve_daily_output_line_ids(
+        db, production_line=production_line, workshop=workshop
+    )
+    if line_ids is not None and not line_ids:
+        return []
+
     day_start = datetime.combine(date_from, datetime.min.time())
     day_end = datetime.combine(date_to + timedelta(days=1), datetime.min.time())
 
@@ -145,7 +250,6 @@ def _build_daily_output_rows(
         db.query(
             func.date(ProductionOutputRecord.record_at).label("report_date"),
             ProductionOutputRecord.production_line_id,
-            ProductionOutputRecord.product_id,
             func.coalesce(func.sum(ProductionOutputRecord.actual_qty), 0).label("actual_qty"),
             func.coalesce(func.sum(ProductionOutputRecord.defect_qty), 0).label("defect_qty"),
             func.coalesce(func.sum(ProductionOutputRecord.area_output), 0).label("area_output"),
@@ -157,16 +261,9 @@ def _build_daily_output_rows(
         .group_by(
             func.date(ProductionOutputRecord.record_at),
             ProductionOutputRecord.production_line_id,
-            ProductionOutputRecord.product_id,
         )
     )
-    if production_line:
-        line_ids = [
-            ln.id
-            for ln in db.query(ProductionLine).filter(ProductionLine.name == production_line).all()
-        ]
-        if not line_ids:
-            return []
+    if line_ids is not None:
         out_q = out_q.filter(ProductionOutputRecord.production_line_id.in_(line_ids))
 
     output_rows = out_q.all()
@@ -175,7 +272,6 @@ def _build_daily_output_rows(
         db.query(
             ProductionPlan.plan_date,
             ProductionPlan.production_line_id,
-            ProductionPlan.product_id,
             func.coalesce(func.sum(ProductionPlan.plan_qty), 0).label("plan_qty"),
         )
         .filter(
@@ -185,49 +281,50 @@ def _build_daily_output_rows(
         .group_by(
             ProductionPlan.plan_date,
             ProductionPlan.production_line_id,
-            ProductionPlan.product_id,
         )
     )
-    if production_line:
-        line_ids = [
-            ln.id
-            for ln in db.query(ProductionLine).filter(ProductionLine.name == production_line).all()
-        ]
+    if line_ids is not None:
         plan_q = plan_q.filter(ProductionPlan.production_line_id.in_(line_ids))
 
     plan_map: dict[tuple, int] = {}
     for row in plan_q.all():
-        plan_map[(_as_date(row.plan_date), row.production_line_id, row.product_id)] = int(
-            row.plan_qty or 0
-        )
+        plan_map[(_as_date(row.plan_date), row.production_line_id)] = int(row.plan_qty or 0)
 
-    line_map = {ln.id: ln.name for ln in db.query(ProductionLine).all()}
-    product_map = {
-        p.id: (p.product_code, p.product_name) for p in db.query(Product).all()
-    }
+    line_rows = db.query(ProductionLine).all()
+    if line_ids is not None:
+        line_rows = [ln for ln in line_rows if ln.id in line_ids]
+    line_map = {ln.id: ln.name for ln in line_rows}
+    workshop_map = {ln.id: ln.workshop for ln in line_rows}
+
+    wh_maps = _build_work_hour_staff_maps(db, date_from=date_from, date_to=date_to)
+    workshop_hours, workshop_staff, date_hours, date_staff = wh_maps
 
     keys: set[tuple] = set()
     out_map: dict[tuple, tuple[int, int, float]] = {}
     for row in output_rows:
         report_date = _as_date(row.report_date)
-        key = (report_date, row.production_line_id, row.product_id)
+        key = (report_date, row.production_line_id)
         keys.add(key)
         out_map[key] = (int(row.actual_qty or 0), int(row.defect_qty or 0), float(row.area_output or 0))
 
     for key in plan_map:
         keys.add(key)
 
-    items: list[DailyOutputReportItem] = []
-    for report_date, line_id, product_id in sorted(
-        keys, key=lambda k: (k[0], line_map.get(k[1], ""), k[2] or 0), reverse=True
+    items: list[DailyOutputReportItemOut] = []
+    for report_date, line_id in sorted(
+        keys, key=lambda k: (k[0], line_map.get(k[1], "")), reverse=True
     ):
-        actual_qty, defect_qty, area_output = out_map.get(
-            (report_date, line_id, product_id), (0, 0, 0.0)
+        actual_qty, defect_qty, area_output = out_map.get((report_date, line_id), (0, 0, 0.0))
+        plan_qty = plan_map.get((report_date, line_id), 0)
+        line_workshop = workshop_map.get(line_id)
+        work_hours, production_staff = _lookup_work_hour_staff(
+            report_date,
+            line_workshop,
+            workshop_hours=workshop_hours,
+            workshop_staff=workshop_staff,
+            date_hours=date_hours,
+            date_staff=date_staff,
         )
-        plan_qty = plan_map.get((report_date, line_id, product_id), 0)
-        product_code, product_name = (None, None)
-        if product_id and product_id in product_map:
-            product_code, product_name = product_map[product_id]
         achievement = round(actual_qty / plan_qty * 100, 2) if plan_qty else 0.0
         defect_rate = (
             round(defect_qty / (actual_qty + defect_qty) * 100, 2)
@@ -235,17 +332,20 @@ def _build_daily_output_rows(
             else 0.0
         )
         items.append(
-            DailyOutputReportItem(
+            DailyOutputReportItemOut(
                 report_date=report_date,
                 production_line=line_map.get(line_id, f"产线#{line_id}"),
-                product_code=product_code,
-                product_name=product_name,
+                product_code=None,
+                product_name=None,
                 plan_qty=plan_qty,
                 actual_qty=actual_qty,
                 defect_qty=defect_qty,
                 area_output=round(area_output, 2),
                 achievement_rate=achievement,
                 defect_rate=defect_rate,
+                workshop=line_workshop,
+                work_hours=work_hours,
+                production_staff=production_staff,
             )
         )
     return items
@@ -253,12 +353,13 @@ def _build_daily_output_rows(
 
 @router.get(
     "/daily-output",
-    response_model=DailyOutputReportListResponse,
+    response_model=DailyOutputReportListResponseOut,
     summary="日产报表",
     description=(
-        "按生产日期、产线、产品聚合日产量："
-        "实际/不良/面积来自 production_output_records，计划来自 production_plans。"
-        "默认查询近 7 日（含今天）；支持按日期范围、产线筛选与分页。"
+        "按生产日期、车间、产线聚合日产量："
+        "实际/不良来自 production_output_records，计划来自 production_plans，"
+        "工时与生产人员来自 employee_work_hours。"
+        "默认查询近 7 日（含今天）；支持单日/区间、车间、产线筛选与分页。"
         "报表中心「日产报表」页数据来自本接口。"
     ),
 )
@@ -268,6 +369,7 @@ def list_daily_output_report(
     date_from: date | None = Query(None, description="生产日期起（含）"),
     date_to: date | None = Query(None, description="生产日期止（含）"),
     production_line: str | None = Query(None, description="产线名称（精确匹配）"),
+    workshop: str | None = Query(None, description="车间名称（精确匹配）"),
     _current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -284,15 +386,17 @@ def list_daily_output_report(
         date_from=date_from,
         date_to=date_to,
         production_line=production_line,
+        workshop=workshop,
     )
     total = len(all_items)
     plan_sum = sum(i.plan_qty for i in all_items)
     actual_sum = sum(i.actual_qty for i in all_items)
     defect_sum = sum(i.defect_qty for i in all_items)
+    work_hours_sum = round(sum(i.work_hours for i in all_items), 2)
     start = (page - 1) * page_size
     page_items = all_items[start : start + page_size]
 
-    return DailyOutputReportListResponse(
+    return DailyOutputReportListResponseOut(
         items=page_items,
         total=total,
         page=page,
@@ -300,25 +404,52 @@ def list_daily_output_report(
         plan_qty_sum=plan_sum,
         actual_qty_sum=actual_sum,
         defect_qty_sum=defect_sum,
+        work_hours_sum=work_hours_sum,
     )
+
+
+@router.get(
+    "/daily-output/filters",
+    response_model=DailyOutputFiltersResponse,
+    summary="日产报表筛选选项",
+    description="返回产线、车间名称列表，供日产报表筛选下拉使用。",
+)
+def list_daily_output_filters(
+    _current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    lines = [
+        name
+        for (name,) in db.query(ProductionLine.name).order_by(ProductionLine.id).all()
+    ]
+    workshops = sorted(
+        {
+            ws
+            for (ws,) in db.query(ProductionLine.workshop)
+            .filter(ProductionLine.workshop.isnot(None), ProductionLine.workshop != "")
+            .distinct()
+            .all()
+            if ws
+        }
+    )
+    return DailyOutputFiltersResponse(lines=lines, workshops=workshops)
 
 
 @router.get(
     "/daily-output/lines",
     response_model=DailyOutputLinesResponse,
     summary="日产报表产线选项",
-    description="返回产线名称列表，供日产报表筛选下拉使用。",
+    description="返回产线名称列表，供日产报表筛选下拉使用（兼容旧客户端）。",
 )
 def list_daily_output_lines(
     _current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    lines = (
-        db.query(ProductionLine.name)
-        .order_by(ProductionLine.id)
-        .all()
-    )
-    return DailyOutputLinesResponse(lines=[name for (name,) in lines])
+    lines = [
+        name
+        for (name,) in db.query(ProductionLine.name).order_by(ProductionLine.id).all()
+    ]
+    return DailyOutputLinesResponse(lines=lines)
 
 
 WORK_HOUR_DIMENSIONS = ("detail", "employee_date", "employee_month", "project", "department")
