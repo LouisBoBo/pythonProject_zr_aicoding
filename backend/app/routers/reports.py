@@ -759,7 +759,7 @@ def _work_hour_export_row(item: EmployeeWorkHourReportItem, dimension: str) -> l
 @router.get(
     "/employee-work-hours",
     response_model=EmployeeWorkHourReportListResponse,
-    summary="员工工时",
+    summary="员工工时报表",
     description=(
         "查询员工工时数据，支持日期范围、部门、员工、项目筛选。"
         "统计维度：detail（明细）、employee_date（按员工+日期）、"
