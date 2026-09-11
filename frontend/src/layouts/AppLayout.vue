@@ -227,6 +227,7 @@ function buildReportMenuItem() {
   if (!children.length) return null
   return {
     key: 'reports',
+    title: '报表中心',
     icon: DataLine,
     children: [
       ...children,
