@@ -11,6 +11,7 @@ OPENAPI_TAGS: list[dict] = [
     {"name": "认证", "description": "登录与当前用户信息"},
     {"name": "工作台", "description": "首页工作台统计、待办与制造看板数据"},
     {"name": "生产工单", "description": "生产工单的增删改查与状态变更"},
+    {"name": "工单逾期预警", "description": "已过计划结束日仍未完成的生产工单预警列表"},
     {"name": "生产总览", "description": "生产概览 KPI、趋势与产线负荷（查库聚合）"},
     {"name": "生产看板", "description": "车间生产看板实时展示数据"},
     {"name": "综合看板", "description": "生产/品质/设备/交付/物料五大模块综合监控"},
@@ -24,7 +25,9 @@ OPENAPI_TAGS: list[dict] = [
     {"name": "品质管理", "description": "品质 KPI、趋势、不良分布与异常"},
     {"name": "报表中心", "description": "MES 报表查询与导出"},
     {"name": "仓储看板", "description": "库存 KPI、出入库趋势、库位与物料明细"},
+    {"name": "库存低水位预警", "description": "当前库存低于安全库存的物料预警列表"},
     {"name": "消息中心", "description": "系统通知、业务告警与公告查询"},
+    {"name": "Cursor 写码过程", "description": "Cursor 写码过程查看：确认开工、SSE/对话回放、追问与审后同步；记录落盘到本工程 docs/cursor-coding-runs"},
 ]
 
 # (HTTP方法大写, 路径) -> {summary, description}
@@ -81,6 +84,11 @@ API_ZH: dict[tuple[str, str], dict[str, str]] = {
     ("DELETE", "/api/work-orders/{work_order_id}"): {
         "summary": "删除生产工单",
         "description": "按 ID 删除生产工单。",
+    },
+    # ----- 工单逾期预警 -----
+    ("GET", "/api/work-order-alerts"): {
+        "summary": "工单逾期预警列表",
+        "description": "查询已过计划结束日仍未完成的工单；工单逾期预警页数据来自本接口。",
     },
     # ----- 生产总览 -----
     ("GET", "/api/production/overview"): {
@@ -401,6 +409,14 @@ API_ZH: dict[tuple[str, str], dict[str, str]] = {
             "inventory_transactions 与 inventory_stock。"
         ),
     },
+    # ----- 库存低水位预警 -----
+    ("GET", "/api/inventory-low-stock"): {
+        "summary": "库存低水位预警列表",
+        "description": (
+            "查询 inventory_stock 中 quantity < safety_stock 且 safety_stock > 0 的记录；"
+            "支持按仓库名称、物料编码/名称筛选，按缺口降序排序。"
+        ),
+    },
     # ----- 报表中心 -----
     ("GET", "/api/reports/wip"): {
         "summary": "在制品报表",
@@ -428,18 +444,70 @@ API_ZH: dict[tuple[str, str], dict[str, str]] = {
     ("GET", "/api/reports/employee-work-hours"): {
         "summary": "员工工时报表",
         "description": (
-            "查询员工工时，支持日期范围、部门、员工、项目筛选与分页。"
-            "统计维度：detail（明细）、employee_date（按员工+日期）、"
-            "employee_month（按员工+月份）、project（按项目）、department（按部门）。"
+            "查询 MES 报工记录（employee_work_hours），支持日期范围、部门、员工筛选。"
+            "统计维度默认 employee（按员工汇总）；报表中心「员工工时报表」页使用本接口。"
         ),
     },
     ("GET", "/api/reports/employee-work-hours/filters"): {
         "summary": "员工工时报表筛选选项",
-        "description": "返回部门、员工、项目下拉选项。",
+        "description": "返回部门、员工下拉选项。",
     },
     ("GET", "/api/reports/employee-work-hours/export"): {
         "summary": "导出员工工时报表 Excel",
         "description": "按当前筛选条件与统计维度导出 Excel 文件。",
+    },
+    ("GET", "/api/reports/equipment-metrics"): {
+        "summary": "设备报表",
+        "description": (
+            "按日期范围、车间、设备型号/单台设备查询 OEE 与稼动指标。"
+            "返回汇总指标卡、趋势序列与明细分页。"
+        ),
+    },
+    ("GET", "/api/reports/equipment-metrics/filters"): {
+        "summary": "设备报表筛选选项",
+        "description": "返回车间、设备型号/类型、设备列表下拉选项。",
+    },
+    ("GET", "/api/reports/equipment-metrics/export"): {
+        "summary": "导出设备报表 Excel",
+        "description": "按当前筛选条件导出设备 OEE 与稼动指标明细 Excel。",
+    },
+    ("GET", "/api/reports/equipment-downtime"): {
+        "summary": "停机报表",
+        "description": (
+            "按时间范围、车间、设备型号/单台设备、停机类型查询停机明细。"
+            "数据来自 equipment_runtime_logs（停机/维修/待机）；"
+            "返回汇总、趋势、按设备/产线/班次统计、原因 Pareto、MTBF/MTTR 与明细分页。"
+        ),
+    },
+    ("GET", "/api/reports/equipment-downtime/filters"): {
+        "summary": "停机报表筛选选项",
+        "description": "返回车间、设备型号/类型、设备列表与停机类型下拉选项。",
+    },
+    ("GET", "/api/reports/equipment-downtime/export"): {
+        "summary": "导出停机报表 Excel",
+        "description": "按当前筛选条件导出多 Sheet Excel（明细、统计、Pareto、MTBF/MTTR）。",
+    },
+    ("GET", "/api/reports/equipment-inspection"): {
+        "summary": "设备点检报表",
+        "description": (
+            "点检明细报表：按点检项展开，返回设备、点检项、结果、点检人、点检时间等；"
+            "支持日期区间、设备、车间（设备位置）、点检状态筛选与分页。"
+        ),
+    },
+    ("GET", "/api/reports/equipment-inspection/filters"): {
+        "summary": "设备点检报表筛选选项",
+        "description": "返回车间（设备位置）与点检设备下拉选项。",
+    },
+    ("GET", "/api/reports/equipment-maintenance"): {
+        "summary": "设备保养报表",
+        "description": (
+            "保养计划执行情况（应保养/已保养/未保养/完成率）与保养记录明细；"
+            "支持关键字、状态、计划日期范围、设备编号筛选与分页。"
+        ),
+    },
+    ("GET", "/api/reports/equipment-maintenance/export"): {
+        "summary": "导出设备保养报表 Excel",
+        "description": "按当前筛选条件导出计划执行情况与保养记录明细 Excel 文件。",
     },
     # ----- 消息中心 -----
     ("GET", "/api/messages/unread-count"): {

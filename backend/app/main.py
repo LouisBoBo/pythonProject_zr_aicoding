@@ -39,12 +39,14 @@ from app.models import (
 )
 from app.routers import (
     auth,
+    cursor_coding,
     dashboard,
     devices,
     equipment,
     equipment_maintenance,
     equipment_repair,
     inspection,
+    inventory_low_stock,
     kanban_boards,
     kanban_general,
     kanban_production,
@@ -53,6 +55,7 @@ from app.routers import (
     quality,
     reports,
     warehouse,
+    work_order_alerts,
     work_orders,
 )
 from app.seed_analytics import backfill_recent_operational_data, seed_analytics_data
@@ -889,6 +892,40 @@ def seed_message_data():
         db.close()
 
 
+def ensure_employee_work_hours_shift_type():
+    """为 employee_work_hours 表补齐 shift_type 列，并按报工时间回填班别。"""
+    inspector = inspect(engine)
+    if not inspector.has_table("employee_work_hours"):
+        return
+    columns = [column["name"] for column in inspector.get_columns("employee_work_hours")]
+    if "shift_type" not in columns:
+        with engine.begin() as conn:
+            conn.execute(
+                text("ALTER TABLE employee_work_hours ADD COLUMN shift_type VARCHAR(10)")
+            )
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                UPDATE employee_work_hours
+                SET shift_type = 'day'
+                WHERE shift_type IS NULL
+                  AND CAST(strftime('%H', created_at) AS INTEGER) >= 8
+                  AND CAST(strftime('%H', created_at) AS INTEGER) < 20
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                UPDATE employee_work_hours
+                SET shift_type = 'night'
+                WHERE shift_type IS NULL
+                """
+            )
+        )
+
+
 def seed_employee_work_hours_data():
     db = SessionLocal()
     try:
@@ -904,6 +941,7 @@ def seed_employee_work_hours_data():
                 project_name="PCB-A 量产项目",
                 task_name="贴片工序",
                 work_date=today - timedelta(days=1),
+                shift_type="day",
                 work_hours=8.0,
                 overtime_hours=1.5,
                 approval_status="approved",
@@ -915,6 +953,7 @@ def seed_employee_work_hours_data():
                 project_name="PCB-A 量产项目",
                 task_name="AOI 复检",
                 work_date=today - timedelta(days=2),
+                shift_type="night",
                 work_hours=7.5,
                 overtime_hours=0.0,
                 approval_status="approved",
@@ -926,6 +965,7 @@ def seed_employee_work_hours_data():
                 project_name="PCB-B 试产项目",
                 task_name="焊接调试",
                 work_date=today - timedelta(days=1),
+                shift_type="night",
                 work_hours=8.0,
                 overtime_hours=2.0,
                 approval_status="pending",
@@ -937,6 +977,7 @@ def seed_employee_work_hours_data():
                 project_name="PCB-B 试产项目",
                 task_name="功能测试",
                 work_date=today - timedelta(days=3),
+                shift_type="day",
                 work_hours=8.0,
                 overtime_hours=0.0,
                 approval_status="approved",
@@ -948,6 +989,7 @@ def seed_employee_work_hours_data():
                 project_name="PCB-A 量产项目",
                 task_name="包装入库",
                 work_date=today - timedelta(days=2),
+                shift_type="day",
                 work_hours=8.0,
                 overtime_hours=0.5,
                 approval_status="approved",
@@ -959,6 +1001,7 @@ def seed_employee_work_hours_data():
                 project_name="仓储支援",
                 task_name="物料盘点",
                 work_date=today - timedelta(days=5),
+                shift_type="night",
                 work_hours=6.0,
                 overtime_hours=0.0,
                 approval_status="rejected",
@@ -970,6 +1013,7 @@ def seed_employee_work_hours_data():
                 project_name="新工艺验证",
                 task_name="方案评审",
                 work_date=today - timedelta(days=1),
+                shift_type="day",
                 work_hours=7.0,
                 overtime_hours=0.0,
                 approval_status="approved",
@@ -981,6 +1025,7 @@ def seed_employee_work_hours_data():
                 project_name="新工艺验证",
                 task_name="实验记录",
                 work_date=today - timedelta(days=4),
+                shift_type="night",
                 work_hours=8.0,
                 overtime_hours=1.0,
                 approval_status="pending",
@@ -992,6 +1037,7 @@ def seed_employee_work_hours_data():
                 project_name="MES 二期",
                 task_name="需求分析",
                 work_date=today - timedelta(days=2),
+                shift_type="day",
                 work_hours=8.0,
                 overtime_hours=0.0,
                 approval_status="approved",
@@ -1003,6 +1049,7 @@ def seed_employee_work_hours_data():
                 project_name="PCB-A 量产项目",
                 task_name="来料检验",
                 work_date=today - timedelta(days=1),
+                shift_type="day",
                 work_hours=8.0,
                 overtime_hours=0.0,
                 approval_status="approved",
@@ -1014,6 +1061,7 @@ def seed_employee_work_hours_data():
                 project_name="PCB-B 试产项目",
                 task_name="出货检验",
                 work_date=today - timedelta(days=6),
+                shift_type="night",
                 work_hours=7.5,
                 overtime_hours=0.0,
                 approval_status="approved",
@@ -1025,6 +1073,7 @@ def seed_employee_work_hours_data():
                 project_name="PCB-C 新品导入",
                 task_name="试产跟进",
                 work_date=today - timedelta(days=10),
+                shift_type="day",
                 work_hours=8.0,
                 overtime_hours=0.0,
                 approval_status="approved",
@@ -1044,6 +1093,7 @@ async def lifespan(app: FastAPI):
     ensure_work_orders_current_process()
     ensure_maintenance_orders_plan_complete_date()
     ensure_equipment_repairs_repair_completed_at()
+    ensure_employee_work_hours_shift_type()
     seed_default_user()
     seed_inspection_data()
     seed_equipment_data()
@@ -1099,6 +1149,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(dashboard.router)
+app.include_router(work_order_alerts.router)
 app.include_router(work_orders.router)
 app.include_router(kanban_boards.router)
 app.include_router(kanban_production.router)
@@ -1112,7 +1163,9 @@ app.include_router(equipment_repair.router)
 app.include_router(quality.router)
 app.include_router(reports.router)
 app.include_router(warehouse.router)
+app.include_router(inventory_low_stock.router)
 app.include_router(messages.router)
+app.include_router(cursor_coding.router)
 
 
 @app.get("/api/health", tags=["系统"])

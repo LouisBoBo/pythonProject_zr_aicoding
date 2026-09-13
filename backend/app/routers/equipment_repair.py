@@ -56,6 +56,22 @@ def _get_equipment_or_404(equipment_id: int, db: Session) -> Equipment:
     return equipment
 
 
+def _repair_duration_minutes(repair: EquipmentRepair) -> float | None:
+    start = repair.start_time or repair.created_at
+    if not start:
+        return None
+    end = repair.repair_completed_at
+    if not end:
+        if repair.status in ("in_progress", "pending") and repair.start_time:
+            end = datetime.utcnow()
+        else:
+            return None
+    minutes = (end - start).total_seconds() / 60
+    if minutes < 0:
+        return None
+    return round(minutes, 1)
+
+
 def _repair_to_list_item(repair: EquipmentRepair) -> EquipmentRepairListItem:
     equipment = repair.equipment
     return EquipmentRepairListItem(
@@ -70,6 +86,8 @@ def _repair_to_list_item(repair: EquipmentRepair) -> EquipmentRepairListItem:
         status=repair.status,
         reporter=repair.reporter,
         repair_person=repair.repair_person,
+        fault_time=repair.created_at,
+        repair_duration_minutes=_repair_duration_minutes(repair),
         repair_completed_at=repair.repair_completed_at,
         created_at=repair.created_at,
     )

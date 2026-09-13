@@ -21,12 +21,15 @@ import RepairManagement from '../views/equipment/RepairManagement.vue'
 import RepairDetail from '../views/equipment/RepairDetail.vue'
 import MaterialInventoryView from '../views/warehouse/MaterialInventoryView.vue'
 import MaterialInboundListView from '../views/warehouse/MaterialInboundListView.vue'
+import LowStockAlertsView from '../views/warehouse/LowStockAlertsView.vue'
 import ReportsIndex from '../views/reports/Index.vue'
 import { buildReportRoutes } from './reportRoutes.js'
 import SettingsIndex from '../views/settings/Index.vue'
 import MessagesIndex from '../views/messages/Index.vue'
 import HelpIndex from '../views/help/Index.vue'
 import WorkOrdersView from '../views/WorkOrdersView.vue'
+import OverdueAlertsView from '../views/work-orders/OverdueAlertsView.vue'
+import ProcessViewerView from '../views/cursor-coding/ProcessViewerView.vue'
 import KanbanBoardsView from '../views/KanbanBoardsView.vue'
 import ProductionKanbanView from '../views/kanban/ProductionKanbanView.vue'
 import WarehouseDashboard from '../views/board/WarehouseDashboard.vue'
@@ -135,6 +138,12 @@ const router = createRouter({
           component: MaterialOutboundView,
           meta: { title: '物料出库', ...authRequired },
         },
+        {
+          path: 'warehouse/low-stock',
+          name: 'warehouse-low-stock',
+          component: LowStockAlertsView,
+          meta: { title: '库存低水位预警', ...authRequired },
+        },
         { path: 'warehouse/:id', redirect: '/warehouse/inventory' },
         {
           path: 'reports',
@@ -149,8 +158,20 @@ const router = createRouter({
         { path: 'messages/:tab', redirect: '/messages' },
         { path: 'help', name: 'help', component: HelpIndex, meta: { title: '帮助文档', ...authRequired } },
         {
+          path: 'cursor-coding',
+          name: 'cursor-coding',
+          component: ProcessViewerView,
+          meta: { title: 'Cursor 写码过程', ...authRequired },
+        },
+        {
           path: 'work-orders/new',
           redirect: { path: '/work-orders', query: { create: '1' } },
+        },
+        {
+          path: 'work-orders/overdue',
+          name: 'work-orders-overdue',
+          component: OverdueAlertsView,
+          meta: { title: '工单逾期预警', ...authRequired },
         },
         {
           path: 'work-orders/:id?',

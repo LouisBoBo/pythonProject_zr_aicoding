@@ -138,6 +138,18 @@ def test_employee_work_hours_detail_and_filters(client, auth_headers, sample_wor
 
 
 def test_employee_work_hours_dimensions(client, auth_headers, sample_work_hours):
+    by_employee = client.get(
+        "/api/reports/employee-work-hours?dimension=employee",
+        headers=auth_headers,
+    )
+    assert by_employee.status_code == 200
+    assert by_employee.json()["total"] == 2
+    zhang_total = next(
+        i for i in by_employee.json()["items"] if i["employee_no"] == "E1001"
+    )
+    assert zhang_total["work_hours"] == 10.0
+    assert zhang_total["work_date"] is None
+
     by_date = client.get(
         "/api/reports/employee-work-hours?dimension=employee_date",
         headers=auth_headers,

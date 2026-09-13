@@ -727,6 +727,9 @@ class EmployeeWorkHour(Base):
     project_name: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     task_name: Mapped[str] = mapped_column(String(100), nullable=False)
     work_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    shift_type: Mapped[str | None] = mapped_column(
+        String(10), nullable=True, index=True
+    )  # day=白班 / night=晚班
     work_hours: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False, default=0)
     overtime_hours: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False, default=0)
     approval_status: Mapped[str] = mapped_column(

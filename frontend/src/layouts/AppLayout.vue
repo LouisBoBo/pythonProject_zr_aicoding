@@ -39,8 +39,40 @@
                   v-show="!sidebarCollapsed && expandedSubmenus[item.key]"
                   class="nav-sublist"
                 >
-                  <li v-for="child in item.children" :key="child.path">
+                  <li v-for="child in item.children" :key="child.path || child.key">
+                    <template v-if="child.children">
+                      <div
+                        class="nav-item nav-parent nav-child"
+                        :class="{
+                          active: isSubmenuActive(child),
+                          expanded: expandedSubmenus[child.key],
+                        }"
+                        @click.stop="toggleSubmenu(child.key)"
+                      >
+                        <el-icon class="nav-icon"><component :is="child.icon" /></el-icon>
+                        <span class="nav-label">{{ child.title }}</span>
+                        <el-icon class="submenu-arrow">
+                          <ArrowDown />
+                        </el-icon>
+                      </div>
+                      <ul
+                        v-show="!sidebarCollapsed && expandedSubmenus[child.key]"
+                        class="nav-sublist nav-sublist-nested"
+                      >
+                        <li v-for="grand in child.children" :key="grand.path">
+                          <router-link
+                            :to="grand.path"
+                            class="nav-item nav-child nav-grandchild"
+                            :class="{ active: isChildActive(grand.path) }"
+                          >
+                            <el-icon class="nav-icon"><component :is="grand.icon" /></el-icon>
+                            <span class="nav-label">{{ grand.title }}</span>
+                          </router-link>
+                        </li>
+                      </ul>
+                    </template>
                     <router-link
+                      v-else
                       :to="child.path"
                       class="nav-item nav-child"
                       :class="{ active: isChildActive(child.path) }"
@@ -189,6 +221,7 @@ import {
   Tools,
   Timer,
   Warning,
+  EditPen,
 } from '@element-plus/icons-vue'
 import { clearToken, fetchCurrentUser } from '../api/auth'
 import { fetchUnreadCount } from '../api/messages'
@@ -216,22 +249,39 @@ const expandedSubmenus = reactive({
   equipment: true,
   warehouse: true,
   reports: true,
+  'reports-equipment': true,
 })
 
 function buildReportMenuItem() {
-  const children = getReportMenuEntries().map((entry) => ({
+  const entries = getReportMenuEntries()
+  const flatEntries = entries.filter((entry) => !entry.menuGroup)
+  const equipmentEntries = entries.filter((entry) => entry.menuGroup === 'equipment')
+
+  const children = flatEntries.map((entry) => ({
     path: entry.path,
     title: entry.title,
     icon: REPORT_ICON_MAP[entry.icon] || Document,
   }))
+
+  if (equipmentEntries.length) {
+    children.push({
+      key: 'reports-equipment',
+      title: '设备报表',
+      icon: Cpu,
+      children: equipmentEntries.map((entry) => ({
+        path: entry.path,
+        title: entry.title,
+        icon: REPORT_ICON_MAP[entry.icon] || Cpu,
+      })),
+    })
+  }
+
   if (!children.length) return null
   return {
     key: 'reports',
     title: '报表中心',
     icon: DataLine,
-    children: [
-      ...children,
-    ],
+    children,
   }
 }
 
@@ -239,6 +289,7 @@ const menuGroups = computed(() => {
   const reportMenu = buildReportMenuItem()
   const systemItems = [
     ...(reportMenu ? [reportMenu] : []),
+    { path: '/cursor-coding', title: 'Cursor 写码过程', icon: EditPen },
     { path: '/settings', title: '系统设置', icon: Setting },
     { path: '/messages', title: '消息中心', icon: Bell, badge: 'messages' },
     { path: '/help', title: '帮助文档', icon: QuestionFilled },
@@ -275,6 +326,7 @@ const menuGroups = computed(() => {
           children: [
             { path: '/production', title: '生产概览', icon: SetUp },
             { path: '/work-orders', title: '生产工单', icon: Document },
+            { path: '/work-orders/overdue', title: '工单逾期预警', icon: Timer },
           ],
         },
         {
@@ -305,6 +357,7 @@ const menuGroups = computed(() => {
             { path: '/warehouse/inventory', title: '物料库存', icon: Box },
             { path: '/warehouse/inbound', title: '物料入库', icon: List },
             { path: '/warehouse/outbound', title: '物料出库', icon: Box },
+            { path: '/warehouse/low-stock', title: '库存低水位预警', icon: Warning },
           ],
         },
       ],
@@ -368,7 +421,10 @@ function toggleSubmenu(key) {
 }
 
 function isSubmenuActive(item) {
-  return item.children?.some((child) => isActive(child.path))
+  return (item.children || []).some((child) => {
+    if (child.path) return isActive(child.path)
+    return isSubmenuActive(child)
+  })
 }
 
 function isActive(path) {
@@ -602,6 +658,11 @@ onMounted(async () => {
 
 .nav-child {
   padding-left: 48px !important;
+  font-size: 13px;
+}
+
+.nav-sublist-nested .nav-grandchild {
+  padding-left: 64px !important;
   font-size: 13px;
 }
 

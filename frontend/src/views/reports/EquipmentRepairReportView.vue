@@ -31,7 +31,7 @@
             <el-option label="已关闭" value="closed" />
           </el-select>
         </el-form-item>
-        <el-form-item label="报修日期">
+        <el-form-item label="故障时间">
           <el-date-picker
             v-model="dateRange"
             type="daterange"
@@ -81,8 +81,7 @@
         highlight-current-row
         @row-click="openDetail"
       >
-        <el-table-column prop="repair_no" label="工单号" min-width="150" fixed="left" />
-        <el-table-column label="设备" min-width="160">
+        <el-table-column label="设备" min-width="160" fixed="left">
           <template #default="{ row }">
             <div class="cell-equipment">
               <span class="equip-name">{{ row.equipment_name || '—' }}</span>
@@ -90,14 +89,15 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column prop="fault_category" label="故障分类" width="110" />
-        <el-table-column prop="fault_description" label="故障描述" min-width="200" show-overflow-tooltip />
-        <el-table-column label="紧急程度" width="90" align="center">
-          <template #default="{ row }">
-            <el-tag :type="urgencyTagType(row.urgency)" size="small" effect="light">
-              {{ urgencyLabel(row.urgency) }}
-            </el-tag>
-          </template>
+        <el-table-column label="故障时间" width="160">
+          <template #default="{ row }">{{ formatDateTime(row.fault_time || row.created_at) }}</template>
+        </el-table-column>
+        <el-table-column prop="fault_description" label="故障现象" min-width="220" show-overflow-tooltip />
+        <el-table-column prop="repair_person" label="维修人" width="100">
+          <template #default="{ row }">{{ row.repair_person || '—' }}</template>
+        </el-table-column>
+        <el-table-column label="耗时" width="110" align="center">
+          <template #default="{ row }">{{ formatDuration(row.repair_duration_minutes) }}</template>
         </el-table-column>
         <el-table-column label="状态" width="90" align="center">
           <template #default="{ row }">
@@ -105,16 +105,6 @@
               {{ statusLabel(row.status) }}
             </el-tag>
           </template>
-        </el-table-column>
-        <el-table-column prop="reporter" label="报修人" width="90" />
-        <el-table-column prop="repair_person" label="维修人" width="90">
-          <template #default="{ row }">{{ row.repair_person || '—' }}</template>
-        </el-table-column>
-        <el-table-column label="报修时间" width="160">
-          <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
-        </el-table-column>
-        <el-table-column label="完成时间" width="160">
-          <template #default="{ row }">{{ formatDateTime(row.repair_completed_at, true) }}</template>
         </el-table-column>
         <el-table-column label="操作" width="80" fixed="right" align="center">
           <template #default="{ row }">
@@ -274,6 +264,16 @@ function formatDateTime(value, allowEmpty = false) {
   if (Number.isNaN(d.getTime())) return '—'
   const pad = (n) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+function formatDuration(minutes) {
+  if (minutes == null || Number.isNaN(Number(minutes))) return '—'
+  const total = Math.round(Number(minutes))
+  if (total < 60) return `${total}分钟`
+  const hours = Math.floor(total / 60)
+  const mins = total % 60
+  if (mins === 0) return `${hours}小时`
+  return `${hours}小时${mins}分钟`
 }
 
 function buildQueryParams() {
