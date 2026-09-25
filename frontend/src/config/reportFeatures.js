@@ -1,3 +1,4 @@
+// workbuddy-e2e-pipeline-verify-20260925
 /**
  * 报表功能注册表（唯一配置入口）。
  * - menu: false → 侧栏隐藏（删菜单只改这里，勿删 api/视图文件）
@@ -31,18 +32,6 @@ export const REPORT_CATALOG = [
     enabled: true,
   },
   {
-    id: 'employee-work-hours',
-    routePath: 'employee-work-hours',
-    viewFile: 'EmployeeWorkHourReportView.vue',
-    apiFile: 'employeeWorkHours.js',
-    title: '员工工时报表',
-    description: 'MES 报工记录按员工汇总工时，支持日期、部门、员工筛选与 Excel 导出',
-    icon: 'Timer',
-    menu: true,
-    hub: true,
-    enabled: true,
-  },
-  {
     id: 'equipment-oee',
     routePath: 'equipment-oee',
     viewFile: 'EquipmentOeeReportView.vue',
@@ -50,19 +39,6 @@ export const REPORT_CATALOG = [
     title: 'OEE 设备报表',
     description: 'OEE、稼动率、开机率与停机时长分析，支持趋势图与 Excel 导出',
     icon: 'DataAnalysis',
-    menuGroup: 'equipment',
-    menu: true,
-    hub: true,
-    enabled: true,
-  },
-  {
-    id: 'equipment',
-    routePath: 'equipment',
-    viewFile: 'EquipmentReportView.vue',
-    apiFile: null,
-    title: '设备台账',
-    description: '设备档案台账查询，按编号/名称/部门/状态筛选',
-    icon: 'Cpu',
     menuGroup: 'equipment',
     menu: true,
     hub: true,

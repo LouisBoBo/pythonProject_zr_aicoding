@@ -481,6 +481,7 @@ def list_daily_output_lines(
     return DailyOutputLinesResponse(lines=lines)
 
 
+
 WORK_HOUR_DIMENSIONS = ("detail", "employee", "employee_date", "employee_month", "project", "department")
 
 APPROVAL_STATUS_LABELS = {
@@ -976,7 +977,6 @@ def export_employee_work_hours_report(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
-
 
 REPAIR_STATUS_LABELS = {
     "pending": "待处理",

@@ -1,4 +1,4 @@
-import { Calendar, Cpu, DataAnalysis, Document, List, Odometer, Timer, Tools } from '@element-plus/icons-vue'
+import { Calendar, Cpu, DataAnalysis, Document, List, Odometer, Timer, Tools, User } from '@element-plus/icons-vue'
 
 export const REPORT_ICON_MAP = {
   Document,
@@ -9,4 +9,5 @@ export const REPORT_ICON_MAP = {
   List,
   Calendar,
   Timer,
+  User,
 }

@@ -219,7 +219,6 @@ class DailyOutputLinesResponse(BaseModel):
     lines: list[str] = Field(description="可选产线名称列表（用于筛选）")
 
 
-
 class EmployeeWorkHourReportItem(BaseModel):
     """员工工时报表行。"""
 

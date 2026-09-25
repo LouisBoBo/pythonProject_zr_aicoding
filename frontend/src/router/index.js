@@ -21,7 +21,6 @@ import RepairManagement from '../views/equipment/RepairManagement.vue'
 import RepairDetail from '../views/equipment/RepairDetail.vue'
 import MaterialInventoryView from '../views/warehouse/MaterialInventoryView.vue'
 import MaterialInboundListView from '../views/warehouse/MaterialInboundListView.vue'
-import LowStockAlertsView from '../views/warehouse/LowStockAlertsView.vue'
 import ReportsIndex from '../views/reports/Index.vue'
 import { buildReportRoutes } from './reportRoutes.js'
 import SettingsIndex from '../views/settings/Index.vue'
@@ -137,12 +136,6 @@ const router = createRouter({
           name: 'warehouse-material-outbound',
           component: MaterialOutboundView,
           meta: { title: '物料出库', ...authRequired },
-        },
-        {
-          path: 'warehouse/low-stock',
-          name: 'warehouse-low-stock',
-          component: LowStockAlertsView,
-          meta: { title: '库存低水位预警', ...authRequired },
         },
         { path: 'warehouse/:id', redirect: '/warehouse/inventory' },
         {

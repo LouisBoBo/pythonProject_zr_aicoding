@@ -444,13 +444,13 @@ API_ZH: dict[tuple[str, str], dict[str, str]] = {
     ("GET", "/api/reports/employee-work-hours"): {
         "summary": "员工工时报表",
         "description": (
-            "查询 MES 报工记录（employee_work_hours），支持日期范围、部门、员工筛选。"
-            "统计维度默认 employee（按员工汇总）；报表中心「员工工时报表」页使用本接口。"
+            "查询 employee_work_hours 表工时数据，支持日期范围、部门、员工、项目筛选与多统计维度。"
+            "报表中心「员工工时报表」页使用本接口。"
         ),
     },
     ("GET", "/api/reports/employee-work-hours/filters"): {
         "summary": "员工工时报表筛选选项",
-        "description": "返回部门、员工下拉选项。",
+        "description": "返回部门、员工、项目下拉选项。",
     },
     ("GET", "/api/reports/employee-work-hours/export"): {
         "summary": "导出员工工时报表 Excel",
