@@ -1085,6 +1085,50 @@ def seed_employee_work_hours_data():
         db.close()
 
 
+def ensure_employee_work_hours_recent_backfill():
+    """为近 7 天无记录的日期补齐演示工时（不覆盖已有数据）。"""
+    db = SessionLocal()
+    try:
+        today = date.today()
+        templates = [
+            ("E1001", "张三", "生产一部", "PCB-A 量产项目", "贴片工序", "day", 8.0, 1.0),
+            ("E1002", "李四", "生产一部", "PCB-B 试产项目", "焊接调试", "night", 7.5, 0.5),
+            ("E1003", "王五", "生产二部", "PCB-A 量产项目", "包装入库", "day", 8.0, 0.0),
+            ("E2001", "赵六", "研发部", "MES 二期", "联调支持", "day", 7.0, 0.0),
+            ("E3001", "周八", "品质部", "PCB-B 试产项目", "过程检验", "night", 8.0, 1.5),
+        ]
+        added = []
+        for offset in range(7):
+            work_date = today - timedelta(days=offset)
+            exists = (
+                db.query(EmployeeWorkHour.id)
+                .filter(EmployeeWorkHour.work_date == work_date)
+                .first()
+            )
+            if exists:
+                continue
+            tpl = templates[offset % len(templates)]
+            added.append(
+                EmployeeWorkHour(
+                    employee_no=tpl[0],
+                    employee_name=tpl[1],
+                    department=tpl[2],
+                    project_name=tpl[3],
+                    task_name=tpl[4],
+                    work_date=work_date,
+                    shift_type=tpl[5],
+                    work_hours=tpl[6],
+                    overtime_hours=tpl[7],
+                    approval_status="approved",
+                )
+            )
+        if added:
+            db.add_all(added)
+            db.commit()
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
@@ -1102,6 +1146,7 @@ async def lifespan(app: FastAPI):
     seed_quality_data()
     seed_message_data()
     seed_employee_work_hours_data()
+    ensure_employee_work_hours_recent_backfill()
     seed_analytics_data()
     backfill_recent_operational_data()
     ensure_inventory_stock_backfill()

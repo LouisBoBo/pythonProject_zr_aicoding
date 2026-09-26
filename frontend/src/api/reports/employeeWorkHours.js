@@ -42,3 +42,11 @@ export async function exportEmployeeWorkHoursReport({
   if (dimension) params.set('dimension', dimension)
   return authFetchBlob(`/api/reports/employee-work-hours/export?${params}`)
 }
+
+export function createEmployeeWorkHour(payload) {
+  return authFetch('/api/reports/employee-work-hours', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}

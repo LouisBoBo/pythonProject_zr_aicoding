@@ -31,8 +31,10 @@ from app.models import (
 from app.schemas import (
     DailyOutputLinesResponse,
     DailyOutputReportItem,
+    EmployeeWorkHourCreate,
     EmployeeWorkHourFilterEmployee,
     EmployeeWorkHourFiltersResponse,
+    EmployeeWorkHourRecordResponse,
     EmployeeWorkHourReportItem,
     EmployeeWorkHourReportListResponse,
     EquipmentDowntimeFilterEquipment,
@@ -908,14 +910,22 @@ def list_employee_work_hour_filters(
         .all()
     ]
     employee_rows = (
-        db.query(EmployeeWorkHour.employee_no, EmployeeWorkHour.employee_name)
-        .distinct()
+        db.query(
+            EmployeeWorkHour.employee_no,
+            func.max(EmployeeWorkHour.employee_name).label("employee_name"),
+            func.max(EmployeeWorkHour.department).label("department"),
+        )
+        .group_by(EmployeeWorkHour.employee_no)
         .order_by(EmployeeWorkHour.employee_no)
         .all()
     )
     employees = [
-        EmployeeWorkHourFilterEmployee(employee_no=no, employee_name=name)
-        for no, name in employee_rows
+        EmployeeWorkHourFilterEmployee(
+            employee_no=no,
+            employee_name=name,
+            department=dept,
+        )
+        for no, name, dept in employee_rows
     ]
     projects = [
         name
@@ -929,6 +939,47 @@ def list_employee_work_hour_filters(
         employees=employees,
         projects=projects,
     )
+
+
+WORK_HOUR_APPROVAL_VALUES = frozenset({"pending", "approved", "rejected"})
+WORK_HOUR_SHIFT_VALUES = frozenset({"day", "night"})
+
+
+@router.post(
+    "/employee-work-hours",
+    response_model=EmployeeWorkHourRecordResponse,
+    status_code=201,
+    summary="新增员工工时",
+    description="员工工时报表页「新增工时」写入 employee_work_hours 表。",
+)
+def create_employee_work_hour(
+    payload: EmployeeWorkHourCreate,
+    _current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    approval = payload.approval_status or "pending"
+    if approval not in WORK_HOUR_APPROVAL_VALUES:
+        raise HTTPException(status_code=400, detail="审批状态无效")
+    shift = payload.shift_type
+    if shift is not None and shift not in WORK_HOUR_SHIFT_VALUES:
+        raise HTTPException(status_code=400, detail="班别无效，应为 day 或 night")
+
+    row = EmployeeWorkHour(
+        employee_no=payload.employee_no.strip(),
+        employee_name=payload.employee_name.strip(),
+        department=payload.department.strip(),
+        project_name=payload.project_name.strip(),
+        task_name=payload.task_name.strip(),
+        work_date=payload.work_date,
+        shift_type=shift,
+        work_hours=payload.work_hours,
+        overtime_hours=payload.overtime_hours,
+        approval_status=approval,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
 
 
 @router.get(

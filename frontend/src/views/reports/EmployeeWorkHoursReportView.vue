@@ -30,6 +30,33 @@
             />
           </el-select>
         </el-form-item>
+        <el-form-item label="员工">
+          <el-select
+            v-model="filters.employeeNo"
+            placeholder="全部"
+            clearable
+            filterable
+            style="width: 180px"
+          >
+            <el-option
+              v-for="emp in employeeOptions"
+              :key="emp.employee_no"
+              :label="`${emp.employee_name} (${emp.employee_no})`"
+              :value="emp.employee_no"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="项目">
+          <el-select
+            v-model="filters.projectName"
+            placeholder="全部"
+            clearable
+            filterable
+            style="width: 180px"
+          >
+            <el-option v-for="proj in projectOptions" :key="proj" :label="proj" :value="proj" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="视图">
           <el-radio-group v-model="viewMode" @change="handleViewModeChange">
             <el-radio-button value="detail">明细</el-radio-button>
@@ -54,6 +81,7 @@
         <div class="toolbar-right">
           <span class="sum-text">工时合计 {{ formatHours(workHoursSum) }}</span>
           <span class="sum-text">加班合计 {{ formatHours(overtimeHoursSum) }}</span>
+          <el-button type="primary" :icon="Plus" @click="openCreate">新增工时</el-button>
           <el-button :icon="Download" @click="handleExport">导出</el-button>
         </div>
       </div>
@@ -78,11 +106,27 @@
         >
           <template #default="{ row }">{{ row.project_name || '—' }}</template>
         </el-table-column>
+        <el-table-column
+          v-if="viewMode === 'detail'"
+          prop="task_name"
+          label="任务"
+          min-width="120"
+        >
+          <template #default="{ row }">{{ row.task_name || '—' }}</template>
+        </el-table-column>
         <el-table-column prop="work_hours" label="工时" width="120" align="right">
           <template #default="{ row }">{{ formatHours(row.work_hours) }}</template>
         </el-table-column>
         <el-table-column prop="overtime_hours" label="加班" width="100" align="right">
           <template #default="{ row }">{{ formatHours(row.overtime_hours) }}</template>
+        </el-table-column>
+        <el-table-column
+          v-if="viewMode === 'detail'"
+          prop="approval_status"
+          label="状态"
+          width="100"
+        >
+          <template #default="{ row }">{{ row.approval_status || '—' }}</template>
         </el-table-column>
       </el-table>
 
@@ -99,14 +143,111 @@
         />
       </div>
     </el-card>
+
+    <el-dialog
+      v-model="createVisible"
+      title="新增工时"
+      width="520px"
+      destroy-on-close
+      @closed="resetCreateForm"
+    >
+      <el-form ref="createFormRef" :model="createForm" :rules="createRules" label-width="88px">
+        <el-form-item label="员工" prop="employeeNo">
+          <el-select
+            v-model="createForm.employeeNo"
+            placeholder="选择或输入工号"
+            filterable
+            allow-create
+            default-first-option
+            style="width: 100%"
+            @change="onCreateEmployeeChange"
+          >
+            <el-option
+              v-for="emp in employeeOptions"
+              :key="emp.employee_no"
+              :label="`${emp.employee_name} (${emp.employee_no})`"
+              :value="emp.employee_no"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="姓名" prop="employeeName">
+          <el-input v-model="createForm.employeeName" placeholder="员工姓名" />
+        </el-form-item>
+        <el-form-item label="部门" prop="department">
+          <el-input v-model="createForm.department" placeholder="所属部门" />
+        </el-form-item>
+        <el-form-item label="项目" prop="projectName">
+          <el-select
+            v-model="createForm.projectName"
+            placeholder="项目"
+            filterable
+            allow-create
+            default-first-option
+            style="width: 100%"
+          >
+            <el-option v-for="proj in projectOptions" :key="proj" :label="proj" :value="proj" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="任务" prop="taskName">
+          <el-input v-model="createForm.taskName" placeholder="任务名称" />
+        </el-form-item>
+        <el-form-item label="工作日期" prop="workDate">
+          <el-date-picker
+            v-model="createForm.workDate"
+            type="date"
+            value-format="YYYY-MM-DD"
+            placeholder="选择日期"
+            style="width: 100%"
+          />
+        </el-form-item>
+        <el-form-item label="班别" prop="shiftType">
+          <el-radio-group v-model="createForm.shiftType">
+            <el-radio value="day">白班</el-radio>
+            <el-radio value="night">晚班</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="工时" prop="workHours">
+          <el-input-number
+            v-model="createForm.workHours"
+            :min="0"
+            :max="24"
+            :step="0.5"
+            :precision="1"
+            style="width: 100%"
+          />
+        </el-form-item>
+        <el-form-item label="加班" prop="overtimeHours">
+          <el-input-number
+            v-model="createForm.overtimeHours"
+            :min="0"
+            :max="24"
+            :step="0.5"
+            :precision="1"
+            style="width: 100%"
+          />
+        </el-form-item>
+        <el-form-item label="审批状态" prop="approvalStatus">
+          <el-select v-model="createForm.approvalStatus" style="width: 100%">
+            <el-option label="待审批" value="pending" />
+            <el-option label="已通过" value="approved" />
+            <el-option label="已驳回" value="rejected" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="createVisible = false">取消</el-button>
+        <el-button type="primary" :loading="submitting" @click="handleSubmitCreate">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
-import { Download } from '@element-plus/icons-vue'
+import { Download, Plus } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import {
+  createEmployeeWorkHour,
   exportEmployeeWorkHoursReport,
   fetchEmployeeWorkHourFilters,
   fetchEmployeeWorkHoursReport,
@@ -133,12 +274,43 @@ const overtimeHoursSum = ref(0)
 const page = ref(1)
 const pageSize = ref(10)
 const departmentOptions = ref([])
+const employeeOptions = ref([])
+const projectOptions = ref([])
 const dateRange = ref(defaultDateRange())
 const viewMode = ref('detail')
 
+const createVisible = ref(false)
+const submitting = ref(false)
+const createFormRef = ref(null)
+
 const filters = reactive({
   department: '',
+  employeeNo: '',
+  projectName: '',
 })
+
+const createForm = reactive({
+  employeeNo: '',
+  employeeName: '',
+  department: '',
+  projectName: '',
+  taskName: '',
+  workDate: new Date().toISOString().slice(0, 10),
+  shiftType: 'day',
+  workHours: 8,
+  overtimeHours: 0,
+  approvalStatus: 'pending',
+})
+
+const createRules = {
+  employeeNo: [{ required: true, message: '请填写工号', trigger: 'blur' }],
+  employeeName: [{ required: true, message: '请填写姓名', trigger: 'blur' }],
+  department: [{ required: true, message: '请填写部门', trigger: 'blur' }],
+  projectName: [{ required: true, message: '请填写项目', trigger: 'blur' }],
+  taskName: [{ required: true, message: '请填写任务', trigger: 'blur' }],
+  workDate: [{ required: true, message: '请选择日期', trigger: 'change' }],
+  workHours: [{ required: true, message: '请填写工时', trigger: 'change' }],
+}
 
 function formatHours(value) {
   const n = Number(value)
@@ -155,8 +327,12 @@ async function loadFilters() {
   try {
     const resp = await fetchEmployeeWorkHourFilters()
     departmentOptions.value = resp.departments || []
+    employeeOptions.value = resp.employees || []
+    projectOptions.value = resp.projects || []
   } catch {
     departmentOptions.value = []
+    employeeOptions.value = []
+    projectOptions.value = []
   }
 }
 
@@ -170,6 +346,8 @@ async function loadReport() {
       dateFrom: (dateRange.value && dateRange.value[0]) || '',
       dateTo: (dateRange.value && dateRange.value[1]) || '',
       department: filters.department || undefined,
+      employeeNo: filters.employeeNo || undefined,
+      projectName: filters.projectName || undefined,
       dimension,
     })
     items.value = resp.items || []
@@ -194,6 +372,8 @@ async function handleExport() {
       dateFrom: (dateRange.value && dateRange.value[0]) || '',
       dateTo: (dateRange.value && dateRange.value[1]) || '',
       department: filters.department || undefined,
+      employeeNo: filters.employeeNo || undefined,
+      projectName: filters.projectName || undefined,
       dimension,
     })
     const url = URL.createObjectURL(blob)
@@ -214,10 +394,70 @@ function handleSearch() {
 
 function handleReset() {
   filters.department = ''
+  filters.employeeNo = ''
+  filters.projectName = ''
   dateRange.value = defaultDateRange()
   viewMode.value = 'detail'
   page.value = 1
   loadReport()
+}
+
+function openCreate() {
+  createVisible.value = true
+}
+
+function resetCreateForm() {
+  createForm.employeeNo = ''
+  createForm.employeeName = ''
+  createForm.department = ''
+  createForm.projectName = ''
+  createForm.taskName = ''
+  createForm.workDate = new Date().toISOString().slice(0, 10)
+  createForm.shiftType = 'day'
+  createForm.workHours = 8
+  createForm.overtimeHours = 0
+  createForm.approvalStatus = 'pending'
+  createFormRef.value?.clearValidate()
+}
+
+function onCreateEmployeeChange(employeeNo) {
+  const emp = employeeOptions.value.find((e) => e.employee_no === employeeNo)
+  if (emp) {
+    createForm.employeeName = emp.employee_name
+    if (emp.department) {
+      createForm.department = emp.department
+    }
+  }
+}
+
+async function handleSubmitCreate() {
+  const valid = await createFormRef.value?.validate().catch(() => false)
+  if (!valid) return
+
+  submitting.value = true
+  try {
+    await createEmployeeWorkHour({
+      employee_no: createForm.employeeNo,
+      employee_name: createForm.employeeName,
+      department: createForm.department,
+      project_name: createForm.projectName,
+      task_name: createForm.taskName,
+      work_date: createForm.workDate,
+      shift_type: createForm.shiftType,
+      work_hours: createForm.workHours,
+      overtime_hours: createForm.overtimeHours,
+      approval_status: createForm.approvalStatus,
+    })
+    ElMessage.success('工时记录已保存')
+    createVisible.value = false
+    await loadFilters()
+    page.value = 1
+    await loadReport()
+  } catch (err) {
+    ElMessage.error(err.message || '保存失败')
+  } finally {
+    submitting.value = false
+  }
 }
 
 onMounted(async () => {

@@ -38,7 +38,7 @@ export const REPORT_CATALOG = [
     viewFile: 'EmployeeWorkHoursReportView.vue',
     apiFile: 'employeeWorkHours.js',
     title: '员工工时报表',
-    description: '按日期区间与部门查询员工工时明细，支持按员工汇总工时合计',
+    description: '按日期区间查询员工工时明细与汇总，支持新增工时录入与 Excel 导出',
     icon: 'Timer',
     menu: true,
     hub: true,
