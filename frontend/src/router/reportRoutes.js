@@ -59,6 +59,7 @@ export function getReportMenuEntries() {
       path: `/reports/${item.routePath}`,
       title: item.title,
       icon: item.icon,
+      menuGroup: item.menuGroup,
     }))
 }
 

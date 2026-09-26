@@ -20,46 +20,21 @@
             placeholder="全部"
             clearable
             filterable
-            style="width: 140px"
-          >
-            <el-option v-for="dept in filterOptions.departments" :key="dept" :label="dept" :value="dept" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="员工">
-          <el-select
-            v-model="filters.employeeNo"
-            placeholder="全部"
-            clearable
-            filterable
             style="width: 160px"
           >
             <el-option
-              v-for="emp in filterOptions.employees"
-              :key="emp.employee_no"
-              :label="`${emp.employee_name}（${emp.employee_no}）`"
-              :value="emp.employee_no"
+              v-for="dept in departmentOptions"
+              :key="dept"
+              :label="dept"
+              :value="dept"
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="项目">
-          <el-select
-            v-model="filters.projectName"
-            placeholder="全部"
-            clearable
-            filterable
-            style="width: 160px"
-          >
-            <el-option v-for="proj in filterOptions.projects" :key="proj" :label="proj" :value="proj" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="统计维度">
-          <el-select v-model="filters.dimension" style="width: 180px" @change="handleDimensionChange">
-            <el-option label="明细（员工+任务）" value="detail" />
-            <el-option label="按员工+日期" value="employee_date" />
-            <el-option label="按员工+月份" value="employee_month" />
-            <el-option label="按项目汇总" value="project" />
-            <el-option label="按部门汇总" value="department" />
-          </el-select>
+        <el-form-item label="视图">
+          <el-radio-group v-model="viewMode" @change="handleViewModeChange">
+            <el-radio-button value="detail">明细</el-radio-button>
+            <el-radio-button value="employee">按员工汇总</el-radio-button>
+          </el-radio-group>
         </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="handleSearch">查询</el-button>
@@ -72,82 +47,42 @@
       <div class="table-toolbar">
         <div class="toolbar-left">
           <span class="table-title">员工工时报表</span>
-          <el-tag size="small" type="info">{{ dimensionLabel }}</el-tag>
+          <el-tag size="small" type="info">
+            {{ viewMode === 'employee' ? '按员工汇总工时合计' : '明细列表' }}
+          </el-tag>
         </div>
         <div class="toolbar-right">
-          <span class="sum-text">工时合计 {{ workHoursSum }}</span>
-          <span class="sum-text">加班合计 {{ overtimeHoursSum }}</span>
-          <el-button :icon="Download" :loading="exporting" @click="handleExport">导出 Excel</el-button>
+          <span class="sum-text">工时合计 {{ formatHours(workHoursSum) }}</span>
+          <span class="sum-text">加班合计 {{ formatHours(overtimeHoursSum) }}</span>
+          <el-button :icon="Download" @click="handleExport">导出</el-button>
         </div>
       </div>
 
       <el-table v-loading="loading" :data="items" stripe border style="width: 100%">
+        <el-table-column prop="employee_name" label="员工" min-width="120" />
+        <el-table-column prop="employee_no" label="工号" width="120" />
+        <el-table-column prop="department" label="部门" min-width="140" />
         <el-table-column
-          v-if="showEmployeeColumns"
-          prop="employee_name"
-          label="员工姓名"
-          min-width="100"
-        />
+          v-if="viewMode === 'detail'"
+          prop="work_date"
+          label="日期"
+          width="130"
+        >
+          <template #default="{ row }">{{ row.work_date || '—' }}</template>
+        </el-table-column>
         <el-table-column
-          v-if="showEmployeeColumns"
-          prop="employee_no"
-          label="工号"
-          width="100"
-        />
-        <el-table-column
-          v-if="showDepartmentColumn"
-          prop="department"
-          label="所属部门"
-          min-width="110"
-        />
-        <el-table-column
-          v-if="showProjectColumn"
+          v-if="viewMode === 'detail'"
           prop="project_name"
-          label="项目名称"
-          min-width="140"
+          label="项目"
+          min-width="120"
         >
           <template #default="{ row }">{{ row.project_name || '—' }}</template>
         </el-table-column>
-        <el-table-column
-          v-if="showTaskColumn"
-          prop="task_name"
-          label="任务名称"
-          min-width="120"
-        >
-          <template #default="{ row }">{{ row.task_name || '—' }}</template>
-        </el-table-column>
-        <el-table-column
-          v-if="showDateColumn"
-          prop="work_date"
-          label="日期"
-          width="120"
-        />
-        <el-table-column
-          v-if="showMonthColumn"
-          prop="work_month"
-          label="月份"
-          width="100"
-        />
-        <el-table-column prop="work_hours" label="工时数" width="90" align="right">
+        <el-table-column prop="work_hours" label="工时" width="120" align="right">
           <template #default="{ row }">{{ formatHours(row.work_hours) }}</template>
         </el-table-column>
-        <el-table-column prop="overtime_hours" label="加班工时" width="100" align="right">
+        <el-table-column prop="overtime_hours" label="加班" width="100" align="right">
           <template #default="{ row }">{{ formatHours(row.overtime_hours) }}</template>
-        </el-table-column>
-        <el-table-column
-          v-if="showRecordCount"
-          prop="record_count"
-          label="明细条数"
-          width="100"
-          align="right"
-        />
-        <el-table-column prop="approval_status" label="审批/状态" width="100">
-          <template #default="{ row }">
-            <el-tag v-if="row.approval_status === '已通过'" size="small" type="success">已通过</el-tag>
-            <el-tag v-else-if="row.approval_status === '待审批'" size="small" type="warning">待审批</el-tag>
-            <el-tag v-else-if="row.approval_status === '已驳回'" size="small" type="danger">已驳回</el-tag>
-            <span v-else>{{ row.approval_status || '—' }}</span>
-          </template>
         </el-table-column>
       </el-table>
 
@@ -168,7 +103,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { Download } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import {
@@ -177,18 +112,10 @@ import {
   fetchEmployeeWorkHoursReport,
 } from '../../api/reports/employeeWorkHours.js'
 
-const DIMENSION_LABELS = {
-  detail: '明细（员工+任务）',
-  employee_date: '按员工+日期',
-  employee_month: '按员工+月份',
-  project: '按项目汇总',
-  department: '按部门汇总',
-}
-
 function defaultDateRange() {
   const end = new Date()
   const start = new Date()
-  start.setDate(end.getDate() - 29)
+  start.setDate(end.getDate() - 6)
   const fmt = (d) => {
     const y = d.getFullYear()
     const m = String(d.getMonth() + 1).padStart(2, '0')
@@ -199,95 +126,84 @@ function defaultDateRange() {
 }
 
 const loading = ref(false)
-const exporting = ref(false)
 const items = ref([])
 const total = ref(0)
-const page = ref(1)
-const pageSize = ref(10)
 const workHoursSum = ref(0)
 const overtimeHoursSum = ref(0)
+const page = ref(1)
+const pageSize = ref(10)
+const departmentOptions = ref([])
 const dateRange = ref(defaultDateRange())
-const filterOptions = reactive({
-  departments: [],
-  employees: [],
-  projects: [],
-})
+const viewMode = ref('detail')
 
 const filters = reactive({
   department: '',
-  employeeNo: '',
-  projectName: '',
-  dimension: 'detail',
 })
-
-const dateFrom = computed(() => (dateRange.value && dateRange.value[0]) || '')
-const dateTo = computed(() => (dateRange.value && dateRange.value[1]) || '')
-const dimensionLabel = computed(() => DIMENSION_LABELS[filters.dimension] || filters.dimension)
-
-const showEmployeeColumns = computed(() =>
-  ['detail', 'employee_date', 'employee_month'].includes(filters.dimension),
-)
-const showDepartmentColumn = computed(() =>
-  ['detail', 'employee_date', 'employee_month', 'department'].includes(filters.dimension),
-)
-const showProjectColumn = computed(
-  () => filters.dimension === 'detail' || filters.dimension === 'project',
-)
-const showTaskColumn = computed(() => filters.dimension === 'detail')
-const showDateColumn = computed(
-  () => filters.dimension === 'detail' || filters.dimension === 'employee_date',
-)
-const showMonthColumn = computed(() => filters.dimension === 'employee_month')
-const showRecordCount = computed(() => filters.dimension !== 'detail')
 
 function formatHours(value) {
   const n = Number(value)
   if (Number.isNaN(n)) return '—'
-  return n.toFixed(2)
+  return n.toFixed(1)
 }
 
-function buildQueryParams() {
-  return {
-    page: page.value,
-    pageSize: pageSize.value,
-    dateFrom: dateFrom.value || undefined,
-    dateTo: dateTo.value || undefined,
-    department: filters.department || undefined,
-    employeeNo: filters.employeeNo || undefined,
-    projectName: filters.projectName || undefined,
-    dimension: filters.dimension,
-  }
+function handleViewModeChange() {
+  page.value = 1
+  loadReport()
 }
 
 async function loadFilters() {
   try {
     const resp = await fetchEmployeeWorkHourFilters()
-    filterOptions.departments = resp.departments || []
-    filterOptions.employees = resp.employees || []
-    filterOptions.projects = resp.projects || []
+    departmentOptions.value = resp.departments || []
   } catch {
-    filterOptions.departments = []
-    filterOptions.employees = []
-    filterOptions.projects = []
+    departmentOptions.value = []
   }
 }
 
 async function loadReport() {
   loading.value = true
   try {
-    const resp = await fetchEmployeeWorkHoursReport(buildQueryParams())
+    const dimension = viewMode.value === 'employee' ? 'employee' : 'detail'
+    const resp = await fetchEmployeeWorkHoursReport({
+      page: page.value,
+      pageSize: pageSize.value,
+      dateFrom: (dateRange.value && dateRange.value[0]) || '',
+      dateTo: (dateRange.value && dateRange.value[1]) || '',
+      department: filters.department || undefined,
+      dimension,
+    })
     items.value = resp.items || []
     total.value = resp.total || 0
-    workHoursSum.value = resp.work_hours_sum || 0
-    overtimeHoursSum.value = resp.overtime_hours_sum || 0
+    workHoursSum.value = resp.work_hours_sum ?? 0
+    overtimeHoursSum.value = resp.overtime_hours_sum ?? 0
   } catch (err) {
-    ElMessage.error(err.message || '加载报表失败')
     items.value = []
     total.value = 0
     workHoursSum.value = 0
     overtimeHoursSum.value = 0
+    ElMessage.error(err.message || '加载员工工时报表失败')
   } finally {
     loading.value = false
+  }
+}
+
+async function handleExport() {
+  try {
+    const dimension = viewMode.value === 'employee' ? 'employee' : 'detail'
+    const blob = await exportEmployeeWorkHoursReport({
+      dateFrom: (dateRange.value && dateRange.value[0]) || '',
+      dateTo: (dateRange.value && dateRange.value[1]) || '',
+      department: filters.department || undefined,
+      dimension,
+    })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `员工工时报表_${new Date().toISOString().slice(0, 10)}.xlsx`
+    link.click()
+    URL.revokeObjectURL(url)
+  } catch (err) {
+    ElMessage.error(err.message || '导出失败')
   }
 }
 
@@ -296,37 +212,12 @@ function handleSearch() {
   loadReport()
 }
 
-function handleDimensionChange() {
-  page.value = 1
-  loadReport()
-}
-
 function handleReset() {
-  dateRange.value = defaultDateRange()
   filters.department = ''
-  filters.employeeNo = ''
-  filters.projectName = ''
-  filters.dimension = 'detail'
+  dateRange.value = defaultDateRange()
+  viewMode.value = 'detail'
   page.value = 1
   loadReport()
-}
-
-async function handleExport() {
-  exporting.value = true
-  try {
-    const { page: _p, pageSize: _s, ...exportParams } = buildQueryParams()
-    const blob = await exportEmployeeWorkHoursReport(exportParams)
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
-    link.download = `员工工时报表_${new Date().toISOString().slice(0, 10)}.xlsx`
-    link.click()
-    URL.revokeObjectURL(link.href)
-    ElMessage.success('导出成功')
-  } catch (err) {
-    ElMessage.error(err.message || '导出失败')
-  } finally {
-    exporting.value = false
-  }
 }
 
 onMounted(async () => {
@@ -344,11 +235,11 @@ onMounted(async () => {
 
 .search-card,
 .table-card {
-  border-radius: 4px;
+  border-radius: 8px;
 }
 
 .search-form {
-  margin-bottom: -8px;
+  margin-bottom: 0;
 }
 
 .table-toolbar {
@@ -356,26 +247,26 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 12px;
-  gap: 12px;
   flex-wrap: wrap;
+  gap: 8px;
 }
 
 .toolbar-left,
 .toolbar-right {
   display: flex;
   align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .table-title {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
+  color: #303133;
 }
 
 .sum-text {
   font-size: 13px;
-  color: var(--el-text-color-secondary);
+  color: #606266;
 }
 
 .pagination-wrap {
