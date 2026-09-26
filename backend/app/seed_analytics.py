@@ -14,6 +14,7 @@ from app.work_order_utils import derive_current_process
 from app.models import (
     DashboardTodo,
     Device,
+    EmployeeWorkHour,
     Equipment,
     EquipmentAlarm,
     EquipmentMaintenanceOrder,
@@ -1128,62 +1129,78 @@ def _shift_dt(value: datetime | None, delta: timedelta) -> datetime | None:
     return value + delta if value else None
 
 
+def _days_behind(value, today: date) -> int:
+    if not value:
+        return 0
+    current = value.date() if hasattr(value, "date") else value
+    return max((today - current).days, 0)
+
+
 def _rebase_live_records_to_today(db, today: date, now: datetime) -> None:
-    """把工单/保养/维修/异常/待办/订单等业务日期整体平移到今天，当天已对齐则跳过。"""
-    anchors: list[date] = []
-    for ts in (
-        db.query(func.max(WorkOrder.updated_at)).scalar(),
-        db.query(func.max(EquipmentRepair.created_at)).scalar(),
-        db.query(func.max(DashboardTodo.created_at)).scalar(),
-        db.query(func.max(QualityAnomaly.discovered_at)).scalar(),
-    ):
-        if ts:
-            anchors.append(ts.date() if hasattr(ts, "date") else ts)
-    if not anchors:
-        return
-    delta_days = (today - max(anchors)).days
-    if delta_days <= 0:
-        return
-    delta = timedelta(days=delta_days)
+    """把工单/保养/维修/异常/待办/订单/工时等业务日期按表平移到今天，已对齐的表跳过。"""
 
-    for wo in db.query(WorkOrder).all():
-        wo.start_date = _shift_date(wo.start_date, delta)
-        wo.end_date = _shift_date(wo.end_date, delta)
-        wo.actual_start_time = _shift_dt(wo.actual_start_time, delta)
-        wo.actual_end_time = _shift_dt(wo.actual_end_time, delta)
-        wo.created_at = _shift_dt(wo.created_at, delta) or now
-        wo.updated_at = now
+    def delta_of(column) -> timedelta:
+        return timedelta(days=_days_behind(db.query(func.max(column)).scalar(), today))
 
-    for plan in db.query(EquipmentMaintenancePlan).all():
-        plan.next_due_at = _shift_dt(plan.next_due_at, delta)
-        plan.created_at = _shift_dt(plan.created_at, delta) or now
-        plan.updated_at = now
+    wo_delta = delta_of(WorkOrder.updated_at)
+    if wo_delta.days:
+        for wo in db.query(WorkOrder).all():
+            wo.start_date = _shift_date(wo.start_date, wo_delta)
+            wo.end_date = _shift_date(wo.end_date, wo_delta)
+            wo.actual_start_time = _shift_dt(wo.actual_start_time, wo_delta)
+            wo.actual_end_time = _shift_dt(wo.actual_end_time, wo_delta)
+            wo.created_at = _shift_dt(wo.created_at, wo_delta) or now
+            wo.updated_at = now
 
-    for order in db.query(EquipmentMaintenanceOrder).all():
-        order.planned_start_at = _shift_dt(order.planned_start_at, delta) or now
-        order.actual_start_at = _shift_dt(order.actual_start_at, delta)
-        order.actual_end_at = _shift_dt(order.actual_end_at, delta)
-        order.created_at = _shift_dt(order.created_at, delta) or now
-        order.updated_at = now
+    plan_delta = delta_of(EquipmentMaintenancePlan.created_at)
+    if plan_delta.days:
+        for plan in db.query(EquipmentMaintenancePlan).all():
+            plan.next_due_at = _shift_dt(plan.next_due_at, plan_delta)
+            plan.created_at = _shift_dt(plan.created_at, plan_delta) or now
+            plan.updated_at = now
 
-    for repair in db.query(EquipmentRepair).all():
-        repair.start_time = _shift_dt(repair.start_time, delta)
-        repair.repair_completed_at = _shift_dt(repair.repair_completed_at, delta)
-        repair.created_at = _shift_dt(repair.created_at, delta) or now
-        repair.updated_at = now
+    mo_delta = delta_of(EquipmentMaintenanceOrder.created_at)
+    if mo_delta.days:
+        for order in db.query(EquipmentMaintenanceOrder).all():
+            order.planned_start_at = _shift_dt(order.planned_start_at, mo_delta) or now
+            order.actual_start_at = _shift_dt(order.actual_start_at, mo_delta)
+            order.actual_end_at = _shift_dt(order.actual_end_at, mo_delta)
+            order.created_at = _shift_dt(order.created_at, mo_delta) or now
+            order.updated_at = now
 
-    for anomaly in db.query(QualityAnomaly).all():
-        anomaly.discovered_at = _shift_dt(anomaly.discovered_at, delta) or now
+    repair_delta = delta_of(EquipmentRepair.created_at)
+    if repair_delta.days:
+        for repair in db.query(EquipmentRepair).all():
+            repair.start_time = _shift_dt(repair.start_time, repair_delta)
+            repair.repair_completed_at = _shift_dt(repair.repair_completed_at, repair_delta)
+            repair.created_at = _shift_dt(repair.created_at, repair_delta) or now
+            repair.updated_at = now
 
-    for todo in db.query(DashboardTodo).all():
-        todo.created_at = _shift_dt(todo.created_at, delta) or now
+    anomaly_delta = delta_of(QualityAnomaly.discovered_at)
+    if anomaly_delta.days:
+        for anomaly in db.query(QualityAnomaly).all():
+            anomaly.discovered_at = _shift_dt(anomaly.discovered_at, anomaly_delta) or now
 
-    for so in db.query(SalesOrder).all():
-        so.due_date = _shift_date(so.due_date, delta) or today
-        so.created_at = _shift_dt(so.created_at, delta) or now
+    todo_delta = delta_of(DashboardTodo.created_at)
+    if todo_delta.days:
+        for todo in db.query(DashboardTodo).all():
+            todo.created_at = _shift_dt(todo.created_at, todo_delta) or now
 
-    for bal in db.query(InventoryBalance).all():
-        bal.updated_at = _shift_dt(bal.updated_at, delta) or now
+    so_delta = delta_of(SalesOrder.created_at)
+    if so_delta.days:
+        for so in db.query(SalesOrder).all():
+            so.due_date = _shift_date(so.due_date, so_delta) or today
+            so.created_at = _shift_dt(so.created_at, so_delta) or now
+
+    bal_delta = delta_of(InventoryBalance.updated_at)
+    if bal_delta.days:
+        for bal in db.query(InventoryBalance).all():
+            bal.updated_at = _shift_dt(bal.updated_at, bal_delta) or now
+
+    hour_delta = delta_of(EmployeeWorkHour.work_date)
+    if hour_delta.days:
+        for hour in db.query(EmployeeWorkHour).all():
+            hour.work_date = _shift_date(hour.work_date, hour_delta) or today
 
     for board in db.query(KanbanBoard).all():
         board.updated_at = now

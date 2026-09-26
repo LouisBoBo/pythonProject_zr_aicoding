@@ -28,6 +28,7 @@ OPENAPI_TAGS: list[dict] = [
     {"name": "库存低水位预警", "description": "当前库存低于安全库存的物料预警列表"},
     {"name": "消息中心", "description": "系统通知、业务告警与公告查询"},
     {"name": "Cursor 写码过程", "description": "Cursor 写码过程查看：确认开工、SSE/对话回放、追问与审后同步；记录落盘到本工程 docs/cursor-coding-runs"},
+    {"name": "AI工作助手", "description": "对接本机 WorkBuddy Web（默认 http://127.0.0.1:3081），代理 API 引擎流式对话"},
 ]
 
 # (HTTP方法大写, 路径) -> {summary, description}

@@ -29,6 +29,7 @@ import HelpIndex from '../views/help/Index.vue'
 import WorkOrdersView from '../views/WorkOrdersView.vue'
 import OverdueAlertsView from '../views/work-orders/OverdueAlertsView.vue'
 import ProcessViewerView from '../views/cursor-coding/ProcessViewerView.vue'
+import WorkBuddyView from '../views/ai-assistant/WorkBuddyView.vue'
 import KanbanBoardsView from '../views/KanbanBoardsView.vue'
 import ProductionKanbanView from '../views/kanban/ProductionKanbanView.vue'
 import WarehouseDashboard from '../views/board/WarehouseDashboard.vue'
@@ -155,6 +156,12 @@ const router = createRouter({
           name: 'cursor-coding',
           component: ProcessViewerView,
           meta: { title: 'Cursor 写码过程', ...authRequired },
+        },
+        {
+          path: 'ai-assistant',
+          name: 'ai-assistant',
+          component: WorkBuddyView,
+          meta: { title: 'AI工作助手', ...authRequired },
         },
         {
           path: 'work-orders/new',

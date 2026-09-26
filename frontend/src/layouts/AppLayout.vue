@@ -222,6 +222,7 @@ import {
   Timer,
   Warning,
   EditPen,
+  ChatDotRound,
 } from '@element-plus/icons-vue'
 import { clearToken, fetchCurrentUser } from '../api/auth'
 import { fetchUnreadCount } from '../api/messages'
@@ -302,6 +303,7 @@ const menuGroups = computed(() => {
         { path: '/home', title: '首页', icon: HomeFilled },
         { path: '/favorites', title: '收藏夹', icon: Star },
         { path: '/workbench', title: '工作台', icon: Monitor },
+        { path: '/ai-assistant', title: 'AI工作助手', icon: ChatDotRound },
       ],
     },
     {
