@@ -1838,7 +1838,7 @@ def _build_equipment_downtime_trend(
     return trend
 
 
-def _shift_label(start_at: datetime) -> str:
+def _downtime_shift_label_from_datetime(start_at: datetime) -> str:
     hour = start_at.hour
     if 8 <= hour < 16:
         return "早班"
@@ -1904,8 +1904,8 @@ def _build_equipment_downtime_by_shift(
 ) -> list[EquipmentDowntimeDimensionStat]:
     return _build_equipment_downtime_dimension_stats(
         items,
-        key_fn=lambda item: _shift_label(item.start_at),
-        label_fn=lambda item: _shift_label(item.start_at),
+        key_fn=lambda item: _downtime_shift_label_from_datetime(item.start_at),
+        label_fn=lambda item: _downtime_shift_label_from_datetime(item.start_at),
     )
 
 

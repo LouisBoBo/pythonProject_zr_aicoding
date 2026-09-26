@@ -41,6 +41,7 @@ from app.routers import (
     auth,
     cursor_coding,
     dashboard,
+    device_dashboard,
     devices,
     equipment,
     equipment_maintenance,
@@ -1200,6 +1201,7 @@ app.include_router(kanban_boards.router)
 app.include_router(kanban_production.router)
 app.include_router(kanban_general.router)
 app.include_router(production.router)
+app.include_router(device_dashboard.router)
 app.include_router(devices.router)
 app.include_router(inspection.router)
 app.include_router(equipment.router)
