@@ -493,11 +493,22 @@ APPROVAL_STATUS_LABELS = {
     "rejected": "已驳回",
 }
 
+SHIFT_TYPE_LABELS = {
+    "day": "白班",
+    "night": "晚班",
+}
+
 
 def _approval_label(status: str | None) -> str:
     if not status:
         return "—"
     return APPROVAL_STATUS_LABELS.get(status, status)
+
+
+def _shift_label(shift: str | None) -> str:
+    if not shift:
+        return "—"
+    return SHIFT_TYPE_LABELS.get(shift, shift)
 
 
 def _apply_work_hour_filters(
@@ -561,6 +572,7 @@ def _build_work_hour_report_items(
                 project_name=row.project_name,
                 task_name=row.task_name,
                 work_date=row.work_date,
+                shift_type=_shift_label(row.shift_type),
                 work_hours=float(row.work_hours or 0),
                 overtime_hours=float(row.overtime_hours or 0),
                 approval_status=_approval_label(row.approval_status),
@@ -753,6 +765,7 @@ def _work_hour_export_headers(dimension: str) -> list[str]:
             "项目名称",
             "任务名称",
             "日期",
+            "班别",
             "工时数",
             "加班工时",
             "审批/状态",
@@ -803,6 +816,7 @@ def _work_hour_export_row(item: EmployeeWorkHourReportItem, dimension: str) -> l
             item.project_name or "",
             item.task_name or "",
             item.work_date.isoformat() if item.work_date else "",
+            item.shift_type or "",
             item.work_hours,
             item.overtime_hours,
             item.approval_status or "",

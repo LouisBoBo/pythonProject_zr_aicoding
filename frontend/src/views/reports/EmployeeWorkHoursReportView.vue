@@ -125,6 +125,15 @@
         >
           <template #default="{ row }">{{ row.task_name || '—' }}</template>
         </el-table-column>
+        <el-table-column
+          v-if="viewMode === 'detail'"
+          prop="shift_type"
+          label="班别"
+          width="90"
+          align="center"
+        >
+          <template #default="{ row }">{{ row.shift_type || '—' }}</template>
+        </el-table-column>
         <el-table-column prop="work_hours" label="工时" width="120" align="right">
           <template #default="{ row }">{{ formatHours(row.work_hours) }}</template>
         </el-table-column>
