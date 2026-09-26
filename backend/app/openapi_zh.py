@@ -444,7 +444,7 @@ API_ZH: dict[tuple[str, str], dict[str, str]] = {
     ("GET", "/api/reports/employee-work-hours"): {
         "summary": "员工工时报表",
         "description": (
-            "查询 employee_work_hours 表工时数据，支持日期范围、部门、员工、项目筛选与多统计维度。"
+            "查询 employee_work_hours 表工时数据，支持日期范围、部门、员工、项目、班别筛选与多统计维度。"
             "报表中心「员工工时报表」页使用本接口。"
         ),
     },

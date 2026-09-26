@@ -1,32 +1,19 @@
-import { clearToken, getToken } from './auth'
+import { getToken } from './auth'
+import { authFetch } from './http.js'
 
-async function authFetch(url, options = {}) {
-  const token = getToken()
-  if (!token) throw new Error('未登录')
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
+const jsonPost = (url, body) =>
+  authFetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
   })
-  if (response.status === 204) return null
-  const data = await response.json().catch(() => ({}))
-  if (!response.ok) {
-    if (response.status === 401 || response.status === 403) clearToken()
-    const detail = data.detail
-    throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail || data) || '请求失败')
-  }
-  return data
-}
 
 export function fetchCursorMeta() {
   return authFetch('/api/cursor-coding/meta')
 }
 
 export function prepareProbe() {
-  return authFetch('/api/cursor-coding/prepare-probe', { method: 'POST', body: '{}' })
+  return jsonPost('/api/cursor-coding/prepare-probe', {})
 }
 
 export function listLocalRuns() {
@@ -38,10 +25,7 @@ export function getLocalRun(jobId) {
 }
 
 export function confirmCursorJob(body) {
-  return authFetch('/api/cursor-coding/confirm', {
-    method: 'POST',
-    body: JSON.stringify(body),
-  })
+  return jsonPost('/api/cursor-coding/confirm', body)
 }
 
 export function fetchJobDialog(jobId) {
@@ -53,17 +37,11 @@ export function listUpstreamJobs() {
 }
 
 export function steerJob(jobId, message) {
-  return authFetch(`/api/cursor-coding/jobs/${encodeURIComponent(jobId)}/steer`, {
-    method: 'POST',
-    body: JSON.stringify({ message }),
-  })
+  return jsonPost(`/api/cursor-coding/jobs/${encodeURIComponent(jobId)}/steer`, { message })
 }
 
 export function applyJob(jobId, accept) {
-  return authFetch(`/api/cursor-coding/jobs/${encodeURIComponent(jobId)}/apply`, {
-    method: 'POST',
-    body: JSON.stringify({ accept }),
-  })
+  return jsonPost(`/api/cursor-coding/jobs/${encodeURIComponent(jobId)}/apply`, { accept })
 }
 
 /** 带 JWT 消费 SSE（EventSource 无法自定义头） */

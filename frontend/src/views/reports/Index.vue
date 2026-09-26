@@ -28,13 +28,13 @@
 <script setup>
 import { computed } from 'vue'
 import { DataLine } from '@element-plus/icons-vue'
-import { REPORT_ICON_MAP } from '../../config/reportIcons.js'
+import { resolveReportIcon } from '../../config/reportIcons.js'
 import { getReportHubEntries } from '../../router/reportRoutes.js'
 
 const hubEntries = computed(() => getReportHubEntries())
 
 function iconOf(name) {
-  return REPORT_ICON_MAP[name] || DataLine
+  return resolveReportIcon(name, DataLine)
 }
 </script>
 

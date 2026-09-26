@@ -12,6 +12,7 @@ export async function fetchEmployeeWorkHoursReport({
   department,
   employeeNo,
   projectName,
+  shiftType,
   dimension = 'detail',
 } = {}) {
   const params = new URLSearchParams()
@@ -21,6 +22,7 @@ export async function fetchEmployeeWorkHoursReport({
   if (department) params.set('department', department)
   if (employeeNo) params.set('employee_no', employeeNo)
   if (projectName) params.set('project_name', projectName)
+  if (shiftType) params.set('shift_type', shiftType)
   if (dimension) params.set('dimension', dimension)
   return authFetch(`/api/reports/employee-work-hours?${params}`)
 }
@@ -31,6 +33,7 @@ export async function exportEmployeeWorkHoursReport({
   department,
   employeeNo,
   projectName,
+  shiftType,
   dimension = 'detail',
 } = {}) {
   const params = new URLSearchParams()
@@ -39,6 +42,7 @@ export async function exportEmployeeWorkHoursReport({
   if (department) params.set('department', department)
   if (employeeNo) params.set('employee_no', employeeNo)
   if (projectName) params.set('project_name', projectName)
+  if (shiftType) params.set('shift_type', shiftType)
   if (dimension) params.set('dimension', dimension)
   return authFetchBlob(`/api/reports/employee-work-hours/export?${params}`)
 }

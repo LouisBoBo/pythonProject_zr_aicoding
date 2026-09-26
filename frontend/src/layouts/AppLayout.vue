@@ -225,7 +225,7 @@ import {
 } from '@element-plus/icons-vue'
 import { clearToken, fetchCurrentUser } from '../api/auth'
 import { fetchUnreadCount } from '../api/messages'
-import { REPORT_ICON_MAP } from '../config/reportIcons.js'
+import { resolveReportIcon } from '../config/reportIcons.js'
 import { getReportMenuEntries } from '../router/reportRoutes.js'
 
 const router = useRouter()
@@ -260,7 +260,7 @@ function buildReportMenuItem() {
   const children = flatEntries.map((entry) => ({
     path: entry.path,
     title: entry.title,
-    icon: REPORT_ICON_MAP[entry.icon] || Document,
+    icon: resolveReportIcon(entry.icon, Document),
   }))
 
   if (equipmentEntries.length) {
@@ -271,7 +271,7 @@ function buildReportMenuItem() {
       children: equipmentEntries.map((entry) => ({
         path: entry.path,
         title: entry.title,
-        icon: REPORT_ICON_MAP[entry.icon] || Cpu,
+        icon: resolveReportIcon(entry.icon, Cpu),
       })),
     })
   }

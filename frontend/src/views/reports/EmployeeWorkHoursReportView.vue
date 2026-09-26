@@ -57,6 +57,17 @@
             <el-option v-for="proj in projectOptions" :key="proj" :label="proj" :value="proj" />
           </el-select>
         </el-form-item>
+        <el-form-item label="班别">
+          <el-select
+            v-model="filters.shiftType"
+            placeholder="全部"
+            clearable
+            style="width: 120px"
+          >
+            <el-option label="白班" value="day" />
+            <el-option label="晚班" value="night" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="视图">
           <el-radio-group v-model="viewMode" @change="handleViewModeChange">
             <el-radio-button value="detail">明细</el-radio-button>
@@ -287,6 +298,7 @@ const filters = reactive({
   department: '',
   employeeNo: '',
   projectName: '',
+  shiftType: '',
 })
 
 const createForm = reactive({
@@ -348,6 +360,7 @@ async function loadReport() {
       department: filters.department || undefined,
       employeeNo: filters.employeeNo || undefined,
       projectName: filters.projectName || undefined,
+      shiftType: filters.shiftType || undefined,
       dimension,
     })
     items.value = resp.items || []
@@ -374,6 +387,7 @@ async function handleExport() {
       department: filters.department || undefined,
       employeeNo: filters.employeeNo || undefined,
       projectName: filters.projectName || undefined,
+      shiftType: filters.shiftType || undefined,
       dimension,
     })
     const url = URL.createObjectURL(blob)
@@ -396,6 +410,7 @@ function handleReset() {
   filters.department = ''
   filters.employeeNo = ''
   filters.projectName = ''
+  filters.shiftType = ''
   dateRange.value = defaultDateRange()
   viewMode.value = 'detail'
   page.value = 1

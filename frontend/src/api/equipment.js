@@ -1,62 +1,4 @@
-import { clearToken, getToken } from './auth'
-
-async function authFetch(url, options = {}) {
-  const token = getToken()
-  if (!token) {
-    throw new Error('未登录')
-  }
-
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      ...options.headers,
-    },
-  })
-
-  if (response.status === 204) {
-    return null
-  }
-
-  if (!response.ok) {
-    if (response.status === 401 || response.status === 403) {
-      clearToken()
-    }
-    const error = await response.json().catch(() => ({}))
-    const detail = error.detail
-    const message = typeof detail === 'string' ? detail : '请求失败'
-    throw new Error(message)
-  }
-
-  return response.json()
-}
-
-async function authFetchBlob(url, options = {}) {
-  const token = getToken()
-  if (!token) {
-    throw new Error('未登录')
-  }
-
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      ...options.headers,
-    },
-  })
-
-  if (!response.ok) {
-    if (response.status === 401 || response.status === 403) {
-      clearToken()
-    }
-    const error = await response.json().catch(() => ({}))
-    const detail = error.detail
-    const message = typeof detail === 'string' ? detail : '导出失败'
-    throw new Error(message)
-  }
-
-  return response.blob()
-}
+import { authFetch, authFetchBlob } from './http.js'
 
 export async function fetchEquipmentList({
   page = 1,
@@ -106,33 +48,16 @@ export async function deleteEquipment(id) {
 }
 
 export async function importEquipment(file) {
-  const token = getToken()
-  if (!token) {
-    throw new Error('未登录')
-  }
-
   const formData = new FormData()
   formData.append('file', file)
-
-  const response = await fetch('/api/equipment/import', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
+  return authFetch(
+    '/api/equipment/import',
+    {
+      method: 'POST',
+      body: formData,
     },
-    body: formData,
-  })
-
-  if (!response.ok) {
-    if (response.status === 401 || response.status === 403) {
-      clearToken()
-    }
-    const error = await response.json().catch(() => ({}))
-    const detail = error.detail
-    const message = typeof detail === 'string' ? detail : '导入失败'
-    throw new Error(message)
-  }
-
-  return response.json()
+    '导入失败',
+  )
 }
 
 export async function exportEquipment(filters = {}) {

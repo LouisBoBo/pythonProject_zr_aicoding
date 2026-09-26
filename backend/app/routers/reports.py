@@ -485,6 +485,7 @@ def list_daily_output_lines(
 
 
 WORK_HOUR_DIMENSIONS = ("detail", "employee", "employee_date", "employee_month", "project", "department")
+WORK_HOUR_SHIFT_VALUES = frozenset({"day", "night"})
 
 APPROVAL_STATUS_LABELS = {
     "pending": "待审批",
@@ -507,6 +508,7 @@ def _apply_work_hour_filters(
     department: str | None,
     employee_no: str | None,
     project_name: str | None,
+    shift_type: str | None = None,
 ):
     query = query.filter(
         EmployeeWorkHour.work_date >= date_from,
@@ -518,6 +520,8 @@ def _apply_work_hour_filters(
         query = query.filter(EmployeeWorkHour.employee_no == employee_no)
     if project_name:
         query = query.filter(EmployeeWorkHour.project_name == project_name)
+    if shift_type:
+        query = query.filter(EmployeeWorkHour.shift_type == shift_type)
     return query
 
 
@@ -529,6 +533,7 @@ def _build_work_hour_report_items(
     department: str | None,
     employee_no: str | None,
     project_name: str | None,
+    shift_type: str | None = None,
     dimension: str,
 ) -> list[EmployeeWorkHourReportItem]:
     query = db.query(EmployeeWorkHour)
@@ -539,6 +544,7 @@ def _build_work_hour_report_items(
         department=department,
         employee_no=employee_no,
         project_name=project_name,
+        shift_type=shift_type,
     )
 
     if dimension == "detail":
@@ -845,7 +851,7 @@ def _work_hour_export_row(item: EmployeeWorkHourReportItem, dimension: str) -> l
     response_model=EmployeeWorkHourReportListResponse,
     summary="员工工时",
     description=(
-        "查询员工工时数据，支持日期范围、部门、员工、项目筛选。"
+        "查询员工工时数据，支持日期范围、部门、员工、项目、班别筛选。"
         "统计维度：detail（明细）、employee（按员工汇总）、employee_date（按员工+日期）、"
         "employee_month（按员工+月份）、project（按项目）、department（按部门）。"
     ),
@@ -858,12 +864,15 @@ def list_employee_work_hours_report(
     department: str | None = Query(None, description="部门筛选"),
     employee_no: str | None = Query(None, description="工号筛选"),
     project_name: str | None = Query(None, description="项目筛选"),
+    shift_type: str | None = Query(None, description="班别筛选 day=白班 night=晚班"),
     dimension: str = Query("detail", description="统计维度"),
     _current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     if dimension not in WORK_HOUR_DIMENSIONS:
         dimension = "detail"
+    if shift_type is not None and shift_type not in WORK_HOUR_SHIFT_VALUES:
+        raise HTTPException(status_code=400, detail="班别无效，应为 day 或 night")
     date_from, date_to = _normalize_work_hour_date_range(date_from, date_to)
 
     all_items = _build_work_hour_report_items(
@@ -873,6 +882,7 @@ def list_employee_work_hours_report(
         department=department,
         employee_no=employee_no,
         project_name=project_name,
+        shift_type=shift_type,
         dimension=dimension,
     )
     total = len(all_items)
@@ -942,7 +952,6 @@ def list_employee_work_hour_filters(
 
 
 WORK_HOUR_APPROVAL_VALUES = frozenset({"pending", "approved", "rejected"})
-WORK_HOUR_SHIFT_VALUES = frozenset({"day", "night"})
 
 
 @router.post(
@@ -993,12 +1002,15 @@ def export_employee_work_hours_report(
     department: str | None = Query(None, description="部门筛选"),
     employee_no: str | None = Query(None, description="工号筛选"),
     project_name: str | None = Query(None, description="项目筛选"),
+    shift_type: str | None = Query(None, description="班别筛选 day=白班 night=晚班"),
     dimension: str = Query("detail", description="统计维度"),
     _current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     if dimension not in WORK_HOUR_DIMENSIONS:
         dimension = "detail"
+    if shift_type is not None and shift_type not in WORK_HOUR_SHIFT_VALUES:
+        raise HTTPException(status_code=400, detail="班别无效，应为 day 或 night")
     date_from, date_to = _normalize_work_hour_date_range(date_from, date_to)
 
     items = _build_work_hour_report_items(
@@ -1008,6 +1020,7 @@ def export_employee_work_hours_report(
         department=department,
         employee_no=employee_no,
         project_name=project_name,
+        shift_type=shift_type,
         dimension=dimension,
     )
 
