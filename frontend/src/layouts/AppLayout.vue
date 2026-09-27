@@ -378,6 +378,7 @@ const menuGroups = computed(() => {
             { path: '/warehouse/inventory', title: '物料库存', icon: Box },
             { path: '/warehouse/inbound', title: '物料入库', icon: List },
             { path: '/warehouse/outbound', title: '物料出库', icon: Box },
+            { path: '/warehouse/low-stock', title: '低库存预警', icon: Warning },
           ],
         },
       ],
