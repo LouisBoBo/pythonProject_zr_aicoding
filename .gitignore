@@ -1,3 +1,6 @@
+# MES 联调测试运行产物
+backend/_mes_test_done.json
+
 # Python
 __pycache__/
 *.py[cod]

@@ -1,0 +1,18 @@
+# MES 工程 · dev-pipeline 步骤 6 机器验证（在 default_workspace 根目录执行）
+dev_pipeline:
+  validate_commands:
+    - name: dsh-policy-doc-exists
+      cmd: test -f docs/DSH_FILE_POLICY.md
+      cwd: .
+    - name: dsh-policy-workspace-write
+      cmd: grep -q "workspace-write" docs/DSH_FILE_POLICY.md
+      cwd: .
+    - name: dsh-policy-session-workspace
+      cmd: grep -q "pythonProject_zr_aicoding" docs/DSH_FILE_POLICY.md
+      cwd: .
+    - name: dsh-policy-approval-ask
+      cmd: grep -q "Approval policy: ask" docs/DSH_FILE_POLICY.md
+      cwd: .
+    - name: dsh-policy-fails-closed
+      cmd: grep -q "fails closed" docs/DSH_FILE_POLICY.md
+      cwd: .

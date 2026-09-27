@@ -43,7 +43,8 @@ API_ZH: dict[tuple[str, str], dict[str, str]] = {
     ("POST", "/api/auth/login"): {
         "summary": "用户登录",
         "description": (
-            "使用用户名、密码和企业编码登录。"
+            "使用用户名、密码登录；`enterprise_code` 可选（默认「测试企业」），"
+            "便于 WorkBuddy/MES 集成客户端仅传账号密码。"
             "校验通过后返回 JWT `access_token`，后续接口请在 Header 中携带："
             "`Authorization: Bearer <token>`。"
         ),

@@ -2,8 +2,9 @@ from typing import Literal
 
 from datetime import date, datetime
 
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
+from app.config import settings
 from app.message_utils import message_level_from_category
 
 ENTERPRISE_CODES = ("江西中软", "江西中软电子有限公司", "前海中软", "测试企业")
@@ -16,9 +17,48 @@ class Token(BaseModel):
 
 
 class LoginRequest(BaseModel):
+    """Web 登录需选企业；WorkBuddy/MES 等集成客户端可不传 enterprise_code（使用默认值）。"""
+
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
     username: str = Field(min_length=1, max_length=50)
     password: str = Field(min_length=1)
-    enterprise_code: EnterpriseCode
+    enterprise_code: EnterpriseCode = Field(
+        default="测试企业",
+        validation_alias="enterpriseCode",
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_mes_login_body(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        body = dict(data)
+        if not str(body.get("username") or "").strip():
+            for alias in ("user", "account", "login_name", "loginName"):
+                alt = body.get(alias)
+                if isinstance(alt, str) and alt.strip():
+                    body["username"] = alt.strip()
+                    break
+        if not str(body.get("username") or "").strip() and str(body.get("password") or "").strip():
+            body["username"] = settings.mes_default_username
+        return body
+
+    @field_validator("username", mode="before")
+    @classmethod
+    def _strip_username(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip()
+        return value
+
+    @field_validator("enterprise_code", mode="before")
+    @classmethod
+    def _default_empty_enterprise(cls, value: object) -> object:
+        if value is None:
+            return "测试企业"
+        if isinstance(value, str) and not value.strip():
+            return "测试企业"
+        return value
 
 
 class UserResponse(BaseModel):

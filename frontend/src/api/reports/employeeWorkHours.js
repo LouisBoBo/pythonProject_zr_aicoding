@@ -27,6 +27,14 @@ export async function fetchEmployeeWorkHoursReport({
   return authFetch(`/api/reports/employee-work-hours?${params}`)
 }
 
+export async function createEmployeeWorkHour(payload) {
+  return authFetch('/api/reports/employee-work-hours', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }, '新增工时失败')
+}
+
 export async function exportEmployeeWorkHoursReport({
   dateFrom,
   dateTo,
@@ -45,12 +53,4 @@ export async function exportEmployeeWorkHoursReport({
   if (shiftType) params.set('shift_type', shiftType)
   if (dimension) params.set('dimension', dimension)
   return authFetchBlob(`/api/reports/employee-work-hours/export?${params}`)
-}
-
-export function createEmployeeWorkHour(payload) {
-  return authFetch('/api/reports/employee-work-hours', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
 }
