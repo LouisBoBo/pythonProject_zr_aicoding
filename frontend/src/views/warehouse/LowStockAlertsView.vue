@@ -45,26 +45,68 @@
 
       <template v-else>
         <el-table v-loading="loading" :data="items" stripe border style="width: 100%">
-          <el-table-column prop="material_code" label="物料编码" min-width="130" fixed="left" />
-          <el-table-column prop="material_name" label="物料名称" min-width="140" />
-          <el-table-column prop="warehouse_name" label="仓库" min-width="120" />
-          <el-table-column prop="last_inbound_at" label="入库时间" width="170">
-            <template #default="{ row }">{{ formatDateTime(row.last_inbound_at) }}</template>
-          </el-table-column>
-          <el-table-column prop="quantity" label="现存量" width="100" align="right">
-            <template #default="{ row }">{{ row.quantity.toLocaleString() }}</template>
-          </el-table-column>
-          <el-table-column prop="safety_stock" label="安全库存" width="100" align="right">
-            <template #default="{ row }">{{ row.safety_stock.toLocaleString() }}</template>
-          </el-table-column>
-          <el-table-column prop="shortage" label="缺口" width="90" align="right">
+          <el-table-column prop="shortage" label="缺口" width="90" align="right" fixed="left">
             <template #default="{ row }">
               <span class="shortage-value">{{ row.shortage.toLocaleString() }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="unit" label="单位" width="70" align="center" />
-          <el-table-column prop="updated_at" label="更新时间" width="170">
-            <template #default="{ row }">{{ formatDateTime(row.updated_at) }}</template>
+          <el-table-column prop="material_code" label="编码" min-width="120" fixed="left" />
+          <el-table-column prop="sales_order_list" label="销售订单列表" min-width="160" show-overflow-tooltip />
+          <el-table-column prop="new_build" label="新build" min-width="110" />
+          <el-table-column prop="project_name" label="项目" min-width="140" show-overflow-tooltip />
+          <el-table-column label="登记发货数量" width="130" align="right">
+            <template #default="{ row }">
+              <el-input-number
+                v-if="row.sales_order_id && !row.order_closed"
+                v-model="row._shipQty"
+                :min="1"
+                :max="row.remaining_shippable"
+                :controls="false"
+                size="small"
+                class="ship-qty-input"
+              />
+              <span v-else>{{ row.ship_register_qty ?? '—' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="登记发货时间" width="200">
+            <template #default="{ row }">
+              <el-date-picker
+                v-if="row.sales_order_id && !row.order_closed"
+                v-model="row._shipAt"
+                type="datetime"
+                value-format="YYYY-MM-DDTHH:mm:ss"
+                placeholder="选择时间"
+                size="small"
+                style="width: 100%"
+              />
+              <span v-else>{{ formatDateTime(row.ship_register_at) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="current_item" label="本项" width="100" align="center" />
+          <el-table-column prop="remaining_shippable" label="剩余可发" width="100" align="right">
+            <template #default="{ row }">{{ row.remaining_shippable.toLocaleString() }}</template>
+          </el-table-column>
+          <el-table-column label="发满关单" width="100" align="center">
+            <template #default="{ row }">
+              <el-tag v-if="row.order_closed" type="success" size="small">已关单</el-tag>
+              <el-tag v-else type="info" size="small">未关单</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="production_delivery_rate" label="生产·交付达成" width="130" align="center" />
+          <el-table-column label="操作" width="100" fixed="right" align="center">
+            <template #default="{ row }">
+              <el-button
+                v-if="row.sales_order_id && !row.order_closed"
+                type="primary"
+                link
+                size="small"
+                :loading="row._submitting"
+                @click="handleRegisterShipment(row)"
+              >
+                登记
+              </el-button>
+              <span v-else class="muted-text">—</span>
+            </template>
           </el-table-column>
         </el-table>
 
@@ -88,7 +130,7 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { fetchInventoryLowStock } from '../../api/inventoryLowStock'
+import { fetchInventoryLowStock, registerLowStockShipment } from '../../api/inventoryLowStock'
 
 const filters = reactive({
   warehouseName: '',
@@ -104,9 +146,21 @@ const total = ref(0)
 function formatDateTime(value) {
   if (!value) return '—'
   const d = new Date(value)
-  if (Number.isNaN(d.getTime())) return value
+  if (Number.isNaN(d.getTime())) return String(value).slice(0, 16).replace('T', ' ')
   const pad = (n) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+function decorateRows(rawItems) {
+  const now = new Date()
+  const pad = (n) => String(n).padStart(2, '0')
+  const defaultAt = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}:00`
+  return (rawItems || []).map((row) => ({
+    ...row,
+    _shipQty: row.remaining_shippable > 0 ? 1 : 1,
+    _shipAt: defaultAt,
+    _submitting: false,
+  }))
 }
 
 async function loadList() {
@@ -118,12 +172,39 @@ async function loadList() {
       warehouseName: filters.warehouseName || undefined,
       keyword: filters.keyword || undefined,
     })
-    items.value = data.items || []
+    items.value = decorateRows(data.items)
     total.value = data.total || 0
   } catch (err) {
     ElMessage.error(err.message || '加载低库存预警失败')
   } finally {
     loading.value = false
+  }
+}
+
+async function handleRegisterShipment(row) {
+  if (!row.sales_order_id) return
+  const qty = Number(row._shipQty)
+  if (!qty || qty < 1) {
+    ElMessage.warning('请填写登记发货数量')
+    return
+  }
+  if (qty > row.remaining_shippable) {
+    ElMessage.warning(`登记发货数量不能超过剩余可发（${row.remaining_shippable}）`)
+    return
+  }
+  row._submitting = true
+  try {
+    const updated = await registerLowStockShipment(row.id, {
+      salesOrderId: row.sales_order_id,
+      shipQty: qty,
+      shippedAt: row._shipAt || undefined,
+    })
+    Object.assign(row, decorateRows([updated])[0])
+    ElMessage.success(updated.order_closed ? '登记成功，订单已发满关单' : '登记发货成功')
+  } catch (err) {
+    ElMessage.error(err.message || '登记发货失败')
+  } finally {
+    row._submitting = false
   }
 }
 
@@ -201,6 +282,14 @@ onMounted(() => {
 .shortage-value {
   color: #f56c6c;
   font-weight: 600;
+}
+
+.ship-qty-input {
+  width: 100%;
+}
+
+.muted-text {
+  color: #c0c4cc;
 }
 
 .pagination-wrap {

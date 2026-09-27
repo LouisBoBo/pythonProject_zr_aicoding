@@ -1,13 +1,13 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
 from app.database import get_db
-from app.models import InventoryStock, MaterialInbound, User
+from app.models import InventoryStock, SalesOrder, ShipmentRecord, User
 
 router = APIRouter(prefix="/api/inventory-low-stock", tags=["库存低水位预警"])
 
@@ -17,14 +17,24 @@ class InventoryLowStockItem(BaseModel):
     material_code: str
     material_name: str
     warehouse_name: str
-    last_inbound_at: datetime | None = Field(
-        default=None, description="最近一次已入库单的入库时间（含年月日时）"
-    )
     quantity: int
     safety_stock: int
     unit: str
-    shortage: int = Field(description="缺口 = 安全库存 - 当前库存")
+    shortage: int = Field(description="缺口 = 安全库存 − 现存量")
     updated_at: datetime
+    # 编码与项目之间
+    sales_order_list: str = Field(default="", description="销售订单列表（逗号分隔）")
+    new_build: str = Field(default="", description="新 build 标识")
+    sales_order_id: int | None = Field(default=None, description="关联主销售订单 ID（登记发货用）")
+    # 项目与本项之间
+    project_name: str = Field(default="", description="项目")
+    ship_register_qty: int | None = Field(default=None, description="登记发货数量（最近一次）")
+    ship_register_at: datetime | None = Field(default=None, description="登记发货时间（最近一次）")
+    # 本项与生产·交付达成之间
+    current_item: str = Field(default="", description="本项")
+    remaining_shippable: int = Field(default=0, description="剩余可发")
+    order_closed: bool = Field(default=False, description="发满关单")
+    production_delivery_rate: str = Field(default="", description="生产·交付达成")
 
     model_config = {"from_attributes": True}
 
@@ -36,40 +46,112 @@ class InventoryLowStockListResponse(BaseModel):
     size: int
 
 
-def _latest_inbound_at_map(
-    db: Session, stocks: list[InventoryStock]
-) -> dict[tuple[int, int], datetime]:
-    """按物料+仓库取最近一条已入库单的 created_at（与物料入库列表「入库时间」口径一致）。"""
-    if not stocks:
-        return {}
-    pairs = {(s.material_id, s.warehouse_id) for s in stocks}
-    material_ids = {mid for mid, _ in pairs}
-    warehouse_ids = {wid for _, wid in pairs}
-    candidates = (
-        db.query(MaterialInbound)
-        .filter(
-            MaterialInbound.status == "completed",
-            MaterialInbound.material_id.in_(material_ids),
-            MaterialInbound.warehouse_id.in_(warehouse_ids),
-        )
+class RegisterShipmentBody(BaseModel):
+    sales_order_id: int = Field(description="销售订单 ID")
+    ship_qty: int = Field(ge=1, description="本次登记发货数量")
+    shipped_at: datetime | None = Field(default=None, description="登记发货时间，默认当前时间")
+
+
+def _open_sales_orders(db: Session) -> list[SalesOrder]:
+    return (
+        db.query(SalesOrder)
+        .filter(SalesOrder.status == "open")
+        .order_by(SalesOrder.order_no.asc())
         .all()
     )
-    latest: dict[tuple[int, int], datetime] = {}
-    for inbound in candidates:
-        key = (inbound.material_id, inbound.warehouse_id)
-        if key not in pairs:
-            continue
-        prev = latest.get(key)
-        if prev is None or inbound.created_at > prev:
-            latest[key] = inbound.created_at
+
+
+def _latest_shipment_map(
+    db: Session, order_ids: list[int]
+) -> dict[int, ShipmentRecord]:
+    if not order_ids:
+        return {}
+    records = (
+        db.query(ShipmentRecord)
+        .filter(ShipmentRecord.sales_order_id.in_(order_ids))
+        .order_by(ShipmentRecord.shipped_at.desc())
+        .all()
+    )
+    latest: dict[int, ShipmentRecord] = {}
+    for rec in records:
+        if rec.sales_order_id not in latest:
+            latest[rec.sales_order_id] = rec
     return latest
+
+
+def _delivery_rate_label(shipped: int, plan: int) -> str:
+    if plan <= 0:
+        return "—"
+    pct = min(100, round(shipped * 100 / plan))
+    return f"{pct}%"
+
+
+def _build_list_item(
+    row: InventoryStock,
+    open_orders: list[SalesOrder],
+    latest_shipments: dict[int, ShipmentRecord],
+    primary_order: SalesOrder | None = None,
+) -> InventoryLowStockItem:
+    primary: SalesOrder | None = primary_order
+    sales_order_list = ""
+    new_build = ""
+    if open_orders:
+        idx = row.material_id % len(open_orders)
+        if primary is None:
+            primary = open_orders[idx]
+        pick = [open_orders[(idx + i) % len(open_orders)] for i in range(min(3, len(open_orders)))]
+        sales_order_list = "、".join(o.order_no for o in pick)
+        if primary is not None:
+            new_build = f"Build-{primary.order_no.split('-')[-1]}"
+
+    ship_register_qty: int | None = None
+    ship_register_at: datetime | None = None
+    remaining_shippable = 0
+    order_closed = False
+    production_delivery_rate = "—"
+    sales_order_id: int | None = None
+
+    if primary is not None:
+        sales_order_id = primary.id
+        remaining_shippable = max(0, primary.plan_qty - primary.shipped_qty)
+        order_closed = primary.status == "closed" or primary.shipped_qty >= primary.plan_qty
+        production_delivery_rate = _delivery_rate_label(primary.shipped_qty, primary.plan_qty)
+        last_ship = latest_shipments.get(primary.id)
+        if last_ship is not None:
+            ship_register_qty = last_ship.ship_qty
+            ship_register_at = last_ship.shipped_at
+
+    project_name = row.material_name
+    current_item = f"{row.quantity}{row.unit}"
+
+    return InventoryLowStockItem(
+        id=row.id,
+        material_code=row.material_code,
+        material_name=row.material_name,
+        warehouse_name=row.warehouse_name,
+        quantity=row.quantity,
+        safety_stock=row.safety_stock,
+        unit=row.unit,
+        shortage=row.safety_stock - row.quantity,
+        updated_at=row.updated_at,
+        sales_order_list=sales_order_list,
+        new_build=new_build,
+        sales_order_id=sales_order_id,
+        project_name=project_name,
+        ship_register_qty=ship_register_qty,
+        ship_register_at=ship_register_at,
+        current_item=current_item,
+        remaining_shippable=remaining_shippable,
+        order_closed=order_closed,
+        production_delivery_rate=production_delivery_rate,
+    )
 
 
 @router.get(
     "",
     response_model=InventoryLowStockListResponse,
     summary="库存低水位预警列表",
-    description="查询当前库存低于安全库存的物料；库存低水位预警页数据来自本接口。",
+    description="展示当前库存低于安全库存的物料；缺口=安全库存−现存量，按缺口降序排列。",
 )
 def list_inventory_low_stock(
     page: int = Query(1, ge=1, description="页码"),
@@ -99,21 +181,66 @@ def list_inventory_low_stock(
 
     total = query.count()
     rows = query.offset((page - 1) * size).limit(size).all()
-    last_inbound_at_map = _latest_inbound_at_map(db, rows)
+    open_orders = _open_sales_orders(db)
+    order_ids = [o.id for o in open_orders]
+    latest_shipments = _latest_shipment_map(db, order_ids)
 
     items = [
-        InventoryLowStockItem(
-            id=row.id,
-            material_code=row.material_code,
-            material_name=row.material_name,
-            warehouse_name=row.warehouse_name,
-            last_inbound_at=last_inbound_at_map.get((row.material_id, row.warehouse_id)),
-            quantity=row.quantity,
-            safety_stock=row.safety_stock,
-            unit=row.unit,
-            shortage=row.safety_stock - row.quantity,
-            updated_at=row.updated_at,
-        )
+        _build_list_item(row, open_orders, latest_shipments)
         for row in rows
     ]
     return InventoryLowStockListResponse(items=items, total=total, page=page, size=size)
+
+
+@router.post(
+    "/{stock_id}/register-shipment",
+    response_model=InventoryLowStockItem,
+    summary="登记发货数量与时间",
+    description="校验不超过剩余可发；发满后自动关单。",
+)
+def register_low_stock_shipment(
+    stock_id: int,
+    body: RegisterShipmentBody,
+    _current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    row = db.query(InventoryStock).filter(InventoryStock.id == stock_id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="低库存记录不存在")
+
+    order = db.query(SalesOrder).filter(SalesOrder.id == body.sales_order_id).first()
+    if order is None:
+        raise HTTPException(status_code=404, detail="销售订单不存在")
+    if order.status == "closed":
+        raise HTTPException(status_code=400, detail="订单已关单，无法继续登记发货")
+
+    remaining = max(0, order.plan_qty - order.shipped_qty)
+    if body.ship_qty > remaining:
+        raise HTTPException(
+            status_code=400,
+            detail=f"登记发货数量不能超过剩余可发（{remaining}）",
+        )
+
+    shipped_at = body.shipped_at or datetime.utcnow()
+    db.add(
+        ShipmentRecord(
+            sales_order_id=order.id,
+            ship_qty=body.ship_qty,
+            shipped_at=shipped_at,
+        )
+    )
+    order.shipped_qty += body.ship_qty
+    if order.shipped_qty >= order.plan_qty:
+        order.status = "closed"
+
+    db.commit()
+    db.refresh(order)
+
+    open_orders = _open_sales_orders(db)
+    latest_shipments = _latest_shipment_map(db, [order.id])
+    return _build_list_item(
+        row,
+        open_orders,
+        latest_shipments,
+        primary_order=order,
+    )
