@@ -51,9 +51,12 @@
             </template>
           </el-table-column>
           <el-table-column prop="material_code" label="编码" min-width="120" fixed="left" />
+          <el-table-column prop="sales_order_in_stock" label="销售订单在库内" width="130" align="center" />
+          <el-table-column prop="no_order_ship_page" label="无建单与发货页" width="140" align="center" />
+          <el-table-column prop="over_ship_no_check" label="超发无校验" width="110" align="center" />
           <el-table-column prop="sales_order_list" label="销售订单列表" min-width="160" show-overflow-tooltip />
-          <el-table-column prop="new_build" label="新build" min-width="110" />
-          <el-table-column prop="project_name" label="项目" min-width="140" show-overflow-tooltip />
+          <el-table-column prop="new_build" label="新" min-width="110" />
+          <el-table-column prop="project_name" label="本项目" min-width="140" show-overflow-tooltip />
           <el-table-column label="登记发货数量" width="130" align="right">
             <template #default="{ row }">
               <el-input-number
@@ -91,6 +94,9 @@
               <el-tag v-if="row.order_closed" type="success" size="small">已关单</el-tag>
               <el-tag v-else type="info" size="small">未关单</el-tag>
             </template>
+          </el-table-column>
+          <el-table-column prop="p0" label="P0" width="70" align="center">
+            <template #default="{ row }">{{ row.p0 || '—' }}</template>
           </el-table-column>
           <el-table-column prop="production_delivery_rate" label="生产·交付达成" width="130" align="center" />
           <el-table-column label="操作" width="100" fixed="right" align="center">

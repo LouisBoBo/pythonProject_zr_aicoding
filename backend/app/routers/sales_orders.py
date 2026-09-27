@@ -21,6 +21,8 @@ class SalesOrderItem(BaseModel):
     plan_qty: int
     shipped_qty: int
     remaining_shippable: int = Field(description="剩余可发")
+    ship_register_qty: int | None = Field(default=None, description="登记发货数量（最近一次）")
+    ship_register_at: datetime | None = Field(default=None, description="登记发货时间（最近一次）")
     order_closed: bool = Field(description="发满关单")
     created_at: datetime
 
@@ -60,7 +62,28 @@ class RegisterShipmentBody(BaseModel):
     shipped_at: datetime | None = Field(default=None, description="登记发货时间，默认当前时间")
 
 
-def _order_item(order: SalesOrder) -> SalesOrderItem:
+def _latest_shipment_map(
+    db: Session, order_ids: list[int]
+) -> dict[int, ShipmentRecord]:
+    if not order_ids:
+        return {}
+    records = (
+        db.query(ShipmentRecord)
+        .filter(ShipmentRecord.sales_order_id.in_(order_ids))
+        .order_by(ShipmentRecord.shipped_at.desc(), ShipmentRecord.id.desc())
+        .all()
+    )
+    latest: dict[int, ShipmentRecord] = {}
+    for rec in records:
+        if rec.sales_order_id not in latest:
+            latest[rec.sales_order_id] = rec
+    return latest
+
+
+def _order_item(
+    order: SalesOrder,
+    latest_ship: ShipmentRecord | None = None,
+) -> SalesOrderItem:
     remaining = max(0, order.plan_qty - order.shipped_qty)
     closed = order.status == "closed" or order.shipped_qty >= order.plan_qty
     return SalesOrderItem(
@@ -72,6 +95,8 @@ def _order_item(order: SalesOrder) -> SalesOrderItem:
         plan_qty=order.plan_qty,
         shipped_qty=order.shipped_qty,
         remaining_shippable=remaining,
+        ship_register_qty=latest_ship.ship_qty if latest_ship else None,
+        ship_register_at=latest_ship.shipped_at if latest_ship else None,
         order_closed=closed,
         created_at=order.created_at,
     )
@@ -119,8 +144,9 @@ def list_sales_orders(
     query = query.order_by(SalesOrder.created_at.desc(), SalesOrder.id.desc())
     total = query.count()
     rows = query.offset((page - 1) * size).limit(size).all()
+    latest_map = _latest_shipment_map(db, [o.id for o in rows])
     return SalesOrderListResponse(
-        items=[_order_item(o) for o in rows],
+        items=[_order_item(o, latest_map.get(o.id)) for o in rows],
         total=total,
         page=page,
         size=size,
@@ -205,17 +231,17 @@ def register_sales_order_shipment(
         )
 
     shipped_at = body.shipped_at or datetime.utcnow()
-    db.add(
-        ShipmentRecord(
-            sales_order_id=order.id,
-            ship_qty=body.ship_qty,
-            shipped_at=shipped_at,
-        )
+    record = ShipmentRecord(
+        sales_order_id=order.id,
+        ship_qty=body.ship_qty,
+        shipped_at=shipped_at,
     )
+    db.add(record)
     order.shipped_qty += body.ship_qty
     if order.shipped_qty >= order.plan_qty:
         order.status = "closed"
 
     db.commit()
     db.refresh(order)
-    return _order_item(order)
+    db.refresh(record)
+    return _order_item(order, record)

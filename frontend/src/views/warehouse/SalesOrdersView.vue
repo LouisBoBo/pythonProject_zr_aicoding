@@ -64,6 +64,14 @@
         <el-table-column prop="remaining_shippable" label="剩余可发" width="100" align="right">
           <template #default="{ row }">{{ row.remaining_shippable.toLocaleString() }}</template>
         </el-table-column>
+        <el-table-column label="登记发货数量" width="120" align="right">
+          <template #default="{ row }">
+            {{ row.ship_register_qty != null ? row.ship_register_qty.toLocaleString() : '—' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="登记发货时间" width="170">
+          <template #default="{ row }">{{ formatDateTime(row.ship_register_at) }}</template>
+        </el-table-column>
         <el-table-column label="发满关单" width="100" align="center">
           <template #default="{ row }">
             <el-tag v-if="row.order_closed" type="success" size="small">已关单</el-tag>
@@ -351,9 +359,9 @@ async function submitShip() {
       shipQty: qty,
       shippedAt: shipForm.shipped_at || undefined,
     })
-    Object.assign(row, updated)
     ElMessage.success(updated.order_closed ? '登记成功，订单已发满关单' : '登记发货成功')
     shipVisible.value = false
+    await loadList()
   } catch (err) {
     ElMessage.error(err.message || '登记发货失败')
   } finally {

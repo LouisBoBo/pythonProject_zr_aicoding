@@ -22,18 +22,22 @@ class InventoryLowStockItem(BaseModel):
     unit: str
     shortage: int = Field(description="缺口 = 安全库存 − 现存量")
     updated_at: datetime
-    # 编码与项目之间
+    # 编码与销售订单列表之间
+    sales_order_in_stock: str = Field(default="", description="销售订单在库内")
+    no_order_ship_page: str = Field(default="", description="无建单与发货页")
+    over_ship_no_check: str = Field(default="", description="超发无校验")
     sales_order_list: str = Field(default="", description="销售订单列表（逗号分隔）")
-    new_build: str = Field(default="", description="新 build 标识")
+    new_build: str = Field(default="", description="新")
     sales_order_id: int | None = Field(default=None, description="关联主销售订单 ID（登记发货用）")
-    # 项目与本项之间
-    project_name: str = Field(default="", description="项目")
+    # 本项目与本项之间
+    project_name: str = Field(default="", description="本项目")
     ship_register_qty: int | None = Field(default=None, description="登记发货数量（最近一次）")
     ship_register_at: datetime | None = Field(default=None, description="登记发货时间（最近一次）")
     # 本项与生产·交付达成之间
     current_item: str = Field(default="", description="本项")
     remaining_shippable: int = Field(default=0, description="剩余可发")
     order_closed: bool = Field(default=False, description="发满关单")
+    p0: str = Field(default="", description="P0")
     production_delivery_rate: str = Field(default="", description="生产·交付达成")
 
     model_config = {"from_attributes": True}
@@ -93,6 +97,9 @@ def _build_list_item(
     primary_order: SalesOrder | None = None,
 ) -> InventoryLowStockItem:
     primary: SalesOrder | None = primary_order
+    sales_order_in_stock = "否"
+    no_order_ship_page = "否"
+    over_ship_no_check = "否"
     sales_order_list = ""
     new_build = ""
     if open_orders:
@@ -109,17 +116,26 @@ def _build_list_item(
     remaining_shippable = 0
     order_closed = False
     production_delivery_rate = "—"
+    p0 = ""
     sales_order_id: int | None = None
+
+    if open_orders:
+        sales_order_in_stock = "是" if row.quantity > 0 else "否"
 
     if primary is not None:
         sales_order_id = primary.id
         remaining_shippable = max(0, primary.plan_qty - primary.shipped_qty)
         order_closed = primary.status == "closed" or primary.shipped_qty >= primary.plan_qty
+        if primary.shipped_qty > primary.plan_qty:
+            over_ship_no_check = "是"
         production_delivery_rate = _delivery_rate_label(primary.shipped_qty, primary.plan_qty)
         last_ship = latest_shipments.get(primary.id)
         if last_ship is not None:
             ship_register_qty = last_ship.ship_qty
             ship_register_at = last_ship.shipped_at
+
+    shortage_val = row.safety_stock - row.quantity
+    p0 = "P0" if shortage_val >= max(1, row.safety_stock // 2) else ""
 
     project_name = row.material_name
     current_item = f"{row.quantity}{row.unit}"
@@ -134,6 +150,9 @@ def _build_list_item(
         unit=row.unit,
         shortage=row.safety_stock - row.quantity,
         updated_at=row.updated_at,
+        sales_order_in_stock=sales_order_in_stock,
+        no_order_ship_page=no_order_ship_page,
+        over_ship_no_check=over_ship_no_check,
         sales_order_list=sales_order_list,
         new_build=new_build,
         sales_order_id=sales_order_id,
@@ -143,6 +162,7 @@ def _build_list_item(
         current_item=current_item,
         remaining_shippable=remaining_shippable,
         order_closed=order_closed,
+        p0=p0,
         production_delivery_rate=production_delivery_rate,
     )
 
