@@ -63,6 +63,13 @@
           <el-table-column prop="updated_at" label="更新时间" width="170">
             <template #default="{ row }">{{ formatDateTime(row.updated_at) }}</template>
           </el-table-column>
+          <el-table-column prop="status" label="状态" width="90" align="center" fixed="right">
+            <template #default="{ row }">
+              <el-tag :type="statusTagType(row.status)" size="small" effect="light">
+                {{ row.status || '—' }}
+              </el-tag>
+            </template>
+          </el-table-column>
         </el-table>
 
         <div class="pagination-wrap">
@@ -104,6 +111,12 @@ function formatDateTime(value) {
   if (Number.isNaN(d.getTime())) return value
   const pad = (n) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+function statusTagType(status) {
+  if (status === '缺货') return 'danger'
+  if (status === '低库存') return 'warning'
+  return 'info'
 }
 
 async function loadList() {

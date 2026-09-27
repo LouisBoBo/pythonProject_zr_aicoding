@@ -22,6 +22,7 @@ class InventoryLowStockItem(BaseModel):
     unit: str
     shortage: int = Field(description="缺口 = 安全库存 - 当前库存")
     updated_at: datetime
+    status: str = Field(description="预警状态：缺货 / 低库存")
 
     model_config = {"from_attributes": True}
 
@@ -33,11 +34,17 @@ class InventoryLowStockListResponse(BaseModel):
     size: int
 
 
+def _low_stock_status(quantity: int) -> str:
+    if quantity <= 0:
+        return "缺货"
+    return "低库存"
+
+
 @router.get(
     "",
     response_model=InventoryLowStockListResponse,
     summary="库存低水位预警列表",
-    description="查询当前库存低于安全库存的物料；库存低水位预警页数据来自本接口。",
+    description="查询当前库存低于安全库存的物料；低库存预警页表格字段与本接口 items 一致。",
 )
 def list_inventory_low_stock(
     page: int = Query(1, ge=1, description="页码"),
@@ -79,6 +86,7 @@ def list_inventory_low_stock(
             unit=row.unit,
             shortage=row.safety_stock - row.quantity,
             updated_at=row.updated_at,
+            status=_low_stock_status(row.quantity),
         )
         for row in rows
     ]
