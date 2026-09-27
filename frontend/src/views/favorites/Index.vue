@@ -3,7 +3,7 @@
     <header class="page-header">
       <div class="header-main">
         <h1 class="page-title">收藏夹</h1>
-        <p class="page-sub">已收藏的网页与功能入口</p>
+        <p class="page-sub">已收藏的网页与功能入口（按当前登录账号隔离，最多 {{ maxCount }} 条）</p>
       </div>
       <el-button :icon="Refresh" @click="loadList">刷新</el-button>
     </header>
@@ -32,14 +32,14 @@
         <el-table-column label="操作" width="160" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="openFavorite(row)">打开</el-button>
-            <el-button link type="danger" @click="removeFavorite(row)">取消收藏</el-button>
+            <el-button link type="danger" @click="confirmRemove(row)">取消收藏</el-button>
           </template>
         </el-table-column>
       </el-table>
 
       <div v-else-if="!loading" class="empty-wrap">
         <el-empty description="暂无收藏网页">
-          <p class="empty-hint">在系统内收藏页面后，将在此显示列表。</p>
+          <p class="empty-hint">点击顶栏星标收藏页面后，将在此显示列表。</p>
         </el-empty>
       </div>
     </section>
@@ -51,14 +51,20 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
-
-/** 与全站收藏写入约定一致（localStorage JSON 数组） */
-const STORAGE_KEY = 'erp_page_favorites_v1'
+import { fetchCurrentUser } from '../../api/auth'
+import {
+  FAVORITES_MAX,
+  favoritesStorageKey,
+  readFavorites,
+  removeFavoriteById,
+} from '../../utils/pageFavorites'
 
 const route = useRoute()
 const router = useRouter()
 const loading = ref(false)
 const items = ref([])
+const username = ref('')
+const maxCount = FAVORITES_MAX
 
 const currentPageTitle = computed(() => {
   const t = route.meta?.title
@@ -67,40 +73,10 @@ const currentPageTitle = computed(() => {
 
 const currentPagePath = computed(() => route.fullPath || route.path || '/')
 
-function normalizeItem(raw, index) {
-  const url = String(raw?.url ?? raw?.path ?? '').trim()
-  const title = String(raw?.title ?? raw?.name ?? url || '未命名').trim()
-  if (!url) return null
-  return {
-    id: raw?.id ?? `${url}-${index}`,
-    title,
-    url,
-    created_at: raw?.created_at ?? raw?.createdAt ?? null,
-  }
-}
-
-function readStoredFavorites() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return []
-    return parsed
-      .map((entry, index) => normalizeItem(entry, index))
-      .filter(Boolean)
-  } catch {
-    return []
-  }
-}
-
-function writeStoredFavorites(list) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(list))
-}
-
 function loadList() {
   loading.value = true
   try {
-    items.value = readStoredFavorites()
+    items.value = readFavorites(username.value)
   } finally {
     loading.value = false
   }
@@ -128,7 +104,7 @@ function openFavorite(row) {
   router.push(url.startsWith('/') ? url : `/${url}`)
 }
 
-async function removeFavorite(row) {
+async function confirmRemove(row) {
   try {
     await ElMessageBox.confirm(`确定取消收藏「${row.title}」？`, '取消收藏', {
       type: 'warning',
@@ -138,21 +114,23 @@ async function removeFavorite(row) {
   } catch {
     return
   }
-  const next = items.value.filter((item) => item.id !== row.id)
-  writeStoredFavorites(
-    next.map(({ title, url, created_at }) => ({ title, url, created_at })),
-  )
-  items.value = next
+  items.value = removeFavoriteById(username.value, row.id)
   ElMessage.success('已取消收藏')
 }
 
 function onStorageEvent(event) {
-  if (event.key === STORAGE_KEY) {
+  if (event.key === favoritesStorageKey(username.value)) {
     loadList()
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
+  try {
+    const user = await fetchCurrentUser()
+    username.value = user?.username || ''
+  } catch {
+    username.value = ''
+  }
   loadList()
   window.addEventListener('storage', onStorageEvent)
 })

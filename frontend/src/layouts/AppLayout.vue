@@ -138,6 +138,18 @@
             />
             <el-button class="search-btn" :icon="Search" @click="handleSearch" />
           </div>
+          <el-tooltip
+            :content="pageFavorited ? '取消收藏当前页' : '收藏当前页'"
+            placement="bottom"
+          >
+            <el-button
+              class="favorite-btn"
+              :class="{ 'is-favorited': pageFavorited }"
+              :icon="Star"
+              circle
+              @click="togglePageFavorite"
+            />
+          </el-tooltip>
           <el-dropdown trigger="click" class="org-dropdown">
             <div class="org-selector">
               <el-icon class="org-lock"><Lock /></el-icon>
@@ -224,10 +236,16 @@ import {
   EditPen,
   ChatDotRound,
 } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import { clearToken, fetchCurrentUser } from '../api/auth'
 import { fetchUnreadCount } from '../api/messages'
 import { resolveReportIcon } from '../config/reportIcons.js'
 import { getReportMenuEntries } from '../router/reportRoutes.js'
+import {
+  addFavorite,
+  isFavorited,
+  removeFavoriteByUrl,
+} from '../utils/pageFavorites'
 
 const router = useRouter()
 const route = useRoute()
@@ -236,6 +254,7 @@ const sidebarCollapsed = ref(false)
 const searchKeyword = ref('')
 const user = ref(null)
 const unreadCount = ref(0)
+const favoriteTick = ref(0)
 
 const expandedGroups = reactive({
   overview: true,
@@ -412,6 +431,44 @@ const userInitial = computed(() => {
   const name = user.value?.username || '李'
   return name.charAt(0).toUpperCase()
 })
+
+const currentFavoriteUrl = computed(() => route.fullPath || route.path || '/')
+
+const currentFavoriteTitle = computed(() => {
+  const t = route.meta?.title
+  if (typeof t === 'string' && t.trim()) return t.trim()
+  const tab = topTabs.find(
+    (item) =>
+      route.path === item.path || route.path.startsWith(`${item.path}/`),
+  )
+  return tab?.label || currentFavoriteUrl.value
+})
+
+const pageFavorited = computed(() => {
+  favoriteTick.value
+  return isFavorited(user.value?.username || '', currentFavoriteUrl.value)
+})
+
+function togglePageFavorite() {
+  const username = user.value?.username || ''
+  const url = currentFavoriteUrl.value
+  if (isFavorited(username, url)) {
+    removeFavoriteByUrl(username, url)
+    favoriteTick.value += 1
+    ElMessage.success('已取消收藏')
+    return
+  }
+  const result = addFavorite(username, {
+    title: currentFavoriteTitle.value,
+    url,
+  })
+  favoriteTick.value += 1
+  if (!result.ok) {
+    ElMessage.warning('无法收藏当前页')
+    return
+  }
+  ElMessage.success('已收藏到收藏夹')
+}
 
 function toggleGroup(key) {
   expandedGroups[key] = !expandedGroups[key]
@@ -775,6 +832,22 @@ onMounted(async () => {
 .search-btn:hover {
   background: rgba(255, 255, 255, 0.28);
   color: #fff;
+}
+
+.favorite-btn {
+  background: rgba(255, 255, 255, 0.12);
+  border: none;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.favorite-btn:hover {
+  background: rgba(255, 255, 255, 0.22);
+  color: #ffd666;
+}
+
+.favorite-btn.is-favorited {
+  color: #ffd666;
+  background: rgba(255, 214, 102, 0.18);
 }
 
 .search-input :deep(.el-input__inner) {
