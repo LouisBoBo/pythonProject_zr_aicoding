@@ -72,6 +72,9 @@
         <el-table-column label="入库日期" width="110">
           <template #default="{ row }">{{ formatDate(row.inbound_date) }}</template>
         </el-table-column>
+        <el-table-column label="入库时间" width="170">
+          <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
+        </el-table-column>
         <el-table-column label="经办人" width="90">
           <template #default="{ row }">{{ row.handler || '—' }}</template>
         </el-table-column>
@@ -270,6 +273,14 @@ function statusLabel(status) {
 function formatDate(value) {
   if (!value) return '—'
   return String(value).slice(0, 10)
+}
+
+function formatDateTime(value) {
+  if (!value) return '—'
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return String(value).slice(0, 16).replace('T', ' ')
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
 function rowClassName() {
