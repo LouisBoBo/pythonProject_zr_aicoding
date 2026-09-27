@@ -23,6 +23,7 @@ import MaterialInventoryView from '../views/warehouse/MaterialInventoryView.vue'
 import MaterialInboundListView from '../views/warehouse/MaterialInboundListView.vue'
 import LowStockAlertsView from '../views/warehouse/LowStockAlertsView.vue'
 import SalesOrdersView from '../views/warehouse/SalesOrdersView.vue'
+import SalesOrderCreateView from '../views/warehouse/SalesOrderCreateView.vue'
 import ReportsIndex from '../views/reports/Index.vue'
 import { buildReportRoutes } from './reportRoutes.js'
 import SettingsIndex from '../views/settings/Index.vue'
@@ -147,10 +148,16 @@ const router = createRouter({
           meta: { title: '低库存预警', ...authRequired },
         },
         {
+          path: 'warehouse/sales-orders/new',
+          name: 'warehouse-sales-orders-new',
+          component: SalesOrderCreateView,
+          meta: { title: '新建销售订单', ...authRequired },
+        },
+        {
           path: 'warehouse/sales-orders',
           name: 'warehouse-sales-orders',
           component: SalesOrdersView,
-          meta: { title: '销售订单与发货', ...authRequired },
+          meta: { title: '销售订单', ...authRequired },
         },
         { path: 'warehouse/:id', redirect: '/warehouse/inventory' },
         {
