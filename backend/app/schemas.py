@@ -272,7 +272,8 @@ class EmployeeWorkHourReportItem(BaseModel):
     shift_type: str | None = Field(default=None, description="班别 day=白班 night=晚班")
     work_hours: float = Field(description="工时数")
     overtime_hours: float = Field(description="加班工时")
-    approval_status: str | None = Field(default=None, description="审批/状态")
+    approval_status: str | None = Field(default=None, description="审批")
+    status: str | None = Field(default=None, description="状态")
     record_count: int | None = Field(default=None, description="明细条数（汇总维度）")
 
 

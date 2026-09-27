@@ -57,7 +57,7 @@ export function getReportMenuEntries() {
     .filter((item) => item.menu !== false)
     .map((item) => ({
       path: `/reports/${item.routePath}`,
-      title: item.title,
+      title: item.menuTitle || item.title,
       icon: item.icon,
       menuGroup: item.menuGroup,
     }))
