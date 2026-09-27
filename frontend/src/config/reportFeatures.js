@@ -40,8 +40,8 @@ export const REPORT_CATALOG = [
     title: '员工工时报表',
     description: '按日期区间与部门查询员工工时明细，支持多维度汇总、填报与 Excel 导出',
     icon: 'Timer',
-    menu: false,
-    hub: false,
+    menu: true,
+    hub: true,
     enabled: true,
   },
   {
