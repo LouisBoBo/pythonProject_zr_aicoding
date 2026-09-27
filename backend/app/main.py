@@ -80,6 +80,27 @@ def seed_default_user():
         db.close()
 
 
+def ensure_sales_orders_ordered_at():
+    """为 sales_orders 表补齐 ordered_at（下单时间）列，存量回填为 created_at。"""
+    inspector = inspect(engine)
+    if not inspector.has_table("sales_orders"):
+        return
+    columns = [column["name"] for column in inspector.get_columns("sales_orders")]
+    if "ordered_at" not in columns:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE sales_orders ADD COLUMN ordered_at DATETIME"))
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                UPDATE sales_orders
+                SET ordered_at = created_at
+                WHERE ordered_at IS NULL AND created_at IS NOT NULL
+                """
+            )
+        )
+
+
 def ensure_work_orders_actual_start_time():
     """为已有数据库的 work_orders 表补齐 actual_start_time 列，并回填已开工/已完成且为空的演示数据。"""
     inspector = inspect(engine)
@@ -1135,6 +1156,7 @@ def ensure_employee_work_hours_recent_backfill():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    ensure_sales_orders_ordered_at()
     ensure_work_orders_actual_start_time()
     ensure_work_orders_actual_end_time()
     ensure_work_orders_current_process()

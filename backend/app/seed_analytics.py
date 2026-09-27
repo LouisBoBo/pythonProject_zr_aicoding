@@ -562,6 +562,7 @@ def seed_analytics_data() -> None:
         ]
         sales_orders: list[SalesOrder] = []
         for order_no, customer, due_offset, status, plan_qty, shipped_qty in sales_defs:
+            created = now - timedelta(days=20 + abs(due_offset))
             order = SalesOrder(
                 order_no=order_no,
                 customer=customer,
@@ -569,7 +570,8 @@ def seed_analytics_data() -> None:
                 status=status,
                 plan_qty=plan_qty,
                 shipped_qty=shipped_qty,
-                created_at=now - timedelta(days=20 + abs(due_offset)),
+                ordered_at=created - timedelta(hours=2),
+                created_at=created,
             )
             db.add(order)
             sales_orders.append(order)

@@ -679,6 +679,9 @@ class SalesOrder(Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="open")
     plan_qty: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     shipped_qty: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    ordered_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.utcnow
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=datetime.utcnow
     )

@@ -24,6 +24,7 @@ class SalesOrderItem(BaseModel):
     ship_register_qty: int | None = Field(default=None, description="登记发货数量（最近一次）")
     ship_register_at: datetime | None = Field(default=None, description="登记发货时间（最近一次）")
     order_closed: bool = Field(description="发满关单")
+    order_time: datetime = Field(description="下单时间")
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -98,6 +99,7 @@ def _order_item(
         ship_register_qty=latest_ship.ship_qty if latest_ship else None,
         ship_register_at=latest_ship.shipped_at if latest_ship else None,
         order_closed=closed,
+        order_time=order.ordered_at,
         created_at=order.created_at,
     )
 
@@ -166,6 +168,7 @@ def create_sales_order(
     order_no = (body.order_no or "").strip() or _generate_order_no(db)
     if db.query(SalesOrder).filter(SalesOrder.order_no == order_no).first():
         raise HTTPException(status_code=400, detail="订单号已存在")
+    now = datetime.utcnow()
     order = SalesOrder(
         order_no=order_no,
         customer=body.customer.strip(),
@@ -173,6 +176,8 @@ def create_sales_order(
         status="open",
         plan_qty=body.plan_qty,
         shipped_qty=0,
+        ordered_at=now,
+        created_at=now,
     )
     db.add(order)
     db.commit()
