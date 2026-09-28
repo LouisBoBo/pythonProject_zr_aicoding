@@ -22,7 +22,6 @@ from app.models import (
     Warehouse,
     WarehouseLocation,
 )
-from app.routers.sales_orders import SalesOrderListResponse, list_sales_orders
 from app.schemas import (
     InventoryStockListResponse,
     InventoryStockResponse,
@@ -592,27 +591,3 @@ def create_material_inbound(
         raise HTTPException(status_code=409, detail="入库单号冲突，请重试")
 
     return MaterialInboundResponse.model_validate(inbound)
-
-
-@router.get(
-    "/sales-orders",
-    response_model=SalesOrderListResponse,
-    summary="销售订单列表",
-)
-def warehouse_list_sales_orders(
-    page: int = Query(1, ge=1),
-    size: int = Query(10, ge=1, le=100),
-    keyword: str | None = Query(None, description="订单号或客户（模糊）"),
-    status: str | None = Query(None, description="状态 open / closed"),
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """销售订单列表（含下单时间 order_time），与 /api/sales-orders 字段一致。"""
-    return list_sales_orders(
-        page=page,
-        size=size,
-        keyword=keyword,
-        status=status,
-        _current_user=current_user,
-        db=db,
-    )
