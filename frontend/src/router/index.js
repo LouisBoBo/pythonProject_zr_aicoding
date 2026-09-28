@@ -132,7 +132,7 @@ const router = createRouter({
         {
           path: 'warehouse/inbound',
           name: 'warehouse-inbound',
-          component: SalesOrdersView,
+          component: MaterialInboundListView,
           meta: { title: '物料入库', ...authRequired },
         },
         {
@@ -156,7 +156,7 @@ const router = createRouter({
         {
           path: 'warehouse/sales-orders',
           name: 'warehouse-sales-orders',
-          component: MaterialInboundListView,
+          component: SalesOrdersView,
           meta: { title: '销售订单', ...authRequired },
         },
         { path: 'warehouse/:id', redirect: '/warehouse/inventory' },

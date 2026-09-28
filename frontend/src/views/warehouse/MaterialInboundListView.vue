@@ -1,134 +1,93 @@
 <template>
-  <div class="work-hours-page">
-    <el-card shadow="never" class="search-card">
-      <el-form :model="searchForm" inline class="search-form">
-        <el-form-item label="日期范围">
-          <el-date-picker
-            v-model="searchForm.dateRange"
-            type="daterange"
-            range-separator="至"
-            start-placeholder="开始日期"
-            end-placeholder="结束日期"
-            value-format="YYYY-MM-DD"
-            clearable
-            style="width: 260px"
-          />
-        </el-form-item>
-        <el-form-item label="部门">
-          <el-select
-            v-model="searchForm.department"
-            placeholder="全部"
-            clearable
-            filterable
-            style="width: 150px"
-          >
-            <el-option v-for="dept in filterOptions.departments" :key="dept" :label="dept" :value="dept" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="工号">
-          <el-select
-            v-model="searchForm.employeeNo"
-            placeholder="全部"
-            clearable
-            filterable
-            style="width: 130px"
-          >
-            <el-option
-              v-for="emp in filterOptions.employees"
-              :key="emp.employee_no"
-              :label="emp.employee_no"
-              :value="emp.employee_no"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="项目">
-          <el-select
-            v-model="searchForm.projectName"
-            placeholder="全部"
-            clearable
-            filterable
-            style="width: 150px"
-          >
-            <el-option v-for="p in filterOptions.projects" :key="p" :label="p" :value="p" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="班别">
-          <el-select v-model="searchForm.shiftType" placeholder="全部" clearable style="width: 110px">
-            <el-option label="全部" value="" />
-            <el-option label="白班" value="day" />
-            <el-option label="晚班" value="night" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="审批">
-          <el-select v-model="searchForm.approvalStatus" placeholder="全部" clearable style="width: 120px">
-            <el-option label="全部" value="" />
-            <el-option label="待审批" value="pending" />
-            <el-option label="已通过" value="approved" />
-            <el-option label="已驳回" value="rejected" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="状态">
-          <el-select v-model="searchForm.status" placeholder="全部" clearable style="width: 120px">
-            <el-option label="全部" value="" />
-            <el-option label="待生效" value="pending_effect" />
-            <el-option label="已生效" value="effective" />
-            <el-option label="已作废" value="void" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="展示">
-          <el-select v-model="searchForm.dimension" style="width: 130px">
-            <el-option label="明细" value="detail" />
-            <el-option label="按员工汇总" value="employee" />
-          </el-select>
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" @click="handleSearch">查询</el-button>
-          <el-button @click="handleReset">重置</el-button>
-        </el-form-item>
-      </el-form>
-    </el-card>
-
-    <el-card shadow="never" class="table-card">
-      <div class="table-toolbar">
-        <span class="table-title">员工工时报表</span>
-        <span v-if="total > 0" class="sum-text">
-          工时合计 {{ formatHours(workHoursSum) }} · 加班合计 {{ formatHours(overtimeHoursSum) }}
-        </span>
+  <div class="inbound-page">
+    <header class="page-header">
+      <div class="header-main">
+        <h1 class="page-title">物料入库</h1>
+        <p class="page-sub">入库单查询 · 新增登记 · 状态跟踪</p>
       </div>
+      <el-button type="primary" @click="openCreate">新增入库</el-button>
+    </header>
 
-      <el-table v-loading="loading" :data="items" stripe border style="width: 100%">
-        <el-table-column prop="employee_name" label="员工" min-width="100" />
-        <!-- 标注：工号列位于「员工」与「部门」之间 -->
-        <el-table-column prop="employee_no" label="工号" width="110" />
-        <el-table-column prop="department" label="部门" min-width="120" />
-        <el-table-column v-if="showDetailColumns" prop="project_name" label="项目" min-width="120">
-          <template #default="{ row }">{{ row.project_name || '—' }}</template>
+    <section class="filter-bar">
+      <el-input
+        v-model="filters.inboundNo"
+        placeholder="入库单号"
+        clearable
+        style="width: 160px"
+        @keyup.enter="handleSearch"
+      />
+      <el-input
+        v-model="filters.materialCode"
+        placeholder="物料编码"
+        clearable
+        style="width: 140px"
+        @keyup.enter="handleSearch"
+      />
+      <el-input
+        v-model="filters.materialName"
+        placeholder="物料名称"
+        clearable
+        style="width: 140px"
+        @keyup.enter="handleSearch"
+      />
+      <el-date-picker
+        v-model="filters.dateRange"
+        type="daterange"
+        range-separator="至"
+        start-placeholder="入库起"
+        end-placeholder="入库止"
+        value-format="YYYY-MM-DD"
+        style="width: 260px"
+      />
+      <el-select v-model="filters.status" placeholder="状态" clearable style="width: 120px">
+        <el-option label="待入库" value="pending" />
+        <el-option label="已入库" value="completed" />
+      </el-select>
+      <el-button type="primary" @click="handleSearch">查询</el-button>
+      <el-button @click="handleReset">重置</el-button>
+    </section>
+
+    <section class="table-section">
+      <el-table
+        v-loading="loading"
+        :data="items"
+        border
+        :row-class-name="rowClassName"
+        style="width: 100%"
+      >
+        <el-table-column prop="inbound_no" label="入库单号" min-width="140" fixed="left" />
+        <el-table-column prop="material_code" label="物料编码" min-width="120" />
+        <el-table-column prop="material_name" label="物料名称" min-width="130" />
+        <el-table-column label="规格型号" min-width="110">
+          <template #default="{ row }">{{ row.spec || '—' }}</template>
         </el-table-column>
-        <el-table-column v-if="showDetailColumns" prop="task_name" label="任务" min-width="120">
-          <template #default="{ row }">{{ row.task_name || '—' }}</template>
+        <el-table-column prop="quantity" label="入库数量" width="100" align="right">
+          <template #default="{ row }">{{ row.quantity.toLocaleString() }}</template>
         </el-table-column>
-        <el-table-column v-if="showDetailColumns" prop="work_date" label="日期" width="120">
-          <template #default="{ row }">{{ row.work_date || '—' }}</template>
+        <el-table-column prop="unit" label="单位" width="70" align="center" />
+        <el-table-column prop="warehouse_name" label="仓库" min-width="110" />
+        <el-table-column label="库位" width="100">
+          <template #default="{ row }">{{ row.location_code || '—' }}</template>
         </el-table-column>
-        <!-- 标注：第7列「班别」与第8列「工时」衔接（班别/工时/加班/审批状态区） -->
-        <el-table-column v-if="showDetailColumns" prop="shift_type" label="班别" width="80">
-          <template #default="{ row }">{{ row.shift_type || '—' }}</template>
+        <el-table-column label="入库日期" width="110">
+          <template #default="{ row }">{{ formatDate(row.inbound_date) }}</template>
         </el-table-column>
-        <el-table-column prop="work_hours" label="工时" width="90" align="right">
-          <template #default="{ row }">{{ formatHours(row.work_hours) }}</template>
+        <el-table-column label="入库时间" width="170">
+          <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
         </el-table-column>
-        <el-table-column prop="overtime_hours" label="加班工时" width="100" align="right">
-          <template #default="{ row }">{{ formatHours(row.overtime_hours) }}</template>
+        <el-table-column label="经办人" width="90">
+          <template #default="{ row }">{{ row.handler || '—' }}</template>
         </el-table-column>
-        <el-table-column prop="approval_status" label="审批" width="90">
-          <template #default="{ row }">{{ row.approval_status || '—' }}</template>
-        </el-table-column>
-        <el-table-column prop="status" label="状态" width="90">
-          <template #default="{ row }">{{ row.status || '—' }}</template>
+        <el-table-column label="状态" width="90" align="center" fixed="right">
+          <template #default="{ row }">
+            <span class="status-tag" :class="'st-' + row.status">
+              {{ statusLabel(row.status) }}
+            </span>
+          </template>
         </el-table-column>
       </el-table>
 
-      <div v-if="total > 0" class="pagination-wrap">
+      <div class="pagination-wrap">
         <el-pagination
           v-model:current-page="page"
           v-model:page-size="pageSize"
@@ -136,125 +95,231 @@
           :page-sizes="[10, 20, 50]"
           layout="total, sizes, prev, pager, next"
           background
-          @size-change="loadReport"
-          @current-change="loadReport"
+          @size-change="loadList"
+          @current-change="loadList"
         />
       </div>
-    </el-card>
+    </section>
+
+    <el-dialog
+      v-model="createVisible"
+      title="新增物料入库"
+      width="520px"
+      destroy-on-close
+      @closed="resetCreateForm"
+    >
+      <el-form
+        ref="createFormRef"
+        :model="createForm"
+        :rules="createRules"
+        label-width="96px"
+      >
+        <el-form-item label="物料" prop="materialId">
+          <el-select
+            v-model="createForm.materialId"
+            placeholder="选择物料"
+            filterable
+            style="width: 100%"
+            @change="onMaterialChange"
+          >
+            <el-option
+              v-for="m in materialOptions"
+              :key="m.id"
+              :label="`${m.material_code} · ${m.material_name}`"
+              :value="m.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="规格型号">
+          <el-input :model-value="selectedMaterial?.spec || '—'" disabled />
+        </el-form-item>
+        <el-form-item label="入库数量" prop="quantity">
+          <el-input-number
+            v-model="createForm.quantity"
+            :min="1"
+            :max="999999"
+            controls-position="right"
+            style="width: 100%"
+          />
+        </el-form-item>
+        <el-form-item label="单位">
+          <el-input :model-value="selectedMaterial?.unit || '—'" disabled />
+        </el-form-item>
+        <el-form-item label="仓库" prop="warehouseId">
+          <el-select
+            v-model="createForm.warehouseId"
+            placeholder="选择仓库"
+            style="width: 100%"
+            @change="onWarehouseChange"
+          >
+            <el-option
+              v-for="wh in warehouseOptions"
+              :key="wh.id"
+              :label="wh.name"
+              :value="wh.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="库位">
+          <el-select
+            v-model="createForm.locationId"
+            placeholder="可选库位"
+            clearable
+            filterable
+            style="width: 100%"
+          >
+            <el-option
+              v-for="loc in filteredLocations"
+              :key="loc.id"
+              :label="loc.location_code"
+              :value="loc.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="入库日期" prop="inboundDate">
+          <el-date-picker
+            v-model="createForm.inboundDate"
+            type="date"
+            value-format="YYYY-MM-DD"
+            placeholder="选择日期"
+            style="width: 100%"
+          />
+        </el-form-item>
+        <el-form-item label="经办人" prop="handler">
+          <el-input v-model="createForm.handler" placeholder="经办人姓名" clearable />
+        </el-form-item>
+        <el-form-item label="状态" prop="status">
+          <el-radio-group v-model="createForm.status">
+            <el-radio value="pending">待入库</el-radio>
+            <el-radio value="completed">已入库</el-radio>
+          </el-radio-group>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="createVisible = false">取消</el-button>
+        <el-button type="primary" :loading="submitting" @click="handleSubmit">
+          提交
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-/** 员工工时报表（路由组件文件名为 MaterialInboundListView.vue） */
-defineOptions({ name: 'EmployeeWorkHoursReportWarehouseView' })
-
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { appendPagination, authFetch } from '../../api/http.js'
+import {
+  createMaterialInbound,
+  fetchLocationOptions,
+  fetchMaterialInboundList,
+  fetchMaterialOptions,
+  fetchWarehouseOptions,
+} from '../../api/warehouse'
 
-function defaultDateRange() {
-  const end = new Date()
-  const start = new Date()
-  start.setDate(end.getDate() - 6)
-  const fmt = (d) => {
-    const y = d.getFullYear()
-    const m = String(d.getMonth() + 1).padStart(2, '0')
-    const day = String(d.getDate()).padStart(2, '0')
-    return `${y}-${m}-${day}`
-  }
-  return [fmt(start), fmt(end)]
-}
+const STATUS_MAP = { pending: '待入库', completed: '已入库' }
 
-const loading = ref(false)
+const filters = reactive({
+  inboundNo: '',
+  materialCode: '',
+  materialName: '',
+  status: '',
+  dateRange: null,
+})
+
 const items = ref([])
-const total = ref(0)
+const loading = ref(false)
 const page = ref(1)
 const pageSize = ref(10)
-const overtimeHoursSum = ref(0)
-const workHoursSum = ref(0)
-const filterOptions = reactive({
-  departments: [],
-  employees: [],
-  projects: [],
+const total = ref(0)
+
+const createVisible = ref(false)
+const submitting = ref(false)
+const createFormRef = ref(null)
+const materialOptions = ref([])
+const warehouseOptions = ref([])
+const locationOptions = ref([])
+
+const createForm = reactive({
+  materialId: null,
+  quantity: 1,
+  warehouseId: null,
+  locationId: null,
+  inboundDate: new Date().toISOString().slice(0, 10),
+  handler: '',
+  status: 'completed',
 })
 
-const searchForm = reactive({
-  dateRange: defaultDateRange(),
-  department: '',
-  employeeNo: '',
-  projectName: '',
-  shiftType: '',
-  approvalStatus: '',
-  status: '',
-  dimension: 'detail',
-})
-
-/** 明细维度展示项目/任务/日期/班别列 */
-const showDetailColumns = computed(() => searchForm.dimension === 'detail')
-
-function queryParams() {
-  const dr = searchForm.dateRange
-  return {
-    date_from: (dr && dr[0]) || undefined,
-    date_to: (dr && dr[1]) || undefined,
-    department: searchForm.department || undefined,
-    employee_no: searchForm.employeeNo || undefined,
-    project_name: searchForm.projectName || undefined,
-    shift_type: searchForm.shiftType || undefined,
-    approval_status: searchForm.approvalStatus || undefined,
-    status: searchForm.status || undefined,
-    dimension: searchForm.dimension || 'detail',
-  }
+const createRules = {
+  materialId: [{ required: true, message: '请选择物料', trigger: 'change' }],
+  quantity: [{ required: true, message: '请输入入库数量', trigger: 'blur' }],
+  warehouseId: [{ required: true, message: '请选择仓库', trigger: 'change' }],
+  inboundDate: [{ required: true, message: '请选择入库日期', trigger: 'change' }],
 }
 
-function formatHours(value) {
-  if (value === null || value === undefined || value === '') return '—'
-  const n = Number(value)
-  if (Number.isNaN(n)) return '—'
-  return n.toFixed(1)
+const selectedMaterial = computed(() =>
+  materialOptions.value.find((m) => m.id === createForm.materialId),
+)
+
+const filteredLocations = computed(() =>
+  createForm.warehouseId
+    ? locationOptions.value.filter((loc) => loc.warehouse_id === createForm.warehouseId)
+    : [],
+)
+
+function statusLabel(status) {
+  return STATUS_MAP[status] || status
 }
 
-async function fetchEmployeeWorkHoursFromWarehouse({ page: p, pageSize: size, ...rest } = {}) {
-  const params = new URLSearchParams()
-  appendPagination(params, { page: p, pageSize: size })
-  Object.entries(rest).forEach(([key, val]) => {
-    if (val !== undefined && val !== null && val !== '') params.set(key, String(val))
-  })
-  return authFetch(`/api/warehouse/employee-work-hours?${params.toString()}`)
+function formatDate(value) {
+  if (!value) return '—'
+  return String(value).slice(0, 10)
 }
 
-async function loadFilters() {
+function formatDateTime(value) {
+  if (!value) return '—'
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return String(value).slice(0, 16).replace('T', ' ')
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+function rowClassName() {
+  return 'inbound-row'
+}
+
+async function loadOptions() {
   try {
-    const resp = await authFetch('/api/reports/employee-work-hours/filters')
-    filterOptions.departments = resp.departments || []
-    filterOptions.employees = resp.employees || []
-    filterOptions.projects = resp.projects || []
+    const [materials, warehouses, locations] = await Promise.all([
+      fetchMaterialOptions(),
+      fetchWarehouseOptions(),
+      fetchLocationOptions(),
+    ])
+    materialOptions.value = materials || []
+    warehouseOptions.value = warehouses || []
+    locationOptions.value = locations || []
   } catch (err) {
-    filterOptions.departments = []
-    filterOptions.employees = []
-    filterOptions.projects = []
-    ElMessage.warning(err?.message || '加载筛选选项失败')
+    ElMessage.error(err.message || '加载选项失败')
   }
 }
 
-async function loadReport() {
+async function loadList() {
   loading.value = true
   try {
-    const resp = await fetchEmployeeWorkHoursFromWarehouse({
+    const [dateFrom, dateTo] = filters.dateRange || []
+    const data = await fetchMaterialInboundList({
       page: page.value,
       pageSize: pageSize.value,
-      ...queryParams(),
+      inboundNo: filters.inboundNo || undefined,
+      materialCode: filters.materialCode || undefined,
+      materialName: filters.materialName || undefined,
+      status: filters.status || undefined,
+      dateFrom,
+      dateTo,
     })
-    items.value = resp.items || []
-    total.value = resp.total || 0
-    workHoursSum.value = resp.work_hours_sum || 0
-    overtimeHoursSum.value = resp.overtime_hours_sum || 0
+    items.value = data.items || []
+    total.value = data.total || 0
   } catch (err) {
-    items.value = []
-    total.value = 0
-    workHoursSum.value = 0
-    overtimeHoursSum.value = 0
-    ElMessage.error(err.message || '加载员工工时报表失败')
+    ElMessage.error(err.message || '加载入库列表失败')
   } finally {
     loading.value = false
   }
@@ -262,67 +327,151 @@ async function loadReport() {
 
 function handleSearch() {
   page.value = 1
-  loadReport()
+  loadList()
 }
 
 function handleReset() {
-  searchForm.dateRange = defaultDateRange()
-  searchForm.department = ''
-  searchForm.employeeNo = ''
-  searchForm.projectName = ''
-  searchForm.shiftType = ''
-  searchForm.approvalStatus = ''
-  searchForm.status = ''
-  searchForm.dimension = 'detail'
+  filters.inboundNo = ''
+  filters.materialCode = ''
+  filters.materialName = ''
+  filters.status = ''
+  filters.dateRange = null
   page.value = 1
-  loadReport()
+  loadList()
 }
 
-onMounted(() => {
-  loadFilters()
-  loadReport()
+function openCreate() {
+  createVisible.value = true
+}
+
+function resetCreateForm() {
+  createForm.materialId = null
+  createForm.quantity = 1
+  createForm.warehouseId = null
+  createForm.locationId = null
+  createForm.inboundDate = new Date().toISOString().slice(0, 10)
+  createForm.handler = ''
+  createForm.status = 'completed'
+  createFormRef.value?.clearValidate()
+}
+
+function onMaterialChange() {
+  // spec/unit auto from selectedMaterial
+}
+
+function onWarehouseChange() {
+  createForm.locationId = null
+}
+
+async function handleSubmit() {
+  const valid = await createFormRef.value?.validate().catch(() => false)
+  if (!valid) return
+
+  submitting.value = true
+  try {
+    await createMaterialInbound({
+      material_id: createForm.materialId,
+      quantity: createForm.quantity,
+      warehouse_id: createForm.warehouseId,
+      location_id: createForm.locationId || null,
+      inbound_date: createForm.inboundDate,
+      handler: createForm.handler || null,
+      status: createForm.status,
+    })
+    ElMessage.success('入库单已提交')
+    createVisible.value = false
+    page.value = 1
+    loadList()
+  } catch (err) {
+    ElMessage.error(err.message || '提交失败')
+  } finally {
+    submitting.value = false
+  }
+}
+
+onMounted(async () => {
+  await loadOptions()
+  loadList()
 })
 </script>
 
 <style scoped>
-.work-hours-page {
+.inbound-page {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 0;
+  min-height: calc(100vh - 120px);
+  background: #f5f7fa;
+  margin: -16px;
+  padding: 0;
 }
 
-.search-card,
-.table-card {
-  border-radius: 8px;
-}
-
-.search-form {
-  margin-bottom: 0;
-}
-
-.table-toolbar {
+.page-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 12px;
+  padding: 20px 24px 16px;
+  background: #fff;
+  border-bottom: 1px solid #ebeef5;
 }
 
-.table-title {
-  font-size: 16px;
+.page-title {
+  margin: 0;
+  font-size: 20px;
   font-weight: 600;
   color: #303133;
 }
 
-.sum-text {
+.page-sub {
+  margin: 4px 0 0;
   font-size: 13px;
-  color: var(--el-text-color-secondary);
+  color: #909399;
+}
+
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 24px;
+  background: #fff;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.table-section {
+  flex: 1;
+  padding: 16px 24px 24px;
+  background: #fff;
+  margin: 12px 16px 16px;
+  border-radius: 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .pagination-wrap {
   display: flex;
   justify-content: flex-end;
   margin-top: 16px;
+}
+
+:deep(.inbound-row:hover > td) {
+  background-color: #f5f9ff !important;
+}
+
+.status-tag {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.st-pending {
+  color: #e6a23c;
+  background: #fdf6ec;
+}
+
+.st-completed {
+  color: #409eff;
+  background: #ecf5ff;
 }
 </style>
