@@ -67,7 +67,6 @@
         </div>
         <div class="toolbar-right">
           <span class="sum-text">工时合计 {{ formatHours(workHoursSum) }}</span>
-          <span class="sum-text">加班合计 {{ formatHours(overtimeHoursSum) }}</span>
         </div>
       </div>
 
@@ -92,6 +91,9 @@
         </el-table-column>
         <el-table-column prop="overtime_hours" label="加班工时" width="90" align="right">
           <template #default="{ row }">{{ formatHours(row.overtime_hours) }}</template>
+        </el-table-column>
+        <el-table-column prop="status" label="状态" width="90" align="center">
+          <template #default="{ row }">{{ row.status || '—' }}</template>
         </el-table-column>
         <el-table-column prop="approval_status" label="审批" width="90" align="center">
           <template #default="{ row }">{{ row.approval_status || '—' }}</template>
@@ -143,7 +145,6 @@ const pageSize = ref(10)
 const departmentOptions = ref([])
 const projectOptions = ref([])
 const workHoursSum = ref(0)
-const overtimeHoursSum = ref(0)
 const dateRange = ref(defaultDateRange())
 
 const filters = reactive({
@@ -192,13 +193,11 @@ async function loadReport() {
     items.value = resp.items || []
     total.value = resp.total || 0
     workHoursSum.value = resp.work_hours_sum || 0
-    overtimeHoursSum.value = resp.overtime_hours_sum || 0
   } catch (err) {
     ElMessage.error(err.message || '加载报表失败')
     items.value = []
     total.value = 0
     workHoursSum.value = 0
-    overtimeHoursSum.value = 0
   } finally {
     loading.value = false
   }

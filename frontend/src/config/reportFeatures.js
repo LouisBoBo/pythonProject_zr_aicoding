@@ -33,18 +33,6 @@ export const REPORT_CATALOG = [
     enabled: true,
   },
   {
-    id: 'employee-work-hours',
-    routePath: 'employee-work-hours',
-    viewFile: 'EmployeeWorkHourReportView.vue',
-    apiFile: 'employeeWorkHours.js',
-    title: '员工工时报表',
-    description: '按员工、项目、部门查询工时与加班明细',
-    icon: 'Timer',
-    menu: true,
-    hub: true,
-    enabled: true,
-  },
-  {
     id: 'equipment-oee',
     routePath: 'equipment-oee',
     viewFile: 'EquipmentOeeReportView.vue',

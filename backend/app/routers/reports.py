@@ -492,6 +492,27 @@ APPROVAL_STATUS_LABELS = {
     "rejected": "已驳回",
 }
 
+WORK_HOUR_STATUS_BY_APPROVAL_LABEL = {
+    "待审批": "待生效",
+    "已通过": "已生效",
+    "已驳回": "已作废",
+}
+
+
+def enrich_work_hour_report_rows(
+    items: list[EmployeeWorkHourReportItem],
+) -> list[EmployeeWorkHourReportItem]:
+    """员工工时报表：由审批推导「状态」列（待生效/已生效/已作废）。"""
+    enriched: list[EmployeeWorkHourReportItem] = []
+    for item in items:
+        approval = item.approval_status or "—"
+        if approval == "汇总":
+            row_status = "汇总"
+        else:
+            row_status = WORK_HOUR_STATUS_BY_APPROVAL_LABEL.get(approval, "—")
+        enriched.append(item.model_copy(update={"status": row_status}))
+    return enriched
+
 SHIFT_TYPE_LABELS = {
     "day": "白班",
     "night": "晚班",
@@ -843,6 +864,7 @@ def list_employee_work_hour_report(
         approval_status=approval_filter,
         dimension=dimension,
     )
+    all_items = enrich_work_hour_report_rows(all_items)
     total = len(all_items)
     work_hours_sum = round(sum(item.work_hours for item in all_items), 2)
     overtime_hours_sum = round(sum(item.overtime_hours for item in all_items), 2)
