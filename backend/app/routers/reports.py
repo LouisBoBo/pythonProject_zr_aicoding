@@ -802,7 +802,7 @@ def _work_hour_export_headers(dimension: str) -> list[str]:
             "班别",
             "工时数",
             "加班工时",
-            "审批/状态",
+            "审批",
         ]
     if dimension == "employee_date":
         return [

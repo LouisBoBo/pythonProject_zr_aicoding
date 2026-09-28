@@ -96,9 +96,6 @@
         <el-table-column prop="overtime_hours" label="加班工时" width="90" align="right">
           <template #default="{ row }">{{ formatHours(row.overtime_hours) }}</template>
         </el-table-column>
-        <el-table-column prop="status" label="状态" width="90" align="center">
-          <template #default="{ row }">{{ row.status || '—' }}</template>
-        </el-table-column>
         <el-table-column prop="approval_status" label="审批" width="90" align="center">
           <template #default="{ row }">{{ row.approval_status || '—' }}</template>
         </el-table-column>
