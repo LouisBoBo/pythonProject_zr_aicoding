@@ -1,10 +1,10 @@
-import { appendPagination, authFetch, authFetchBlob } from './http.js'
+import { appendPagination, authFetch } from './http.js'
 
 export async function fetchEmployeeWorkHourFilters() {
   return authFetch('/api/reports/employee-work-hours/filters')
 }
 
-export async function fetchEmployeeWorkHoursReport({
+export async function fetchEmployeeWorkHourReport({
   page = 1,
   pageSize = 10,
   dateFrom,
@@ -27,46 +27,4 @@ export async function fetchEmployeeWorkHoursReport({
   if (approvalStatus) params.set('approval_status', approvalStatus)
   if (dimension) params.set('dimension', dimension)
   return authFetch(`/api/reports/employee-work-hours?${params}`)
-}
-
-export async function batchApproveEmployeeWorkHours({ ids, approvalStatus }) {
-  return authFetch(
-    '/api/reports/employee-work-hours/batch-approval',
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids, approval_status: approvalStatus }),
-    },
-    '批量审批失败',
-  )
-}
-
-export async function createEmployeeWorkHour(payload) {
-  return authFetch('/api/reports/employee-work-hours', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  }, '新增工时失败')
-}
-
-export async function exportEmployeeWorkHoursReport({
-  dateFrom,
-  dateTo,
-  department,
-  employeeNo,
-  projectName,
-  shiftType,
-  approvalStatus,
-  dimension = 'detail',
-} = {}) {
-  const params = new URLSearchParams()
-  if (dateFrom) params.set('date_from', dateFrom)
-  if (dateTo) params.set('date_to', dateTo)
-  if (department) params.set('department', department)
-  if (employeeNo) params.set('employee_no', employeeNo)
-  if (projectName) params.set('project_name', projectName)
-  if (shiftType) params.set('shift_type', shiftType)
-  if (approvalStatus) params.set('approval_status', approvalStatus)
-  if (dimension) params.set('dimension', dimension)
-  return authFetchBlob(`/api/reports/employee-work-hours/export?${params}`)
 }

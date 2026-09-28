@@ -32,6 +32,7 @@ from app.schemas import (
     DailyOutputLinesResponse,
     DailyOutputReportItem,
     EmployeeWorkHourReportItem,
+    EmployeeWorkHourReportListResponse,
     EquipmentDowntimeFilterEquipment,
     EquipmentDowntimeFiltersResponse,
     EquipmentDowntimeDimensionStat,
@@ -748,6 +749,114 @@ def _normalize_work_hour_date_range(
     if date_from > date_to:
         date_from, date_to = date_to, date_from
     return date_from, date_to
+
+
+class EmployeeWorkHourFiltersResponse(BaseModel):
+    departments: list[str] = Field(description="可选部门列表")
+    projects: list[str] = Field(description="可选项目名称列表")
+
+
+@router.get(
+    "/employee-work-hours/filters",
+    response_model=EmployeeWorkHourFiltersResponse,
+    summary="员工工时报表筛选选项",
+    description="返回部门与项目名称列表，供员工工时报表筛选下拉使用。",
+)
+def list_employee_work_hour_filters(
+    _current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    departments = sorted(
+        {
+            dept
+            for (dept,) in db.query(EmployeeWorkHour.department)
+            .filter(EmployeeWorkHour.department.isnot(None), EmployeeWorkHour.department != "")
+            .distinct()
+            .all()
+            if dept
+        }
+    )
+    projects = sorted(
+        {
+            name
+            for (name,) in db.query(EmployeeWorkHour.project_name)
+            .filter(EmployeeWorkHour.project_name.isnot(None), EmployeeWorkHour.project_name != "")
+            .distinct()
+            .all()
+            if name
+        }
+    )
+    return EmployeeWorkHourFiltersResponse(departments=departments, projects=projects)
+
+
+@router.get(
+    "/employee-work-hours",
+    response_model=EmployeeWorkHourReportListResponse,
+    summary="员工工时报表",
+    description=(
+        "按日期范围、部门、工号、项目等条件查询员工工时明细或汇总。"
+        "默认近 30 日、detail 维度；支持 employee / employee_date / employee_month / project / department 汇总。"
+        "报表中心「员工工时报表」页数据来自本接口。"
+    ),
+)
+def list_employee_work_hour_report(
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(10, ge=1, le=100, description="每页条数"),
+    date_from: date | None = Query(None, description="工作日期起（含）"),
+    date_to: date | None = Query(None, description="工作日期止（含）"),
+    department: str | None = Query(None, description="部门（精确匹配）"),
+    employee_no: str | None = Query(None, description="工号（精确匹配）"),
+    project_name: str | None = Query(None, description="项目名称（精确匹配）"),
+    shift_type: str | None = Query(None, description="班别：day=白班 / night=晚班"),
+    approval_status: str | None = Query(
+        None, description="审批状态：pending / approved / rejected / all（不过滤）"
+    ),
+    dimension: str = Query("detail", description="统计维度"),
+    _current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if dimension not in WORK_HOUR_DIMENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"dimension 无效，可选：{', '.join(WORK_HOUR_DIMENSIONS)}",
+        )
+    if shift_type and shift_type not in WORK_HOUR_SHIFT_VALUES:
+        raise HTTPException(status_code=400, detail="shift_type 无效，可选：day / night")
+    approval_filter: str | None = approval_status
+    if approval_filter == "all":
+        approval_filter = None
+    elif approval_filter and approval_filter not in WORK_HOUR_APPROVAL_VALUES:
+        raise HTTPException(
+            status_code=400,
+            detail="approval_status 无效，可选：pending / approved / rejected / all",
+        )
+
+    date_from, date_to = _normalize_work_hour_date_range(date_from, date_to)
+    all_items = _build_work_hour_report_items(
+        db,
+        date_from=date_from,
+        date_to=date_to,
+        department=department,
+        employee_no=employee_no,
+        project_name=project_name,
+        shift_type=shift_type,
+        approval_status=approval_filter,
+        dimension=dimension,
+    )
+    total = len(all_items)
+    work_hours_sum = round(sum(item.work_hours for item in all_items), 2)
+    overtime_hours_sum = round(sum(item.overtime_hours for item in all_items), 2)
+    start = (page - 1) * page_size
+    page_items = all_items[start : start + page_size]
+    return EmployeeWorkHourReportListResponse(
+        items=page_items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        dimension=dimension,
+        work_hours_sum=work_hours_sum,
+        overtime_hours_sum=overtime_hours_sum,
+    )
 
 
 REPAIR_STATUS_LABELS = {
