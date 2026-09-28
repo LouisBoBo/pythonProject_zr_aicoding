@@ -443,25 +443,6 @@ API_ZH: dict[tuple[str, str], dict[str, str]] = {
         "summary": "日产报表产线选项",
         "description": "返回产线名称列表，供日产报表筛选下拉使用。",
     },
-    ("GET", "/api/reports/employee-work-hours"): {
-        "summary": "员工工时报表",
-        "description": (
-            "查询 employee_work_hours 表工时数据，支持日期范围、部门、员工、项目、班别筛选与多统计维度。"
-            "报表中心「员工工时报表」页使用本接口。"
-        ),
-    },
-    ("GET", "/api/reports/employee-work-hours/filters"): {
-        "summary": "员工工时报表筛选选项",
-        "description": "返回部门、员工、项目下拉选项。",
-    },
-    ("POST", "/api/reports/employee-work-hours"): {
-        "summary": "新增员工工时",
-        "description": "员工工时报表页录入单条工时，写入 employee_work_hours。",
-    },
-    ("GET", "/api/reports/employee-work-hours/export"): {
-        "summary": "导出员工工时报表 Excel",
-        "description": "按当前筛选条件与统计维度导出 Excel 文件。",
-    },
     ("GET", "/api/reports/equipment-metrics"): {
         "summary": "设备报表",
         "description": (
