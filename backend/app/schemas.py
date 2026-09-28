@@ -262,6 +262,7 @@ class DailyOutputLinesResponse(BaseModel):
 class EmployeeWorkHourReportItem(BaseModel):
     """员工工时报表行。"""
 
+    id: int | None = Field(default=None, description="明细记录 ID（仅 detail 维度）")
     employee_name: str = Field(description="员工姓名")
     employee_no: str = Field(description="工号")
     department: str = Field(description="所属部门")
@@ -275,6 +276,17 @@ class EmployeeWorkHourReportItem(BaseModel):
     approval_status: str | None = Field(default=None, description="审批")
     status: str | None = Field(default=None, description="状态")
     record_count: int | None = Field(default=None, description="明细条数（汇总维度）")
+
+
+class EmployeeWorkHourBatchApprovalRequest(BaseModel):
+    """批量通过/驳回待审批工时。"""
+
+    ids: list[int] = Field(min_length=1, description="待审批记录 ID 列表")
+    approval_status: str = Field(description="目标状态 approved / rejected")
+
+
+class EmployeeWorkHourBatchApprovalResponse(BaseModel):
+    updated: int = Field(description="实际更新条数（仅 pending 会被更新）")
 
 
 class EmployeeWorkHourReportListResponse(BaseModel):

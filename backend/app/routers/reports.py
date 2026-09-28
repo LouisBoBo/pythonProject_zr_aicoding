@@ -31,6 +31,8 @@ from app.models import (
 from app.schemas import (
     DailyOutputLinesResponse,
     DailyOutputReportItem,
+    EmployeeWorkHourBatchApprovalRequest,
+    EmployeeWorkHourBatchApprovalResponse,
     EmployeeWorkHourCreate,
     EmployeeWorkHourFilterEmployee,
     EmployeeWorkHourFiltersResponse,
@@ -486,6 +488,9 @@ def list_daily_output_lines(
 
 WORK_HOUR_DIMENSIONS = ("detail", "employee", "employee_date", "employee_month", "project", "department")
 WORK_HOUR_SHIFT_VALUES = frozenset({"day", "night"})
+WORK_HOUR_APPROVAL_VALUES = frozenset({"pending", "approved", "rejected"})
+# 查询参数额外允许 all（不过滤）；非法值一律 400
+WORK_HOUR_APPROVAL_QUERY_VALUES = WORK_HOUR_APPROVAL_VALUES | {"all"}
 
 APPROVAL_STATUS_LABELS = {
     "pending": "待审批",
@@ -511,6 +516,29 @@ def _shift_label(shift: str | None) -> str:
     return SHIFT_TYPE_LABELS.get(shift, shift)
 
 
+def _parse_work_hour_approval_status(
+    value: str | None,
+    *,
+    default: str | None = None,
+) -> str | None:
+    """解析审批筛选：返回 pending/approved/rejected，或 None 表示不过滤（all）。
+
+    default：参数未传时的默认语义（export 默认 approved；list 默认 all）。
+    """
+    if value is None or str(value).strip() == "":
+        raw = default
+    else:
+        raw = str(value).strip().lower()
+    if raw is None or raw == "all":
+        return None
+    if raw not in WORK_HOUR_APPROVAL_VALUES:
+        raise HTTPException(
+            status_code=400,
+            detail="审批状态无效，应为 pending / approved / rejected / all",
+        )
+    return raw
+
+
 def _apply_work_hour_filters(
     query,
     *,
@@ -520,6 +548,7 @@ def _apply_work_hour_filters(
     employee_no: str | None,
     project_name: str | None,
     shift_type: str | None = None,
+    approval_status: str | None = None,
 ):
     query = query.filter(
         EmployeeWorkHour.work_date >= date_from,
@@ -533,6 +562,8 @@ def _apply_work_hour_filters(
         query = query.filter(EmployeeWorkHour.project_name == project_name)
     if shift_type:
         query = query.filter(EmployeeWorkHour.shift_type == shift_type)
+    if approval_status:
+        query = query.filter(EmployeeWorkHour.approval_status == approval_status)
     return query
 
 
@@ -545,6 +576,7 @@ def _build_work_hour_report_items(
     employee_no: str | None,
     project_name: str | None,
     shift_type: str | None = None,
+    approval_status: str | None = None,
     dimension: str,
 ) -> list[EmployeeWorkHourReportItem]:
     query = db.query(EmployeeWorkHour)
@@ -556,6 +588,7 @@ def _build_work_hour_report_items(
         employee_no=employee_no,
         project_name=project_name,
         shift_type=shift_type,
+        approval_status=approval_status,
     )
 
     if dimension == "detail":
@@ -566,6 +599,7 @@ def _build_work_hour_report_items(
         ).all()
         return [
             EmployeeWorkHourReportItem(
+                id=row.id,
                 employee_name=row.employee_name,
                 employee_no=row.employee_no,
                 department=row.department,
@@ -865,9 +899,10 @@ def _work_hour_export_row(item: EmployeeWorkHourReportItem, dimension: str) -> l
     response_model=EmployeeWorkHourReportListResponse,
     summary="员工工时",
     description=(
-        "查询员工工时数据，支持日期范围、部门、员工、项目、班别筛选。"
-        "统计维度：detail（明细）、employee（按员工汇总）、employee_date（按员工+日期）、"
-        "employee_month（按员工+月份）、project（按项目）、department（按部门）。"
+        "查询员工工时数据，支持日期范围、部门、员工、项目、班别、审批状态筛选。"
+        "列表明细默认展示全部审批状态（便于审批操作）；"
+        "合计默认仅统计已通过（R01），include_unapproved=true 可含未通过。"
+        "统计维度：detail / employee / employee_date / employee_month / project / department。"
     ),
 )
 def list_employee_work_hours_report(
@@ -879,6 +914,14 @@ def list_employee_work_hours_report(
     employee_no: str | None = Query(None, description="工号筛选"),
     project_name: str | None = Query(None, description="项目筛选"),
     shift_type: str | None = Query(None, description="班别筛选 day=白班 night=晚班"),
+    approval_status: str | None = Query(
+        None,
+        description="审批筛选 pending/approved/rejected/all；未传=all（明细可审）",
+    ),
+    include_unapproved: bool = Query(
+        False,
+        description="为 true 时合计含未通过；默认 false（合计仅已通过）",
+    ),
     dimension: str = Query("detail", description="统计维度"),
     _current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -887,10 +930,10 @@ def list_employee_work_hours_report(
         dimension = "detail"
     if shift_type is not None and shift_type not in WORK_HOUR_SHIFT_VALUES:
         raise HTTPException(status_code=400, detail="班别无效，应为 day 或 night")
+    status_filter = _parse_work_hour_approval_status(approval_status, default="all")
     date_from, date_to = _normalize_work_hour_date_range(date_from, date_to)
 
-    all_items = _build_work_hour_report_items(
-        db,
+    build_kwargs = dict(
         date_from=date_from,
         date_to=date_to,
         department=department,
@@ -899,9 +942,28 @@ def list_employee_work_hours_report(
         shift_type=shift_type,
         dimension=dimension,
     )
+    # 明细未筛选时展示全部（便于审批）；非明细汇总未筛选时默认已通过口径（R01）
+    if status_filter is None and dimension != "detail":
+        item_status = "approved"
+    else:
+        item_status = status_filter
+    all_items = _build_work_hour_report_items(
+        db,
+        approval_status=item_status,
+        **build_kwargs,
+    )
     total = len(all_items)
-    work_hours_sum = round(sum(i.work_hours for i in all_items), 2)
-    overtime_hours_sum = round(sum(i.overtime_hours for i in all_items), 2)
+    # R01：合计默认只统计已通过；显式筛选某一审批态或 include_unapproved 时跟列表口径
+    if include_unapproved or status_filter is not None:
+        sum_items = all_items
+    else:
+        sum_items = _build_work_hour_report_items(
+            db,
+            approval_status="approved",
+            **build_kwargs,
+        )
+    work_hours_sum = round(sum(i.work_hours for i in sum_items), 2)
+    overtime_hours_sum = round(sum(i.overtime_hours for i in sum_items), 2)
     start = (page - 1) * page_size
     page_items = all_items[start : start + page_size]
 
@@ -965,9 +1027,6 @@ def list_employee_work_hour_filters(
     )
 
 
-WORK_HOUR_APPROVAL_VALUES = frozenset({"pending", "approved", "rejected"})
-
-
 @router.post(
     "/employee-work-hours",
     response_model=EmployeeWorkHourRecordResponse,
@@ -980,9 +1039,8 @@ def create_employee_work_hour(
     _current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    approval = payload.approval_status or "pending"
-    if approval not in WORK_HOUR_APPROVAL_VALUES:
-        raise HTTPException(status_code=400, detail="审批状态无效")
+    # 新增一律待审批，避免客户端直写 approved 越权
+    approval = "pending"
     shift = payload.shift_type
     if shift is not None and shift not in WORK_HOUR_SHIFT_VALUES:
         raise HTTPException(status_code=400, detail="班别无效，应为 day 或 night")
@@ -1005,10 +1063,41 @@ def create_employee_work_hour(
     return row
 
 
+@router.post(
+    "/employee-work-hours/batch-approval",
+    response_model=EmployeeWorkHourBatchApprovalResponse,
+    summary="批量审批员工工时",
+    description="批量通过/驳回；仅更新当前为 pending 的记录。",
+)
+def batch_approve_employee_work_hours(
+    payload: EmployeeWorkHourBatchApprovalRequest,
+    _current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    target = (payload.approval_status or "").strip().lower()
+    if target not in {"approved", "rejected"}:
+        raise HTTPException(status_code=400, detail="审批状态无效，应为 approved 或 rejected")
+    ids = [int(x) for x in payload.ids if x is not None]
+    if not ids:
+        raise HTTPException(status_code=400, detail="ids 不能为空")
+    rows = (
+        db.query(EmployeeWorkHour)
+        .filter(
+            EmployeeWorkHour.id.in_(ids),
+            EmployeeWorkHour.approval_status == "pending",
+        )
+        .all()
+    )
+    for row in rows:
+        row.approval_status = target
+    db.commit()
+    return EmployeeWorkHourBatchApprovalResponse(updated=len(rows))
+
+
 @router.get(
     "/employee-work-hours/export",
     summary="导出员工工时报表 Excel",
-    description="按当前筛选条件与统计维度导出 Excel 文件。",
+    description="按当前筛选条件与统计维度导出 Excel；未传审批筛选时默认仅导出已通过（R01）。",
 )
 def export_employee_work_hours_report(
     date_from: date | None = Query(None, description="日期起（含）"),
@@ -1017,6 +1106,10 @@ def export_employee_work_hours_report(
     employee_no: str | None = Query(None, description="工号筛选"),
     project_name: str | None = Query(None, description="项目筛选"),
     shift_type: str | None = Query(None, description="班别筛选 day=白班 night=晚班"),
+    approval_status: str | None = Query(
+        None,
+        description="审批筛选；未传默认 approved；传 all 导出全部",
+    ),
     dimension: str = Query("detail", description="统计维度"),
     _current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -1025,6 +1118,9 @@ def export_employee_work_hours_report(
         dimension = "detail"
     if shift_type is not None and shift_type not in WORK_HOUR_SHIFT_VALUES:
         raise HTTPException(status_code=400, detail="班别无效，应为 day 或 night")
+    status_filter = _parse_work_hour_approval_status(
+        approval_status, default="approved"
+    )
     date_from, date_to = _normalize_work_hour_date_range(date_from, date_to)
 
     items = _build_work_hour_report_items(
@@ -1035,6 +1131,7 @@ def export_employee_work_hours_report(
         employee_no=employee_no,
         project_name=project_name,
         shift_type=shift_type,
+        approval_status=status_filter,
         dimension=dimension,
     )
 

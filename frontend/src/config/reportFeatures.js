@@ -38,10 +38,10 @@ export const REPORT_CATALOG = [
     viewFile: 'EmployeeWorkHoursReportView.vue',
     apiFile: 'employeeWorkHours.js',
     title: '员工工时报表',
-    description: '查询员工工时、加班与班别明细',
+    description: '按时间查询与录入工时，支持审批与按项目/部门汇总',
     icon: 'Timer',
-    menu: false,
-    hub: false,
+    menu: true,
+    hub: true,
     enabled: true,
   },
   {

@@ -13,6 +13,7 @@ export async function fetchEmployeeWorkHoursReport({
   employeeNo,
   projectName,
   shiftType,
+  approvalStatus,
   dimension = 'detail',
 } = {}) {
   const params = new URLSearchParams()
@@ -23,8 +24,21 @@ export async function fetchEmployeeWorkHoursReport({
   if (employeeNo) params.set('employee_no', employeeNo)
   if (projectName) params.set('project_name', projectName)
   if (shiftType) params.set('shift_type', shiftType)
+  if (approvalStatus) params.set('approval_status', approvalStatus)
   if (dimension) params.set('dimension', dimension)
   return authFetch(`/api/reports/employee-work-hours?${params}`)
+}
+
+export async function batchApproveEmployeeWorkHours({ ids, approvalStatus }) {
+  return authFetch(
+    '/api/reports/employee-work-hours/batch-approval',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids, approval_status: approvalStatus }),
+    },
+    '批量审批失败',
+  )
 }
 
 export async function createEmployeeWorkHour(payload) {
@@ -42,6 +56,7 @@ export async function exportEmployeeWorkHoursReport({
   employeeNo,
   projectName,
   shiftType,
+  approvalStatus,
   dimension = 'detail',
 } = {}) {
   const params = new URLSearchParams()
@@ -51,6 +66,7 @@ export async function exportEmployeeWorkHoursReport({
   if (employeeNo) params.set('employee_no', employeeNo)
   if (projectName) params.set('project_name', projectName)
   if (shiftType) params.set('shift_type', shiftType)
+  if (approvalStatus) params.set('approval_status', approvalStatus)
   if (dimension) params.set('dimension', dimension)
   return authFetchBlob(`/api/reports/employee-work-hours/export?${params}`)
 }
