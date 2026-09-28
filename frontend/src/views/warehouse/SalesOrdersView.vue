@@ -31,9 +31,6 @@
         <el-table-column label="交期" width="110">
           <template #default="{ row }">{{ formatDate(row.due_date) }}</template>
         </el-table-column>
-        <el-table-column label="下单时间" width="170">
-          <template #default="{ row }">{{ formatDateTime(row.order_time) }}</template>
-        </el-table-column>
         <el-table-column prop="plan_qty" label="计划数量" width="100" align="right" />
         <el-table-column prop="shipped_qty" label="已发数量" width="100" align="right" />
         <el-table-column prop="remaining_shippable" label="剩余可发" width="100" align="right" />
