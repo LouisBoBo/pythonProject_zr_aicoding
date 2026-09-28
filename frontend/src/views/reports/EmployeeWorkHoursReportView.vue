@@ -109,9 +109,6 @@
           width="48"
           :selectable="rowSelectable"
         />
-        <el-table-column v-if="showCol('status')" prop="status" label="状态" width="90">
-          <template #default="{ row }">{{ row.status || '—' }}</template>
-        </el-table-column>
         <el-table-column
           v-if="showCol('employee_name')"
           prop="employee_name"
@@ -248,7 +245,6 @@ import {
 
 const DIMENSION_COLS = {
   detail: [
-    'status',
     'employee_name',
     'employee_no',
     'department',
@@ -259,15 +255,14 @@ const DIMENSION_COLS = {
     'approval_status',
   ],
   employee: [
-    'status',
     'employee_name',
     'employee_no',
     'department',
     'record_count',
     'approval_status',
   ],
-  project: ['status', 'project_name', 'record_count', 'approval_status'],
-  department: ['status', 'department', 'record_count', 'approval_status'],
+  project: ['project_name', 'record_count', 'approval_status'],
+  department: ['department', 'record_count', 'approval_status'],
 }
 
 function defaultDateRange() {
