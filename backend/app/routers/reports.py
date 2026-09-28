@@ -897,11 +897,12 @@ def _work_hour_export_row(item: EmployeeWorkHourReportItem, dimension: str) -> l
 @router.get(
     "/employee-work-hours",
     response_model=EmployeeWorkHourReportListResponse,
-    summary="员工工时",
+    summary="员工工时报表",
     description=(
-        "查询员工工时数据，支持日期范围、部门、员工、项目、班别、审批状态筛选。"
-        "列表明细默认展示全部审批状态（便于审批操作）；"
-        "合计默认仅统计已通过（R01），include_unapproved=true 可含未通过。"
+        "报表中心「员工工时报表」页列表数据来自本接口。"
+        "支持日期范围、部门、员工、项目、班别、审批状态筛选；"
+        "列表明细默认展示全部审批状态；合计默认仅统计已通过，"
+        "include_unapproved=true 可含未通过。"
         "统计维度：detail / employee / employee_date / employee_month / project / department。"
     ),
 )
@@ -956,12 +957,17 @@ def list_employee_work_hours_report(
     # R01：合计默认只统计已通过；显式筛选某一审批态或 include_unapproved 时跟列表口径
     if include_unapproved or status_filter is not None:
         sum_items = all_items
-    else:
+        sum_scope = "same_as_list"
+    elif dimension == "detail":
         sum_items = _build_work_hour_report_items(
             db,
             approval_status="approved",
             **build_kwargs,
         )
+        sum_scope = "approved_only"
+    else:
+        sum_items = all_items
+        sum_scope = "same_as_list"
     work_hours_sum = round(sum(i.work_hours for i in sum_items), 2)
     overtime_hours_sum = round(sum(i.overtime_hours for i in sum_items), 2)
     start = (page - 1) * page_size
@@ -975,6 +981,7 @@ def list_employee_work_hours_report(
         dimension=dimension,
         work_hours_sum=work_hours_sum,
         overtime_hours_sum=overtime_hours_sum,
+        sum_scope=sum_scope,
     )
 
 

@@ -297,6 +297,10 @@ class EmployeeWorkHourReportListResponse(BaseModel):
     dimension: str = Field(description="统计维度")
     work_hours_sum: float = Field(description="工时合计")
     overtime_hours_sum: float = Field(description="加班工时合计")
+    sum_scope: str = Field(
+        default="same_as_list",
+        description="合计口径：same_as_list 与当前列表一致；approved_only 合计仅已通过（R01）",
+    )
 
 
 class EmployeeWorkHourFilterEmployee(BaseModel):

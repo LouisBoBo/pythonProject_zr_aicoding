@@ -60,13 +60,17 @@
     </el-card>
 
     <el-card shadow="never" class="table-card">
+      <div class="page-header">
+        <h2 class="page-title">员工工时报表</h2>
+        <p class="page-subtitle">报表中心 · 按条件查询员工工时明细</p>
+      </div>
       <div class="table-toolbar">
         <div class="toolbar-left">
-          <span class="table-title">员工工时报表</span>
           <el-tag size="small" type="info">明细维度</el-tag>
         </div>
         <div class="toolbar-right">
           <span class="sum-text">工时合计 {{ formatHours(workHoursSum) }}</span>
+          <el-tag v-if="sumScopeLabel" size="small" type="warning">{{ sumScopeLabel }}</el-tag>
         </div>
       </div>
 
@@ -123,6 +127,7 @@ import {
   fetchEmployeeWorkHourFilters,
   fetchEmployeeWorkHourReport,
 } from '../../api/reports/employeeWorkHours.js'
+import { EMPLOYEE_WORK_HOUR_SUM_SCOPE_LABELS } from '../../config/reportFeatures.js'
 
 function defaultDateRange() {
   const end = new Date()
@@ -145,6 +150,10 @@ const pageSize = ref(10)
 const departmentOptions = ref([])
 const projectOptions = ref([])
 const workHoursSum = ref(0)
+const sumScope = ref('same_as_list')
+const sumScopeLabel = computed(
+  () => EMPLOYEE_WORK_HOUR_SUM_SCOPE_LABELS[sumScope.value] || '',
+)
 const dateRange = ref(defaultDateRange())
 
 const filters = reactive({
@@ -193,11 +202,13 @@ async function loadReport() {
     items.value = resp.items || []
     total.value = resp.total || 0
     workHoursSum.value = resp.work_hours_sum || 0
+    sumScope.value = resp.sum_scope || 'same_as_list'
   } catch (err) {
     ElMessage.error(err.message || '加载报表失败')
     items.value = []
     total.value = 0
     workHoursSum.value = 0
+    sumScope.value = 'same_as_list'
   } finally {
     loading.value = false
   }
@@ -234,6 +245,22 @@ onMounted(async () => {
 
 .search-card :deep(.el-card__body) {
   padding-bottom: 4px;
+}
+
+.page-header {
+  margin-bottom: 12px;
+}
+
+.page-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.page-subtitle {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
 }
 
 .table-toolbar {
