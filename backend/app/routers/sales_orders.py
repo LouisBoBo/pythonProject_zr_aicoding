@@ -2,7 +2,7 @@ from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import or_
+from sqlalchemy import or_, update
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
@@ -228,23 +228,47 @@ def register_sales_order_shipment(
     if order.status == "closed":
         raise HTTPException(status_code=400, detail="订单已关单，无法继续登记发货")
 
-    remaining = max(0, order.plan_qty - order.shipped_qty)
-    if body.ship_qty > remaining:
+    ship_qty = body.ship_qty
+    shipped_at = body.shipped_at or datetime.utcnow()
+
+    # 条件 UPDATE 保证并发下不会超发（读-改-写非原子）
+    inc_result = db.execute(
+        update(SalesOrder)
+        .where(
+            SalesOrder.id == order.id,
+            SalesOrder.status != "closed",
+            SalesOrder.shipped_qty + ship_qty <= SalesOrder.plan_qty,
+        )
+        .values(shipped_qty=SalesOrder.shipped_qty + ship_qty)
+    )
+    if inc_result.rowcount != 1:
+        db.rollback()
+        order = db.query(SalesOrder).filter(SalesOrder.id == order_id).first()
+        if order is None:
+            raise HTTPException(status_code=404, detail="销售订单不存在")
+        if order.status == "closed":
+            raise HTTPException(status_code=400, detail="订单已关单，无法继续登记发货")
+        remaining = max(0, order.plan_qty - order.shipped_qty)
         raise HTTPException(
             status_code=400,
             detail=f"登记发货数量不能超过剩余可发（{remaining}）",
         )
 
-    shipped_at = body.shipped_at or datetime.utcnow()
     record = ShipmentRecord(
         sales_order_id=order.id,
-        ship_qty=body.ship_qty,
+        ship_qty=ship_qty,
         shipped_at=shipped_at,
     )
     db.add(record)
-    order.shipped_qty += body.ship_qty
-    if order.shipped_qty >= order.plan_qty:
-        order.status = "closed"
+    db.execute(
+        update(SalesOrder)
+        .where(
+            SalesOrder.id == order.id,
+            SalesOrder.status != "closed",
+            SalesOrder.shipped_qty >= SalesOrder.plan_qty,
+        )
+        .values(status="closed")
+    )
 
     db.commit()
     db.refresh(order)

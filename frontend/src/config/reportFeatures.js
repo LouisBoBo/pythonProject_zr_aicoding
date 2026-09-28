@@ -54,8 +54,8 @@ export const REPORT_CATALOG = [
     description: '按时间、车间与设备查询停机/维修/待机明细，含趋势、维度统计与 MTBF/MTTR，支持 Excel 导出',
     icon: 'Odometer',
     menuGroup: 'equipment',
-    menu: true,
-    hub: true,
+    menu: false,
+    hub: false,
     enabled: true,
   },
   {

@@ -25,7 +25,6 @@ OPENAPI_TAGS: list[dict] = [
     {"name": "品质管理", "description": "品质 KPI、趋势、不良分布与异常"},
     {"name": "报表中心", "description": "MES 报表查询与导出"},
     {"name": "仓储看板", "description": "库存 KPI、出入库趋势、库位与物料明细"},
-    {"name": "库存低水位预警", "description": "当前库存低于安全库存的物料预警列表"},
     {"name": "消息中心", "description": "系统通知、业务告警与公告查询"},
     {"name": "Cursor 写码过程", "description": "Cursor 写码过程查看：确认开工、SSE/对话回放、追问与审后同步；记录落盘到本工程 docs/cursor-coding-runs"},
     {"name": "AI工作助手", "description": "对接本机 WorkBuddy Web（默认 http://127.0.0.1:3081），代理 API 引擎流式对话"},
@@ -409,14 +408,6 @@ API_ZH: dict[tuple[str, str], dict[str, str]] = {
             "创建入库单并写入 material_inbounds 表；"
             "状态为 completed（已入库）时同步更新 inventory_balances、"
             "inventory_transactions 与 inventory_stock。"
-        ),
-    },
-    # ----- 库存低水位预警 -----
-    ("GET", "/api/inventory-low-stock"): {
-        "summary": "库存低水位预警列表",
-        "description": (
-            "查询 inventory_stock 中 quantity < safety_stock 且 safety_stock > 0 的记录；"
-            "支持按仓库名称、物料编码/名称筛选，按缺口降序排序。"
         ),
     },
     # ----- 报表中心 -----
