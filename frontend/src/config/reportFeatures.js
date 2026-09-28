@@ -40,8 +40,8 @@ export const REPORT_CATALOG = [
     title: '员工工时报表',
     description: '查询员工工时、加班与班别明细',
     icon: 'Timer',
-    menu: true,
-    hub: true,
+    menu: false,
+    hub: false,
     enabled: true,
   },
   {
