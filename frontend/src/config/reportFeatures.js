@@ -56,7 +56,7 @@ export const REPORT_CATALOG = [
     menuGroup: 'equipment',
     menu: false,
     hub: false,
-    enabled: true,
+    enabled: false,
   },
   {
     id: 'equipment-repairs',
