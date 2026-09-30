@@ -7,11 +7,6 @@
  * - enabled: false → 强制下线（即使文件还在）
  * 路由/菜单仅注册「enabled + 视图文件存在 + api 文件存在（若声明）」的项，缺文件不会拖垮整站。
  */
-/** 员工工时报表合计口径角标（与接口 sum_scope 对齐） */
-export const EMPLOYEE_WORK_HOUR_SUM_SCOPE_LABELS = {
-  approved_only: '仅已通过',
-}
-
 export const REPORT_CATALOG = [
   {
     id: 'wip',
@@ -40,10 +35,10 @@ export const REPORT_CATALOG = [
   {
     id: 'employee-work-hours',
     routePath: 'employee-work-hours',
-    viewFile: 'EmployeeWorkHourReportView.vue',
+    viewFile: 'EmployeeWorkHoursReportView.vue',
     apiFile: 'employeeWorkHours.js',
     title: '员工工时报表',
-    description: '按日期、部门、员工与项目查询工时明细与合计',
+    description: '按日期区间与部门查询员工工时明细，支持按员工汇总工时合计',
     icon: 'Timer',
     menu: true,
     hub: true,

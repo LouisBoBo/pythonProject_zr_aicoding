@@ -25,6 +25,7 @@ OPENAPI_TAGS: list[dict] = [
     {"name": "品质管理", "description": "品质 KPI、趋势、不良分布与异常"},
     {"name": "报表中心", "description": "MES 报表查询与导出"},
     {"name": "仓储看板", "description": "库存 KPI、出入库趋势、库位与物料明细"},
+    {"name": "低库存预警", "description": "现存量低于安全库存的物料预警列表"},
     {"name": "消息中心", "description": "系统通知、业务告警与公告查询"},
     {"name": "Cursor 写码过程", "description": "Cursor 写码过程查看：确认开工、SSE/对话回放、追问与审后同步；记录落盘到本工程 docs/cursor-coding-runs"},
     {"name": "AI工作助手", "description": "对接本机 WorkBuddy Web（默认 http://127.0.0.1:3081），代理 API 引擎流式对话"},
@@ -380,7 +381,14 @@ API_ZH: dict[tuple[str, str], dict[str, str]] = {
         "summary": "物料库存列表",
         "description": (
             "分页查询 inventory_stock 表，支持按物料编码、物料名称、仓库名称筛选；"
-            "返回库存数量、单位、安全库存、更新时间等字段。"
+            "返回库存数量、单位、安全库存、库存差量（当前库存−安全库存）、更新时间等字段。"
+        ),
+    },
+    ("GET", "/api/inventory-low-stock"): {
+        "summary": "低库存预警列表",
+        "description": (
+            "查询现存量低于安全库存的 inventory_stock 记录，支持物料编码、名称、仓库筛选与分页；"
+            "缺口 = 安全库存 − 现存量，结果按缺口降序排列。"
         ),
     },
     ("GET", "/api/warehouse/warehouses"): {
@@ -433,6 +441,18 @@ API_ZH: dict[tuple[str, str], dict[str, str]] = {
     ("GET", "/api/reports/daily-output/lines"): {
         "summary": "日产报表产线选项",
         "description": "返回产线名称列表，供日产报表筛选下拉使用。",
+    },
+    ("GET", "/api/reports/employee-work-hours/filters"): {
+        "summary": "员工工时报表筛选选项",
+        "description": "返回部门、员工、项目下拉选项。",
+    },
+    ("GET", "/api/reports/employee-work-hours"): {
+        "summary": "员工工时报表",
+        "description": (
+            "基于 employee_work_hours 查询员工工时；默认近 7 日。"
+            "支持班别（白班 day / 晚班 night）筛选、明细与按员工/日期/月份/项目/部门等维度汇总与分页。"
+            "报表中心「员工工时报表」页使用本接口。"
+        ),
     },
     ("GET", "/api/reports/equipment-metrics"): {
         "summary": "设备报表",

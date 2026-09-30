@@ -1,9 +1,9 @@
 <template>
-  <div class="material-inventory-page">
+  <div class="low-stock-alert-page">
     <el-card shadow="never" class="search-card">
       <div class="page-heading">
-        <h2 class="page-title">物料库存</h2>
-        <p class="page-desc">按物料与仓库维度查询当前库存，支持编码、名称、仓库筛选</p>
+        <h2 class="page-title">低库存预警</h2>
+        <p class="page-desc">展示现存量低于安全库存的物料，缺口 = 安全库存 − 现存量，按缺口降序排列</p>
       </div>
       <el-form :model="filters" inline class="search-form">
         <el-form-item label="物料编码">
@@ -47,37 +47,28 @@
 
     <el-card shadow="never" class="table-card">
       <div class="table-toolbar">
-        <span class="table-title">库存明细</span>
-        <span v-if="total > 0" class="table-summary">
-          共 {{ total }} 条，当前筛选库存合计 {{ quantitySum.toLocaleString() }}
-        </span>
+        <span class="table-title">预警列表</span>
+        <span v-if="total > 0" class="table-summary">共 {{ total }} 条低库存记录</span>
       </div>
 
       <el-table v-loading="loading" :data="items" stripe border style="width: 100%">
         <el-table-column prop="material_code" label="物料编码" min-width="130" fixed="left" />
         <el-table-column prop="material_name" label="物料名称" min-width="140" />
         <el-table-column prop="warehouse_name" label="仓库" min-width="120" />
-        <el-table-column prop="quantity" label="库存数量" width="110" align="right">
-          <template #default="{ row }">
-            <span :class="{ 'qty-low': row.quantity < row.safety_stock }">
-              {{ row.quantity.toLocaleString() }}
-            </span>
-          </template>
+        <el-table-column prop="quantity" label="现存量" width="100" align="right">
+          <template #default="{ row }">{{ row.quantity.toLocaleString() }}</template>
         </el-table-column>
-        <el-table-column prop="unit" label="单位" width="70" align="center" />
         <el-table-column prop="safety_stock" label="安全库存" width="100" align="right">
           <template #default="{ row }">{{ row.safety_stock.toLocaleString() }}</template>
         </el-table-column>
-        <el-table-column prop="stock_diff" label="库存差量" width="110" align="right">
+        <el-table-column prop="shortage" label="缺口" width="100" align="right">
           <template #default="{ row }">
-            <span :class="{ 'qty-low': stockDiff(row) < 0 }">
-              {{ formatStockDiff(row) }}
-            </span>
+            <span class="shortage-value">{{ row.shortage.toLocaleString() }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="updated_at" label="更新时间" width="170">
-          <template #default="{ row }">{{ formatDateTime(row.updated_at) }}</template>
-        </el-table-column>
+        <template #empty>
+          <el-empty description="暂无低库存预警数据" />
+        </template>
       </el-table>
 
       <div class="pagination-wrap">
@@ -99,7 +90,8 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { fetchInventoryStockList, fetchWarehouseOptions } from '../../api/warehouse'
+import { fetchInventoryLowStockList } from '../api/inventoryLowStock'
+import { fetchWarehouseOptions } from '../api/warehouse'
 
 const filters = reactive({
   materialCode: '',
@@ -113,28 +105,6 @@ const loading = ref(false)
 const page = ref(1)
 const pageSize = ref(10)
 const total = ref(0)
-const quantitySum = ref(0)
-
-function formatDateTime(value) {
-  if (!value) return '—'
-  const d = new Date(value)
-  if (Number.isNaN(d.getTime())) return value
-  const pad = (n) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
-
-function stockDiff(row) {
-  if (typeof row.stock_diff === 'number') return row.stock_diff
-  return row.quantity - row.safety_stock
-}
-
-function formatStockDiff(row) {
-  const diff = stockDiff(row)
-  const formatted = Math.abs(diff).toLocaleString()
-  if (diff > 0) return `+${formatted}`
-  if (diff < 0) return `-${formatted}`
-  return '0'
-}
 
 async function loadWarehouseOptions() {
   try {
@@ -147,7 +117,7 @@ async function loadWarehouseOptions() {
 async function loadList() {
   loading.value = true
   try {
-    const data = await fetchInventoryStockList({
+    const data = await fetchInventoryLowStockList({
       page: page.value,
       pageSize: pageSize.value,
       materialCode: filters.materialCode || undefined,
@@ -156,9 +126,8 @@ async function loadList() {
     })
     items.value = data.items || []
     total.value = data.total || 0
-    quantitySum.value = data.quantity_sum || 0
   } catch (err) {
-    ElMessage.error(err.message || '加载库存列表失败')
+    ElMessage.error(err.message || '加载低库存预警列表失败')
   } finally {
     loading.value = false
   }
@@ -184,7 +153,7 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.material-inventory-page {
+.low-stock-alert-page {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -237,7 +206,7 @@ onMounted(() => {
   color: #606266;
 }
 
-.qty-low {
+.shortage-value {
   color: #f56c6c;
   font-weight: 600;
 }

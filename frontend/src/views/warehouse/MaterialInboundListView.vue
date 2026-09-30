@@ -87,13 +87,6 @@
         </el-table-column>
       </el-table>
 
-      <!-- 员工工时报表：加班工时与审批之间为「状态」列（本页为物料入库，列定义与报表页对齐供同步校验） -->
-      <el-table v-show="false" :data="[]" aria-hidden="true">
-        <el-table-column prop="overtime_hours" label="加班工时" />
-        <el-table-column prop="status" label="状态" />
-        <el-table-column prop="approval_status" label="审批" />
-      </el-table>
-
       <div class="pagination-wrap">
         <el-pagination
           v-model:current-page="page"

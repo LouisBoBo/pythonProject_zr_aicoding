@@ -48,6 +48,7 @@ from app.routers import (
     equipment_maintenance,
     equipment_repair,
     inspection,
+    inventory_low_stock,
     sales_orders,
     kanban_boards,
     kanban_general,
@@ -1232,6 +1233,7 @@ app.include_router(equipment_maintenance.router)
 app.include_router(equipment_repair.router)
 app.include_router(quality.router)
 app.include_router(reports.router)
+app.include_router(inventory_low_stock.router)
 app.include_router(warehouse.router)
 app.include_router(sales_orders.router)
 app.include_router(messages.router)

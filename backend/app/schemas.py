@@ -262,7 +262,6 @@ class DailyOutputLinesResponse(BaseModel):
 class EmployeeWorkHourReportItem(BaseModel):
     """员工工时报表行。"""
 
-    id: int | None = Field(default=None, description="明细记录 ID（仅 detail 维度）")
     employee_name: str = Field(description="员工姓名")
     employee_no: str = Field(description="工号")
     department: str = Field(description="所属部门")
@@ -270,22 +269,11 @@ class EmployeeWorkHourReportItem(BaseModel):
     task_name: str | None = Field(default=None, description="任务名称")
     work_date: date | None = Field(default=None, description="日期")
     work_month: str | None = Field(default=None, description="月份（YYYY-MM）")
-    shift_type: str | None = Field(default=None, description="班别 day=白班 night=晚班")
+    shift_type: str | None = Field(default=None, description="班别（白班/晚班）")
     work_hours: float = Field(description="工时数")
     overtime_hours: float = Field(description="加班工时")
-    approval_status: str | None = Field(default=None, description="审批")
+    approval_status: str | None = Field(default=None, description="审批/状态")
     record_count: int | None = Field(default=None, description="明细条数（汇总维度）")
-
-
-class EmployeeWorkHourBatchApprovalRequest(BaseModel):
-    """批量通过/驳回待审批工时。"""
-
-    ids: list[int] = Field(min_length=1, description="待审批记录 ID 列表")
-    approval_status: str = Field(description="目标状态 approved / rejected")
-
-
-class EmployeeWorkHourBatchApprovalResponse(BaseModel):
-    updated: int = Field(description="实际更新条数（仅 pending 会被更新）")
 
 
 class EmployeeWorkHourReportListResponse(BaseModel):
@@ -296,55 +284,17 @@ class EmployeeWorkHourReportListResponse(BaseModel):
     dimension: str = Field(description="统计维度")
     work_hours_sum: float = Field(description="工时合计")
     overtime_hours_sum: float = Field(description="加班工时合计")
-    sum_scope: str = Field(
-        default="same_as_list",
-        description="合计口径：same_as_list 与当前列表一致；approved_only 合计仅已通过（R01）",
-    )
 
 
 class EmployeeWorkHourFilterEmployee(BaseModel):
     employee_no: str
     employee_name: str
-    department: str | None = Field(default=None, description="所属部门")
 
 
 class EmployeeWorkHourFiltersResponse(BaseModel):
     departments: list[str] = Field(description="部门选项")
     employees: list[EmployeeWorkHourFilterEmployee] = Field(description="员工选项")
     projects: list[str] = Field(description="项目选项")
-
-
-class EmployeeWorkHourCreate(BaseModel):
-    """新增员工工时填报。"""
-
-    employee_no: str = Field(min_length=1, max_length=20, description="工号")
-    employee_name: str = Field(min_length=1, max_length=50, description="姓名")
-    department: str = Field(min_length=1, max_length=50, description="部门")
-    project_name: str = Field(min_length=1, max_length=100, description="项目")
-    task_name: str = Field(min_length=1, max_length=100, description="任务")
-    work_date: date = Field(description="工作日期")
-    shift_type: str | None = Field(default="day", description="班别 day/night")
-    work_hours: float = Field(ge=0, le=24, description="工时数")
-    overtime_hours: float = Field(default=0, ge=0, le=24, description="加班工时")
-    approval_status: str = Field(default="pending", description="审批状态")
-
-
-class EmployeeWorkHourRecordResponse(BaseModel):
-    """单条员工工时记录（新增/详情）。"""
-
-    id: int
-    employee_no: str
-    employee_name: str
-    department: str
-    project_name: str
-    task_name: str
-    work_date: date
-    shift_type: str | None = None
-    work_hours: float
-    overtime_hours: float
-    approval_status: str
-
-    model_config = {"from_attributes": True}
 
 
 class EquipmentOeeFilterEquipment(BaseModel):
@@ -1527,6 +1477,12 @@ class InventoryStockResponse(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def stock_diff(self) -> int:
+        """库存差量：当前库存 − 安全库存。"""
+        return self.quantity - self.safety_stock
 
 
 class InventoryStockListResponse(BaseModel):
