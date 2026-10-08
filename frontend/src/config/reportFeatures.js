@@ -3,6 +3,9 @@
 // cch-20261008-report-center-remove-pcb-production-ops-menu
 // cch-20261008-report-center-add-daily-output-menu
 // cch-20261008-daily-output-add-device-column
+// cch-20261008-daily-output-device-explicit-association-only
+// cch-20261008-daily-output-add-order-no-column
+// cch-20261008-daily-output-null-line-id-guard
 /**
  * 报表功能注册表（唯一配置入口）。
  * 开发流水线偏好见 mesDevPipelinePreferences.js；侧栏「报表中心」菜单由此表驱动。
@@ -30,7 +33,9 @@ export const REPORT_CATALOG = [
     viewFile: 'DailyOutputReportView.vue',
     apiFile: 'dailyOutput.js',
     title: '日产报表',
-    description: '按日 / 车间 / 产线 / 设备查看计划、实际产量、工时与生产人员',
+    // 列表在「计划产量」与「实际产量」之间展示「订单号」，数据来自 /api/reports/daily-output 的 order_no
+    description:
+      '按日 / 车间 / 产线查看计划产量、订单号、实际产量、达成率、不良与工时、生产人员',
     icon: 'DataAnalysis',
     menu: true,
     hub: true,

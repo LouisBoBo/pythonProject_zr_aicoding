@@ -84,6 +84,7 @@ class DailyOutputReportItemOut(DailyOutputReportItem):
 
     workshop: str | None = Field(default=None, description="车间")
     device: str | None = Field(default=None, description="设备")
+    order_no: str | None = Field(default=None, description="订单号")
     work_hours: float = Field(default=0, description="工时（小时）")
     production_staff: str | None = Field(default=None, description="生产人员（逗号分隔）")
 
@@ -242,49 +243,25 @@ def _build_daily_output_line_device_map(
     db: Session,
     line_rows: list[ProductionLine],
 ) -> dict[int, str | None]:
-    """按产线解析关联设备名称（车间匹配 + 产线名匹配，同车间多线按序分配）。"""
+    """按产线解析关联设备名称（名称/位置匹配；否则 LineCapacitySnapshot；无明确关联则留空）。"""
     if not line_rows:
         return {}
 
     equipment_list = db.query(Equipment).order_by(Equipment.id).all()
-    by_department: dict[str, list[Equipment]] = defaultdict(list)
-    for eq in equipment_list:
-        dept = (eq.department or "").strip()
-        if dept:
-            by_department[dept].append(eq)
-
-    lines_by_workshop: dict[str, list[ProductionLine]] = defaultdict(list)
-    for line in line_rows:
-        ws = (line.workshop or "").strip()
-        if ws:
-            lines_by_workshop[ws].append(line)
 
     device_map: dict[int, str | None] = {}
-    assigned: set[int] = set()
-
-    for ws, lines_in_ws in lines_by_workshop.items():
-        lines_sorted = sorted(lines_in_ws, key=lambda ln: ln.id)
-        dept_equipment = by_department.get(ws, [])
-        dept_idx = 0
-        for line in lines_sorted:
-            name_matched = [
-                eq
-                for eq in equipment_list
-                if line.name in (eq.location or "") or line.name in (eq.name or "")
-            ]
-            if name_matched:
-                device_map[line.id] = "、".join(
-                    sorted({eq.name for eq in name_matched if eq.name})
-                )
-            elif dept_equipment:
-                eq = dept_equipment[dept_idx % len(dept_equipment)]
-                dept_idx += 1
-                device_map[line.id] = eq.name
-            assigned.add(line.id)
-
     for line in line_rows:
-        if line.id in assigned:
+        name_matched = [
+            eq
+            for eq in equipment_list
+            if line.name in (eq.location or "") or line.name in (eq.name or "")
+        ]
+        if name_matched:
+            device_map[line.id] = "、".join(
+                sorted({eq.name for eq in name_matched if eq.name})
+            )
             continue
+
         snap = (
             db.query(LineCapacitySnapshot)
             .filter(LineCapacitySnapshot.production_line_id == line.id)
@@ -295,9 +272,46 @@ def _build_daily_output_line_device_map(
             label = snap.station_name.replace("-主工位", "").strip()
             device_map[line.id] = label or None
         else:
+            # 无名称/位置匹配且无快照时留空，禁止按同车间设备序号轮询猜测
             device_map[line.id] = None
 
     return device_map
+
+
+def _build_daily_output_order_no_map(
+    db: Session,
+    *,
+    day_start: datetime,
+    day_end: datetime,
+    line_ids: list[int] | None,
+) -> dict[tuple[date, int], str]:
+    """按生产日期 + 产线汇总产量记录关联的工单订单号（多条以顿号拼接）。"""
+    query = (
+        db.query(
+            func.date(ProductionOutputRecord.record_at).label("report_date"),
+            ProductionOutputRecord.production_line_id,
+            WorkOrder.order_no,
+        )
+        .join(WorkOrder, ProductionOutputRecord.work_order_id == WorkOrder.id)
+        .filter(
+            ProductionOutputRecord.record_at >= day_start,
+            ProductionOutputRecord.record_at < day_end,
+            ProductionOutputRecord.work_order_id.isnot(None),
+            ProductionOutputRecord.production_line_id.isnot(None),
+        )
+    )
+    if line_ids is not None:
+        query = query.filter(ProductionOutputRecord.production_line_id.in_(line_ids))
+
+    order_map: dict[tuple[date, int], set[str]] = defaultdict(set)
+    for row in query.distinct().all():
+        report_date = _as_date(row.report_date)
+        if row.order_no:
+            order_map[(report_date, row.production_line_id)].add(row.order_no)
+
+    return {
+        key: "、".join(sorted(numbers)) for key, numbers in order_map.items() if numbers
+    }
 
 
 def _lookup_work_hour_staff(
@@ -330,7 +344,7 @@ def _build_daily_output_rows(
     production_line: str | None,
     workshop: str | None,
 ) -> list[DailyOutputReportItemOut]:
-    """按日 / 车间 / 产线聚合产量事实与计划，并关联工时与生产人员。"""
+    """按日 / 车间 / 产线聚合产量事实与计划，并关联设备、工时与生产人员。"""
     line_ids = _resolve_daily_output_line_ids(
         db, production_line=production_line, workshop=workshop
     )
@@ -351,6 +365,7 @@ def _build_daily_output_rows(
         .filter(
             ProductionOutputRecord.record_at >= day_start,
             ProductionOutputRecord.record_at < day_end,
+            ProductionOutputRecord.production_line_id.isnot(None),
         )
         .group_by(
             func.date(ProductionOutputRecord.record_at),
@@ -371,6 +386,7 @@ def _build_daily_output_rows(
         .filter(
             ProductionPlan.plan_date >= date_from,
             ProductionPlan.plan_date <= date_to,
+            ProductionPlan.production_line_id.isnot(None),
         )
         .group_by(
             ProductionPlan.plan_date,
@@ -382,6 +398,8 @@ def _build_daily_output_rows(
 
     plan_map: dict[tuple, int] = {}
     for row in plan_q.all():
+        if row.production_line_id is None:
+            continue
         plan_map[(_as_date(row.plan_date), row.production_line_id)] = int(row.plan_qty or 0)
 
     line_rows = db.query(ProductionLine).all()
@@ -390,6 +408,9 @@ def _build_daily_output_rows(
     line_map = {ln.id: ln.name for ln in line_rows}
     workshop_map = {ln.id: ln.workshop for ln in line_rows}
     device_map = _build_daily_output_line_device_map(db, line_rows)
+    order_no_map = _build_daily_output_order_no_map(
+        db, day_start=day_start, day_end=day_end, line_ids=line_ids
+    )
 
     wh_maps = _build_work_hour_staff_maps(db, date_from=date_from, date_to=date_to)
     workshop_hours, workshop_staff, date_hours, date_staff = wh_maps
@@ -397,18 +418,24 @@ def _build_daily_output_rows(
     keys: set[tuple] = set()
     out_map: dict[tuple, tuple[int, int, float]] = {}
     for row in output_rows:
+        if row.production_line_id is None:
+            continue
         report_date = _as_date(row.report_date)
         key = (report_date, row.production_line_id)
         keys.add(key)
         out_map[key] = (int(row.actual_qty or 0), int(row.defect_qty or 0), float(row.area_output or 0))
 
     for key in plan_map:
+        if key[1] is None:
+            continue
         keys.add(key)
 
     items: list[DailyOutputReportItemOut] = []
     for report_date, line_id in sorted(
-        keys, key=lambda k: (k[0], line_map.get(k[1], "")), reverse=True
+        keys, key=lambda k: (k[0], line_map.get(k[1], "") if k[1] is not None else ""), reverse=True
     ):
+        if line_id is None:
+            continue
         actual_qty, defect_qty, area_output = out_map.get((report_date, line_id), (0, 0, 0.0))
         plan_qty = plan_map.get((report_date, line_id), 0)
         line_workshop = workshop_map.get(line_id)
@@ -429,7 +456,7 @@ def _build_daily_output_rows(
         items.append(
             DailyOutputReportItemOut(
                 report_date=report_date,
-                production_line=line_map.get(line_id, f"产线#{line_id}"),
+                production_line=line_map.get(line_id) or "—",
                 product_code=None,
                 product_name=None,
                 plan_qty=plan_qty,
@@ -440,6 +467,7 @@ def _build_daily_output_rows(
                 defect_rate=defect_rate,
                 workshop=line_workshop,
                 device=device_map.get(line_id),
+                order_no=order_no_map.get((report_date, line_id)),
                 work_hours=work_hours,
                 production_staff=production_staff,
             )
