@@ -7,7 +7,10 @@
           <span>报表中心</span>
         </div>
       </template>
-      <p class="hub-desc">MES 数据统计与可视化报表入口。</p>
+      <p class="hub-desc">
+        MES 数据统计与可视化报表入口。开发类需求由 mes_dev_pipeline_begin 走一体化流水线；报表取数
+        zr_esc_mes_query、图表 zr_esc_mcp_chart（表格下紧贴 Markdown 图片，单位不一致不共轴）。
+      </p>
       <el-empty v-if="!hubEntries.length" description="当前无已启用的报表模块" />
       <div v-else class="report-links">
         <router-link

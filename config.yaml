@@ -1,5 +1,22 @@
 # MES 工程 · dev-pipeline 步骤 6 机器验证（在 default_workspace 根目录执行）
 dev_pipeline:
+  # 一体化写码：中间步骤（含步骤 5 写代码）自动连续执行，不向用户暂停索要确认。
+  # DSH「Approval policy: ask」仅指文件沙箱写盘审批，不等于 dev-pipeline 步骤 5 要人工点确认。
+  integrated_coding:
+    step_5_requires_user_confirmation: false
+  linked_run_user_notice: |
+    任务已关联一体化写码流程（run_id={{run_id}}）。
+    将依次执行：需求采集 → 需求理解 → 读库上下文 → 规划实现 → 写代码 → 验证 → 复核 → 提交。
+    中间步骤自动执行，含写代码在内均无需您确认；请勿提示「步骤 5 会暂停等你确认」。
+  steps:
+    - { index: 1, name: 需求采集 }
+    - { index: 2, name: 需求理解 }
+    - { index: 3, name: 读库上下文 }
+    - { index: 4, name: 规划实现 }
+    - { index: 5, name: 写代码, requires_user_confirmation: false }
+    - { index: 6, name: 验证 }
+    - { index: 7, name: 复核 }
+    - { index: 8, name: 提交 }
   validate_commands:
     - name: dsh-policy-doc-exists
       cmd: test -f docs/DSH_FILE_POLICY.md
@@ -15,4 +32,10 @@ dev_pipeline:
       cwd: .
     - name: dsh-policy-fails-closed
       cmd: grep -q "fails closed" docs/DSH_FILE_POLICY.md
+      cwd: .
+    - name: dev-pipeline-step5-no-user-pause
+      cmd: grep -q "step_5_requires_user_confirmation: false" config.yaml
+      cwd: .
+    - name: dev-pipeline-notice-no-step5-pause
+      cmd: grep -q "均无需您确认" config.yaml
       cwd: .

@@ -29,6 +29,7 @@ OPENAPI_TAGS: list[dict] = [
     {"name": "消息中心", "description": "系统通知、业务告警与公告查询"},
     {"name": "Cursor 写码过程", "description": "Cursor 写码过程查看：确认开工、SSE/对话回放、追问与审后同步；记录落盘到本工程 docs/cursor-coding-runs"},
     {"name": "AI工作助手", "description": "对接本机 WorkBuddy Web（默认 http://127.0.0.1:3081），代理 API 引擎流式对话"},
+    {"name": "一体化写码流程", "description": "dev-pipeline 八步定义与关联任务提示；步骤 5 写代码自动执行，不需用户确认"},
 ]
 
 # (HTTP方法大写, 路径) -> {summary, description}

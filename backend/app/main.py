@@ -41,6 +41,7 @@ from app.models import (
 from app.routers import (
     auth,
     cursor_coding,
+    dev_pipeline,
     workbuddy,
     dashboard,
     device_dashboard,
@@ -1246,6 +1247,7 @@ app.include_router(warehouse.router)
 app.include_router(sales_orders.router)
 app.include_router(messages.router)
 app.include_router(cursor_coding.router)
+app.include_router(dev_pipeline.router)
 app.include_router(workbuddy.router)
 
 @app.get("/api/health", tags=["系统"])

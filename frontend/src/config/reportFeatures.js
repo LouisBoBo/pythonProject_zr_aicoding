@@ -1,5 +1,6 @@
 // workbuddy-e2e-pipeline-verify-20260925
 // mes-dev-pipeline-tooling-verify-20260926
+// cch-20261008-report-center-pipeline-prefs
 /**
  * 报表功能注册表（唯一配置入口）。
  * - menu: false → 侧栏隐藏（删菜单只改这里，勿删 api/视图文件）
