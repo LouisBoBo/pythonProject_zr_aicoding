@@ -8,9 +8,17 @@
         </div>
       </template>
       <p class="hub-desc">
-        MES 数据统计与可视化报表入口。开发类需求由 mes_dev_pipeline_begin 走一体化流水线；报表取数
-        zr_esc_mes_query、图表 zr_esc_mcp_chart（表格下紧贴 Markdown 图片，单位不一致不共轴）。
+        MES 数据统计与可视化报表入口。{{ pipelineSummary }}
       </p>
+      <el-collapse v-model="prefsOpen" class="prefs-collapse">
+        <el-collapse-item title="开发流水线与澄清约定" name="prefs">
+          <ul class="prefs-list">
+            <li v-for="item in pipelinePreferences" :key="item.id">
+              <strong>{{ item.title }}：</strong>{{ item.detail }}
+            </li>
+          </ul>
+        </el-collapse-item>
+      </el-collapse>
       <el-empty v-if="!hubEntries.length" description="当前无已启用的报表模块" />
       <div v-else class="report-links">
         <router-link
@@ -29,12 +37,19 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { DataLine } from '@element-plus/icons-vue'
+import {
+  DEV_PIPELINE_PREFERENCES,
+  getReportHubPipelineSummary,
+} from '../../config/mesDevPipelinePreferences.js'
 import { resolveReportIcon } from '../../config/reportIcons.js'
 import { getReportHubEntries } from '../../router/reportRoutes.js'
 
 const hubEntries = computed(() => getReportHubEntries())
+const pipelineSummary = getReportHubPipelineSummary()
+const pipelinePreferences = DEV_PIPELINE_PREFERENCES
+const prefsOpen = ref(['prefs'])
 
 function iconOf(name) {
   return resolveReportIcon(name, DataLine)
@@ -56,7 +71,24 @@ function iconOf(name) {
 
 .hub-desc {
   color: var(--el-text-color-secondary);
-  margin: 0 0 16px;
+  margin: 0 0 12px;
+}
+
+.prefs-collapse {
+  margin-bottom: 16px;
+  border: none;
+}
+
+.prefs-list {
+  margin: 0;
+  padding-left: 1.2em;
+  color: var(--el-text-color-regular);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.prefs-list li + li {
+  margin-top: 8px;
 }
 
 .report-links {

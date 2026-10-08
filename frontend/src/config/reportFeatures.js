@@ -3,6 +3,7 @@
 // cch-20261008-report-center-pipeline-prefs
 /**
  * 报表功能注册表（唯一配置入口）。
+ * 开发流水线偏好见 mesDevPipelinePreferences.js；侧栏「报表中心」菜单由此表驱动。
  * - menu: false → 侧栏隐藏（删菜单只改这里，勿删 api/视图文件）
  * - hub: false → 报表中心首页不展示入口
  * - enabled: false → 强制下线（即使文件还在）
