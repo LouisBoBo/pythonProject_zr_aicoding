@@ -78,6 +78,9 @@
           <template #default="{ row }">{{ row.workshop || '—' }}</template>
         </el-table-column>
         <el-table-column prop="production_line" label="产线" min-width="110" />
+        <el-table-column prop="device" label="设备" min-width="120">
+          <template #default="{ row }">{{ row.device || '—' }}</template>
+        </el-table-column>
         <el-table-column prop="plan_qty" label="计划产量" width="100" align="right" />
         <el-table-column prop="actual_qty" label="实际产量" width="100" align="right" />
         <el-table-column prop="achievement_rate" label="达成率" width="100" align="right">

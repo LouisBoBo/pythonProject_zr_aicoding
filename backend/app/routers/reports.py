@@ -22,6 +22,7 @@ from app.models import (
     EquipmentRuntimeLog,
     InspectionRecord,
     InspectionRecordItem,
+    LineCapacitySnapshot,
     ProductionLine,
     ProductionOutputRecord,
     ProductionPlan,
@@ -79,9 +80,10 @@ WIP_METRIC = "wip"
 
 
 class DailyOutputReportItemOut(DailyOutputReportItem):
-    """日产报表响应行（扩展车间、工时、生产人员）。"""
+    """日产报表响应行（扩展车间、设备、工时、生产人员）。"""
 
     workshop: str | None = Field(default=None, description="车间")
+    device: str | None = Field(default=None, description="设备")
     work_hours: float = Field(default=0, description="工时（小时）")
     production_staff: str | None = Field(default=None, description="生产人员（逗号分隔）")
 
@@ -236,6 +238,68 @@ def _build_work_hour_staff_maps(
     return workshop_hours, workshop_staff, date_hours, date_staff
 
 
+def _build_daily_output_line_device_map(
+    db: Session,
+    line_rows: list[ProductionLine],
+) -> dict[int, str | None]:
+    """按产线解析关联设备名称（车间匹配 + 产线名匹配，同车间多线按序分配）。"""
+    if not line_rows:
+        return {}
+
+    equipment_list = db.query(Equipment).order_by(Equipment.id).all()
+    by_department: dict[str, list[Equipment]] = defaultdict(list)
+    for eq in equipment_list:
+        dept = (eq.department or "").strip()
+        if dept:
+            by_department[dept].append(eq)
+
+    lines_by_workshop: dict[str, list[ProductionLine]] = defaultdict(list)
+    for line in line_rows:
+        ws = (line.workshop or "").strip()
+        if ws:
+            lines_by_workshop[ws].append(line)
+
+    device_map: dict[int, str | None] = {}
+    assigned: set[int] = set()
+
+    for ws, lines_in_ws in lines_by_workshop.items():
+        lines_sorted = sorted(lines_in_ws, key=lambda ln: ln.id)
+        dept_equipment = by_department.get(ws, [])
+        dept_idx = 0
+        for line in lines_sorted:
+            name_matched = [
+                eq
+                for eq in equipment_list
+                if line.name in (eq.location or "") or line.name in (eq.name or "")
+            ]
+            if name_matched:
+                device_map[line.id] = "、".join(
+                    sorted({eq.name for eq in name_matched if eq.name})
+                )
+            elif dept_equipment:
+                eq = dept_equipment[dept_idx % len(dept_equipment)]
+                dept_idx += 1
+                device_map[line.id] = eq.name
+            assigned.add(line.id)
+
+    for line in line_rows:
+        if line.id in assigned:
+            continue
+        snap = (
+            db.query(LineCapacitySnapshot)
+            .filter(LineCapacitySnapshot.production_line_id == line.id)
+            .order_by(LineCapacitySnapshot.snapshot_at.desc())
+            .first()
+        )
+        if snap and snap.station_name:
+            label = snap.station_name.replace("-主工位", "").strip()
+            device_map[line.id] = label or None
+        else:
+            device_map[line.id] = None
+
+    return device_map
+
+
 def _lookup_work_hour_staff(
     report_date: date,
     workshop: str | None,
@@ -325,6 +389,7 @@ def _build_daily_output_rows(
         line_rows = [ln for ln in line_rows if ln.id in line_ids]
     line_map = {ln.id: ln.name for ln in line_rows}
     workshop_map = {ln.id: ln.workshop for ln in line_rows}
+    device_map = _build_daily_output_line_device_map(db, line_rows)
 
     wh_maps = _build_work_hour_staff_maps(db, date_from=date_from, date_to=date_to)
     workshop_hours, workshop_staff, date_hours, date_staff = wh_maps
@@ -374,6 +439,7 @@ def _build_daily_output_rows(
                 achievement_rate=achievement,
                 defect_rate=defect_rate,
                 workshop=line_workshop,
+                device=device_map.get(line_id),
                 work_hours=work_hours,
                 production_staff=production_staff,
             )
@@ -388,6 +454,7 @@ def _build_daily_output_rows(
     description=(
         "按生产日期、车间、产线聚合日产量："
         "实际/不良来自 production_output_records，计划来自 production_plans，"
+        "设备来自 equipment / line_capacity_snapshots，"
         "工时与生产人员来自 employee_work_hours。"
         "默认查询近 7 日（含今天）；支持单日/区间、车间、产线筛选与分页。"
         "报表中心「日产报表」页数据来自本接口。"
