@@ -80,17 +80,17 @@ LOG_DIR="$ROOT/.dev-logs"
 mkdir -p "$LOG_DIR"
 
 (
-  cd backend
+  cd "$ROOT/backend"
   # shellcheck disable=SC1091
   source .venv/bin/activate
   nohup uvicorn app.main:app --reload --port "$BACKEND_PORT" --host 127.0.0.1 \
-    >"$LOG_DIR/backend.log" 2>&1 &
+    >>"$LOG_DIR/backend.log" 2>&1 &
   echo $! >"$LOG_DIR/backend.pid"
 )
 
 (
-  cd frontend
-  nohup npm run dev >"$LOG_DIR/frontend.log" 2>&1 &
+  cd "$ROOT/frontend"
+  nohup npm run dev >>"$LOG_DIR/frontend.log" 2>&1 &
   echo $! >"$LOG_DIR/frontend.pid"
 )
 
@@ -105,8 +105,8 @@ done
 
 echo
 echo "完成: $(git log -1 --oneline)"
-echo "后端: http://127.0.0.1:${BACKEND_PORT}"
-echo "前端: http://localhost:${FRONTEND_PORT}"
+echo ">>> 浏览器请打开前端登录: http://127.0.0.1:${FRONTEND_PORT}/  （或 http://localhost:${FRONTEND_PORT}/）"
+echo "后端 API: http://127.0.0.1:${BACKEND_PORT}/docs （勿把 ${BACKEND_PORT} 当网页入口）"
 echo "日志: $LOG_DIR/"
 curl -s "http://127.0.0.1:${BACKEND_PORT}/api/health" && echo
 curl -s -o /dev/null -w "frontend HTTP %{http_code}\n" "http://localhost:${FRONTEND_PORT}/"

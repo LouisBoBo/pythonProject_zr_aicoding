@@ -45,6 +45,19 @@ export const REPORT_CATALOG = [
     enabled: true,
   },
   {
+    id: 'pcb-production-ops',
+    routePath: 'pcb-production-ops',
+    viewFile: 'PcbProductionOpsReportView.vue',
+    apiFile: 'pcbProductionOps.js',
+    title: 'PCB 生产运营分析',
+    description:
+      'MES 连通与近 7 日产出/工单趋势、在制与异常核查；仅实际量与工时，作废口径列为盲区',
+    icon: 'TrendCharts',
+    menu: true,
+    hub: true,
+    enabled: true,
+  },
+  {
     id: 'equipment-oee',
     routePath: 'equipment-oee',
     viewFile: 'EquipmentOeeReportView.vue',
@@ -53,9 +66,9 @@ export const REPORT_CATALOG = [
     description: 'OEE、稼动率、开机率与停机时长分析，支持趋势图与 Excel 导出',
     icon: 'DataAnalysis',
     menuGroup: 'equipment',
-    menu: true,
-    hub: true,
-    enabled: true,
+    menu: false,
+    hub: false,
+    enabled: false,
   },
   {
     id: 'equipment-downtime',

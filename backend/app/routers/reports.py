@@ -71,6 +71,7 @@ from app.work_order_utils import (
     calc_wip_quantity,
     derive_current_process,
 )
+from app.zr_esc_mes_query import query_pcb_production_ops
 
 router = APIRouter(prefix="/api/reports", tags=["报表中心"])
 
@@ -2368,3 +2369,19 @@ def export_equipment_maintenance_report(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.get(
+    "/pcb-production-ops",
+    summary="PCB 生产运营分析",
+    description=(
+        "MES 状态、近 7 日产出/工单趋势（按实际返回日期对齐时间窗）、"
+        "在制 10 单与异常三单核查；作废口径列为盲区，仅展示实际量与工时。"
+    ),
+)
+def get_pcb_production_ops_report(
+    days: int = Query(7, ge=1, le=31, description="趋势天数（默认近 7 日）"),
+    _current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return query_pcb_production_ops(db, days=days)

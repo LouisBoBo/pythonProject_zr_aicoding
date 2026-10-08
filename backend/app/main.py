@@ -4,6 +4,7 @@ from datetime import date, datetime, timedelta
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from fastapi.openapi.utils import get_openapi
 from sqlalchemy import inspect, text
 from sqlalchemy.orm import joinedload
@@ -1212,10 +1213,17 @@ app.openapi = custom_openapi
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5175", "http://127.0.0.1:5175"],
+    allow_origin_regex=r"^http://(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}):5175$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.get("/", include_in_schema=False)
+def root_redirect():
+    """根路径无页面，引导到 Swagger；日常请用前端 5175 登录。"""
+    return RedirectResponse(url="/docs")
 
 app.include_router(auth.router)
 app.include_router(dashboard.router)
