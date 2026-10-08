@@ -55,8 +55,8 @@ export const REPORT_CATALOG = [
     description:
       'MES 连通与近 7 日产出/工单趋势、在制与异常核查；仅实际量与工时，作废口径列为盲区',
     icon: 'TrendCharts',
-    menu: true,
-    hub: true,
+    menu: false,
+    hub: false,
     enabled: true,
   },
   {
