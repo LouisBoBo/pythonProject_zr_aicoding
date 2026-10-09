@@ -66,7 +66,6 @@
 
       <el-table v-loading="loading" :data="items" stripe border style="width: 100%">
         <el-table-column prop="employee_name" label="员工" min-width="120" />
-        <el-table-column prop="employee_no" label="工号" width="120" />
         <el-table-column prop="department" label="部门" min-width="140" />
         <el-table-column
           v-if="viewMode === 'detail'"
