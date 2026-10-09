@@ -6,6 +6,7 @@
 // cch-20261008-daily-output-device-explicit-association-only
 // cch-20261008-daily-output-add-order-no-column
 // cch-20261008-daily-output-null-line-id-guard
+// cch-20261009-report-center-add-employee-work-hours-menu
 /**
  * 报表功能注册表（唯一配置入口）。
  * 开发流水线偏好见 mesDevPipelinePreferences.js；侧栏「报表中心」菜单由此表驱动。
@@ -49,8 +50,8 @@ export const REPORT_CATALOG = [
     title: '员工工时报表',
     description: '按日期区间与部门查询员工工时明细，支持按员工汇总工时合计',
     icon: 'Timer',
-    menu: false,
-    hub: false,
+    menu: true,
+    hub: true,
     enabled: true,
   },
   {
