@@ -11,6 +11,7 @@ from sqlalchemy import func
 
 from app.database import SessionLocal
 from app.work_order_utils import derive_current_process
+from app.material_purchase import purchase_profile_for
 from app.models import (
     DashboardTodo,
     Device,
@@ -489,6 +490,7 @@ def seed_analytics_data() -> None:
                 unit=unit,
                 safety_stock=safety_stock,
                 max_stock=max_stock,
+                **purchase_profile_for(m_code),
             )
             db.add(material)
             materials_by_code[m_code] = material

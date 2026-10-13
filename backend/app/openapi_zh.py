@@ -26,6 +26,8 @@ OPENAPI_TAGS: list[dict] = [
     {"name": "报表中心", "description": "MES 报表查询与导出"},
     {"name": "仓储看板", "description": "库存 KPI、出入库趋势、库位与物料明细"},
     {"name": "低库存预警", "description": "现存量低于安全库存的物料预警列表"},
+    {"name": "物料采购", "description": "物料采购列表、供应商与采购单价"},
+    {"name": "员工管理", "description": "员工列表、部门信息与工资"},
     {"name": "消息中心", "description": "系统通知、业务告警与公告查询"},
     {"name": "Cursor 写码过程", "description": "Cursor 写码过程查看：确认开工、SSE/对话回放、追问与审后同步；记录落盘到本工程 docs/cursor-coding-runs"},
     {"name": "AI工作助手", "description": "对接本机 WorkBuddy Web（默认 http://127.0.0.1:3081），代理 API 引擎流式对话"},
@@ -548,6 +550,14 @@ API_ZH: dict[tuple[str, str], dict[str, str]] = {
     ("PATCH", "/api/messages/read-all"): {
         "summary": "全部标记已读",
         "description": "批量将未读消息标记为已读，可按分类筛选。",
+    },
+    ("GET", "/api/material-purchases"): {
+        "summary": "物料采购列表",
+        "description": "分页查询物料的供应商与采购单价；物料采购列表页数据来自本接口。",
+    },
+    ("GET", "/api/employees"): {
+        "summary": "员工列表",
+        "description": "分页查询员工的部门、个人资料与月工资；员工列表页数据来自本接口。",
     },
 }
 

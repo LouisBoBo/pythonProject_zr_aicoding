@@ -569,6 +569,12 @@ class Material(Base):
     unit: Mapped[str] = mapped_column(String(20), nullable=False, default="件")
     safety_stock: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     max_stock: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    supplier_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    supplier_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    supplier_contact: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    supplier_phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    supplier_address: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    purchase_price: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
 
     balances: Mapped[list["InventoryBalance"]] = relationship(back_populates="material")
     transactions: Mapped[list["InventoryTransaction"]] = relationship(back_populates="material")
@@ -716,6 +722,24 @@ class Message(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=datetime.utcnow, index=True
     )
+
+
+class Employee(Base):
+    """员工主数据"""
+
+    __tablename__ = "employees"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    employee_no: Mapped[str] = mapped_column(String(20), unique=True, index=True, nullable=False)
+    employee_name: Mapped[str] = mapped_column(String(50), nullable=False)
+    gender: Mapped[str] = mapped_column(String(10), nullable=False, default="男")
+    phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    position: Mapped[str] = mapped_column(String(50), nullable=False, default="操作员")
+    department_code: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
+    department_name: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    hire_date: Mapped[date] = mapped_column(Date, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="在职")
+    salary: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False, default=0)
 
 
 class EmployeeWorkHour(Base):

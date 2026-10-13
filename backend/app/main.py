@@ -30,6 +30,7 @@ from app.models import (
     Material,
     MaterialInbound,
     Message,
+    Employee,
     EmployeeWorkHour,
     QualityAnomaly,
     QualityDefectDetail,
@@ -63,6 +64,9 @@ from app.routers import (
     work_order_alerts,
     work_orders,
 )
+from app.routers import employees as employees_router
+from app.routers import material_purchases
+from app.material_purchase import backfill_material_purchase_profiles
 from app.seed_analytics import backfill_recent_operational_data, seed_analytics_data
 
 
@@ -78,6 +82,32 @@ def seed_default_user():
                 )
             )
             db.commit()
+    finally:
+        db.close()
+
+
+def ensure_material_purchase_fields():
+    """为 materials 补齐供应商与采购单价列，并回填空值。"""
+    inspector = inspect(engine)
+    if not inspector.has_table("materials"):
+        return
+    columns = {column["name"] for column in inspector.get_columns("materials")}
+    additions = [
+        ("supplier_code", "VARCHAR(50)"),
+        ("supplier_name", "VARCHAR(100)"),
+        ("supplier_contact", "VARCHAR(50)"),
+        ("supplier_phone", "VARCHAR(30)"),
+        ("supplier_address", "VARCHAR(200)"),
+        ("purchase_price", "NUMERIC(12, 4)"),
+    ]
+    missing = [(name, ddl) for name, ddl in additions if name not in columns]
+    if missing:
+        with engine.begin() as conn:
+            for name, ddl in missing:
+                conn.execute(text(f"ALTER TABLE materials ADD COLUMN {name} {ddl}"))
+    db = SessionLocal()
+    try:
+        backfill_material_purchase_profiles(db)
     finally:
         db.close()
 
@@ -952,6 +982,116 @@ def ensure_employee_work_hours_shift_type():
         )
 
 
+def seed_employees():
+    """写入员工主数据（部门、个人资料、月工资）。已有数据时跳过。"""
+    db = SessionLocal()
+    try:
+        if db.query(Employee).first():
+            return
+        rows = [
+            Employee(
+                employee_no="E1001",
+                employee_name="张三",
+                gender="男",
+                phone="13800001001",
+                position="贴片操作员",
+                department_code="DEPT-P1",
+                department_name="生产一部",
+                hire_date=date(2022, 3, 15),
+                status="在职",
+                salary=6800,
+            ),
+            Employee(
+                employee_no="E1002",
+                employee_name="李四",
+                gender="男",
+                phone="13800001002",
+                position="焊接技师",
+                department_code="DEPT-P1",
+                department_name="生产一部",
+                hire_date=date(2021, 8, 1),
+                status="在职",
+                salary=8200,
+            ),
+            Employee(
+                employee_no="E1003",
+                employee_name="王五",
+                gender="女",
+                phone="13800001003",
+                position="包装员",
+                department_code="DEPT-P2",
+                department_name="生产二部",
+                hire_date=date(2023, 1, 10),
+                status="在职",
+                salary=6200,
+            ),
+            Employee(
+                employee_no="E2001",
+                employee_name="赵六",
+                gender="男",
+                phone="13800002001",
+                position="工艺工程师",
+                department_code="DEPT-RD",
+                department_name="研发部",
+                hire_date=date(2020, 6, 18),
+                status="在职",
+                salary=12500,
+            ),
+            Employee(
+                employee_no="E2002",
+                employee_name="孙七",
+                gender="女",
+                phone="13800002002",
+                position="软件工程师",
+                department_code="DEPT-RD",
+                department_name="研发部",
+                hire_date=date(2021, 11, 2),
+                status="在职",
+                salary=11800,
+            ),
+            Employee(
+                employee_no="E3001",
+                employee_name="周八",
+                gender="男",
+                phone="13800003001",
+                position="检验员",
+                department_code="DEPT-QA",
+                department_name="品质部",
+                hire_date=date(2022, 9, 20),
+                status="在职",
+                salary=7500,
+            ),
+            Employee(
+                employee_no="E3002",
+                employee_name="吴九",
+                gender="女",
+                phone="13800003002",
+                position="品质工程师",
+                department_code="DEPT-QA",
+                department_name="品质部",
+                hire_date=date(2019, 4, 8),
+                status="在职",
+                salary=9800,
+            ),
+            Employee(
+                employee_no="E4001",
+                employee_name="郑十",
+                gender="男",
+                phone="13800004001",
+                position="仓管员",
+                department_code="DEPT-WH",
+                department_name="仓储部",
+                hire_date=date(2023, 5, 6),
+                status="在职",
+                salary=6500,
+            ),
+        ]
+        db.add_all(rows)
+        db.commit()
+    finally:
+        db.close()
+
+
 def seed_employee_work_hours_data():
     db = SessionLocal()
     try:
@@ -1158,6 +1298,7 @@ def ensure_employee_work_hours_recent_backfill():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    ensure_material_purchase_fields()
     ensure_sales_orders_ordered_at()
     ensure_work_orders_actual_start_time()
     ensure_work_orders_actual_end_time()
@@ -1172,6 +1313,7 @@ async def lifespan(app: FastAPI):
     seed_equipment_repair_data()
     seed_quality_data()
     seed_message_data()
+    seed_employees()
     seed_employee_work_hours_data()
     ensure_employee_work_hours_recent_backfill()
     seed_analytics_data()
@@ -1244,6 +1386,8 @@ app.include_router(quality.router)
 app.include_router(reports.router)
 app.include_router(inventory_low_stock.router)
 app.include_router(warehouse.router)
+app.include_router(material_purchases.router)
+app.include_router(employees_router.router)
 app.include_router(sales_orders.router)
 app.include_router(messages.router)
 app.include_router(cursor_coding.router)

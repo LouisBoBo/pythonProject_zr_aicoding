@@ -235,6 +235,9 @@ import {
   Warning,
   EditPen,
   ChatDotRound,
+  Goods,
+  User,
+  ShoppingCart,
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { clearToken, fetchCurrentUser } from '../api/auth'
@@ -268,6 +271,8 @@ const expandedSubmenus = reactive({
   kanban: true,
   equipment: true,
   warehouse: true,
+  'material-purchase': true,
+  'employee-management': true,
   reports: true,
   'reports-equipment': true,
 })
@@ -379,6 +384,23 @@ const menuGroups = computed(() => {
             { path: '/warehouse/inbound', title: '物料入库', icon: List },
             { path: '/warehouse/outbound', title: '物料出库', icon: Box },
             { path: '/warehouse/low-stock', title: '低库存预警', icon: Warning },
+          ],
+        },
+        { path: '/materials', title: '物料管理', icon: Goods },
+        {
+          key: 'material-purchase',
+          title: '物料采购',
+          icon: ShoppingCart,
+          children: [
+            { path: '/material-purchases', title: '物料采购列表', icon: List },
+          ],
+        },
+        {
+          key: 'employee-management',
+          title: '员工管理',
+          icon: User,
+          children: [
+            { path: '/employees', title: '员工列表', icon: List },
           ],
         },
       ],

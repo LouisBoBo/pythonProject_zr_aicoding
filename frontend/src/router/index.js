@@ -34,6 +34,9 @@ import WorkBuddyView from '../views/ai-assistant/WorkBuddyView.vue'
 import KanbanBoardsView from '../views/KanbanBoardsView.vue'
 import ProductionKanbanView from '../views/kanban/ProductionKanbanView.vue'
 import WarehouseDashboard from '../views/board/WarehouseDashboard.vue'
+import MaterialManagementView from '../views/materials/Index.vue'
+import MaterialPurchaseListView from '../views/materials/PurchaseListView.vue'
+import EmployeeManagementView from '../views/employees/Index.vue'
 const authRequired = { requiresAuth: true }
 
 const kanbanRoutes = [
@@ -146,6 +149,24 @@ const router = createRouter({
           meta: { title: '低库存预警', ...authRequired },
         },
         { path: 'warehouse/:id', redirect: '/warehouse/inventory' },
+        {
+          path: 'materials',
+          name: 'materials',
+          component: MaterialManagementView,
+          meta: { title: '物料管理', ...authRequired },
+        },
+        {
+          path: 'material-purchases',
+          name: 'material-purchases',
+          component: MaterialPurchaseListView,
+          meta: { title: '物料采购列表', ...authRequired },
+        },
+        {
+          path: 'employees',
+          name: 'employees',
+          component: EmployeeManagementView,
+          meta: { title: '员工列表', ...authRequired },
+        },
         {
           path: 'reports',
           name: 'reports',
