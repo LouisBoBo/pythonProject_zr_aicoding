@@ -706,6 +706,139 @@ def seed_analytics_data() -> None:
         db.close()
 
 
+def _daily_output_target_qty(
+    plan_qty: int, line_idx: int, p_idx: int, day_offset: int
+) -> tuple[int, int]:
+    actual = int(plan_qty * (0.88 + (p_idx % 3) * 0.03))
+    defect = 8 + line_idx + p_idx + (day_offset % 5)
+    return actual, defect
+
+
+def _normalize_production_output_facts(
+    db,
+    today: date,
+    now: datetime,
+    lines: list[ProductionLine],
+    products_by_line: dict[int, list[Product]],
+) -> None:
+    """历史日每产线+产品仅一条 18:00 日汇总（约 88–97% 计划）；当日去掉未来时刻与重复粒度。"""
+    line_code = {ln.id: ln.code for ln in lines}
+    line_idx_map = {ln.id: idx for idx, ln in enumerate(lines)}
+    product_idx: dict[tuple[int, int], int] = {}
+    for line_id, prods in products_by_line.items():
+        for p_idx, prod in enumerate(prods):
+            product_idx[(line_id, prod.id)] = p_idx
+
+    groups = (
+        db.query(
+            ProductionOutputRecord.production_line_id,
+            ProductionOutputRecord.product_id,
+            func.date(ProductionOutputRecord.record_at).label("out_day"),
+            func.count().label("cnt"),
+            func.coalesce(func.sum(ProductionOutputRecord.actual_qty), 0).label("total"),
+        )
+        .group_by(
+            ProductionOutputRecord.production_line_id,
+            ProductionOutputRecord.product_id,
+            func.date(ProductionOutputRecord.record_at),
+        )
+        .all()
+    )
+
+    for line_id, product_id, out_day, cnt, total in groups:
+        if isinstance(out_day, datetime):
+            out_day = out_day.date()
+        elif isinstance(out_day, str):
+            out_day = date.fromisoformat(out_day[:10])
+        day_start = datetime.combine(out_day, datetime.min.time())
+        day_end = day_start + timedelta(days=1)
+        base_q = db.query(ProductionOutputRecord).filter(
+            ProductionOutputRecord.production_line_id == line_id,
+            ProductionOutputRecord.product_id == product_id,
+            ProductionOutputRecord.record_at >= day_start,
+            ProductionOutputRecord.record_at < day_end,
+        )
+
+        if out_day == today:
+            base_q.filter(ProductionOutputRecord.record_at > now).delete(
+                synchronize_session=False
+            )
+            base_q.filter(ProductionOutputRecord.work_order_id.isnot(None)).delete(
+                synchronize_session=False
+            )
+            db.flush()
+            records = base_q.order_by(ProductionOutputRecord.record_at).all()
+            hour_slots = {
+                r.record_at.hour
+                for r in records
+                if 8 <= r.record_at.hour <= 20 and r.record_at.minute == 0
+            }
+            if len(hour_slots) >= 2 and len(records) > len(hour_slots):
+                for r in list(records):
+                    if r.record_at.hour == 18 and r.record_at.minute == 0:
+                        db.delete(r)
+            continue
+
+        plan = (
+            db.query(ProductionPlan)
+            .filter(
+                ProductionPlan.plan_date == out_day,
+                ProductionPlan.production_line_id == line_id,
+                ProductionPlan.product_id == product_id,
+            )
+            .first()
+        )
+        plan_qty = int(plan.plan_qty) if plan else max(int(total), 1)
+        ratio = int(total) / plan_qty if plan_qty else 1.0
+        records = base_q.order_by(ProductionOutputRecord.record_at).all()
+        single_ok = (
+            len(records) == 1
+            and records[0].record_at.hour == 18
+            and records[0].record_at.minute == 0
+            and 0.85 <= ratio <= 1.02
+        )
+        if single_ok:
+            continue
+
+        line_idx = line_idx_map.get(line_id, 0)
+        p_idx = product_idx.get((line_id, product_id), product_id % 3)
+        day_offset = (today - out_day).days
+        actual, defect = _daily_output_target_qty(plan_qty, line_idx, p_idx, day_offset)
+        code = line_code.get(line_id, "L")
+        for r in records:
+            db.delete(r)
+        db.flush()
+        db.add(
+            ProductionOutputRecord(
+                record_at=datetime(out_day.year, out_day.month, out_day.day, 18, 0, 0),
+                production_line_id=line_id,
+                product_id=product_id,
+                process_card_no=f"PC-{code}-{out_day:%m%d}-D-{p_idx}",
+                actual_qty=actual,
+                area_output=round(actual * 1.85, 2),
+                defect_qty=defect,
+                incoming_boards=actual + defect + 10,
+            )
+        )
+
+
+def _reconcile_sales_shipped_qty(db) -> None:
+    """订单头已发量 = 发货明细合计，且不超过计划量。"""
+    for order in db.query(SalesOrder).all():
+        detail_sum = int(
+            db.query(func.coalesce(func.sum(ShipmentRecord.ship_qty), 0))
+            .filter(ShipmentRecord.sales_order_id == order.id)
+            .scalar()
+        )
+        order.shipped_qty = min(detail_sum, order.plan_qty)
+
+
+def _fix_work_order_plan_date_order(db) -> None:
+    for wo in db.query(WorkOrder).all():
+        if wo.start_date and wo.end_date and wo.end_date < wo.start_date:
+            wo.end_date = wo.start_date
+
+
 def backfill_recent_operational_data(days: int | None = None) -> None:
     """把看板/总览依赖的事实表补到「今天」，已有日期跳过，可重复调用。
 
@@ -729,6 +862,9 @@ def backfill_recent_operational_data(days: int | None = None) -> None:
         for product in products:
             if product.default_line_id in products_by_line:
                 products_by_line[product.default_line_id].append(product)
+
+        _normalize_production_output_facts(db, today, now, lines, products_by_line)
+        _reconcile_sales_shipped_qty(db)
 
         # ---------- 生产计划 + 产量 ----------
         for day_offset in range(days - 1, -1, -1):
@@ -1119,6 +1255,9 @@ def backfill_recent_operational_data(days: int | None = None) -> None:
             target_count=min(1000, max(month_days * 32, 200)),
         )
         _rebase_live_records_to_today(db, today, now)
+        _normalize_production_output_facts(db, today, now, lines, products_by_line)
+        _reconcile_sales_shipped_qty(db)
+        _fix_work_order_plan_date_order(db)
 
         db.commit()
     finally:
@@ -1487,7 +1626,6 @@ def ensure_rich_work_orders(
     ym = today.strftime("%Y%m")
     seq = 1
     global_idx = 0
-    created_for_link: list[tuple] = []
 
     for day_i, day_count in enumerate(day_counts):
         the_day = month_start + timedelta(days=day_i)
@@ -1513,45 +1651,11 @@ def ensure_rich_work_orders(
                 **profile,
             )
             db.add(wo)
-            if status in ("completed", "closed", "in_progress"):
-                created_for_link.append((the_day, wo, line, product))
             global_idx += 1
 
     db.flush()
 
-    # 为每日完工/在制工单挂一条产量事实，强化「每天都有生产数据」
-    for the_day, wo, line, product in created_for_link:
-        if wo.status not in ("completed", "closed", "in_progress"):
-            continue
-        hour = 10 + (wo.id % 8)
-        record_at = _dt_on(the_day, hour, (wo.id * 3) % 60)
-        qty = max(wo.actual_quantity or int(wo.plan_quantity * 0.3), 1)
-        if wo.status == "in_progress":
-            qty = max(wo.actual_quantity, 1)
-        defect = (wo.id % 5)
-        exists = (
-            db.query(ProductionOutputRecord)
-            .filter(
-                ProductionOutputRecord.work_order_id == wo.id,
-                ProductionOutputRecord.record_at == record_at,
-            )
-            .first()
-        )
-        if exists:
-            continue
-        db.add(
-            ProductionOutputRecord(
-                record_at=record_at,
-                production_line_id=line.id,
-                product_id=product.id,
-                work_order_id=wo.id,
-                process_card_no=f"PC-{wo.order_no}",
-                actual_qty=qty,
-                area_output=round(qty * 1.85, 2),
-                defect_qty=defect,
-                incoming_boards=qty + defect + 2,
-            )
-        )
+    # 产量事实由 backfill 产线日/小时汇总维护；工单保留 actual_quantity，避免与计划产量 double count。
 
 
 def seed_rich_work_orders(target_count: int | None = None) -> None:

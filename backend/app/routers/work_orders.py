@@ -5,6 +5,7 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.audit import record_audit
 from app.auth import get_current_user
 from app.database import engine, get_db
 from app.material_outbound_store import MaterialOutbound, ensure_material_outbounds_schema
@@ -18,6 +19,7 @@ from app.models import (
     WarehouseLocation,
     WorkOrder,
 )
+from app.permissions import INVENTORY_WRITE, WORK_ORDERS_WRITE, require_permissions
 from app.schemas import (
     WorkOrderCreate,
     WorkOrderListResponse,
@@ -362,7 +364,7 @@ def list_material_outbound(
 )
 def create_material_outbound(
     payload: MaterialOutboundCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permissions(INVENTORY_WRITE)),
     db: Session = Depends(get_db),
 ):
     if payload.status not in ("pending", "completed"):
@@ -427,6 +429,18 @@ def create_material_outbound(
         db.flush()
         if payload.status == "completed":
             _apply_outbound_to_inventory(db, outbound)
+        record_audit(
+            db,
+            username=current_user.username,
+            action="create",
+            resource="material_outbound",
+            resource_id=outbound.outbound_no,
+            detail={
+                "material_code": outbound.material_code,
+                "quantity": outbound.quantity,
+                "status": outbound.status,
+            },
+        )
         db.commit()
         db.refresh(outbound)
     except HTTPException:
@@ -451,7 +465,7 @@ def get_work_order(
 @router.post("", response_model=WorkOrderResponse, status_code=201)
 def create_work_order(
     payload: WorkOrderCreate,
-    _current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permissions(WORK_ORDERS_WRITE)),
     db: Session = Depends(get_db),
 ):
     existing = db.query(WorkOrder).filter(WorkOrder.order_no == payload.order_no).first()
@@ -472,6 +486,15 @@ def create_work_order(
     )
     db.add(work_order)
     try:
+        db.flush()
+        record_audit(
+            db,
+            username=current_user.username,
+            action="create",
+            resource="work_order",
+            resource_id=work_order.order_no,
+            detail={"product_name": work_order.product_name},
+        )
         db.commit()
     except IntegrityError:
         db.rollback()
@@ -484,7 +507,7 @@ def create_work_order(
 def update_work_order(
     work_order_id: int,
     payload: WorkOrderUpdate,
-    _current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permissions(WORK_ORDERS_WRITE)),
     db: Session = Depends(get_db),
 ):
     work_order = _get_work_order_or_404(work_order_id, db)
@@ -509,6 +532,14 @@ def update_work_order(
     work_order.updated_at = datetime.utcnow()
 
     try:
+        record_audit(
+            db,
+            username=current_user.username,
+            action="update",
+            resource="work_order",
+            resource_id=work_order.order_no,
+            detail={"fields": sorted(update_data.keys())},
+        )
         db.commit()
     except IntegrityError:
         db.rollback()
@@ -530,7 +561,7 @@ def update_work_order(
 def update_work_order_status(
     work_order_id: int,
     payload: WorkOrderStatusUpdate,
-    _current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permissions(WORK_ORDERS_WRITE)),
     db: Session = Depends(get_db),
 ):
     work_order = _get_work_order_or_404(work_order_id, db)
@@ -538,12 +569,21 @@ def update_work_order_status(
     if payload.status not in allowed:
         raise HTTPException(status_code=400, detail=f"无法从 {work_order.status} 流转到 {payload.status}")
 
+    old_status = work_order.status
     work_order.status = payload.status
     ensure_work_order_timestamps(work_order)
     work_order.current_process = derive_current_process(
         work_order.status, work_order.plan_quantity, work_order.actual_quantity
     )
     work_order.updated_at = datetime.utcnow()
+    record_audit(
+        db,
+        username=current_user.username,
+        action="status_change",
+        resource="work_order",
+        resource_id=work_order.order_no,
+        detail={"from": old_status, "to": payload.status},
+    )
     db.commit()
     db.refresh(work_order)
     return work_order
@@ -552,9 +592,17 @@ def update_work_order_status(
 @router.delete("/{work_order_id}", status_code=204)
 def delete_work_order(
     work_order_id: int,
-    _current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permissions(WORK_ORDERS_WRITE)),
     db: Session = Depends(get_db),
 ):
     work_order = _get_work_order_or_404(work_order_id, db)
+    order_no = work_order.order_no
     db.delete(work_order)
+    record_audit(
+        db,
+        username=current_user.username,
+        action="delete",
+        resource="work_order",
+        resource_id=order_no,
+    )
     db.commit()

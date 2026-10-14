@@ -23,30 +23,38 @@ defineProps({
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 400px;
+  min-height: calc(100vh - 140px);
+  padding: 24px;
 }
 
 .placeholder-card {
   text-align: center;
-  padding: 48px 64px;
+  padding: 52px 64px;
+  max-width: 480px;
   background: #fff;
+  border: 1px solid #e8ecf1;
   border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.06);
 }
 
 .placeholder-icon {
   color: #667eea;
   margin-bottom: 16px;
+  padding: 14px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.12), rgba(118, 75, 162, 0.08));
 }
 
 .placeholder-card h2 {
-  font-size: 24px;
+  font-size: 22px;
+  font-weight: 600;
   color: #1a1a2e;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .placeholder-card p {
-  color: #888;
-  font-size: 16px;
+  color: #909399;
+  font-size: 14px;
+  line-height: 1.6;
 }
 </style>

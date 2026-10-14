@@ -8,7 +8,8 @@ from __future__ import annotations
 # OpenAPI 分组标签（Swagger 左侧分类）
 OPENAPI_TAGS: list[dict] = [
     {"name": "系统", "description": "健康检查等系统级接口"},
-    {"name": "认证", "description": "登录与当前用户信息"},
+    {"name": "认证", "description": "登录与当前用户信息（含权限码）"},
+    {"name": "审计日志", "description": "操作审计查询（需 audit.read）"},
     {"name": "工作台", "description": "首页工作台统计、待办与制造看板数据"},
     {"name": "生产工单", "description": "生产工单的增删改查与状态变更"},
     {"name": "工单逾期预警", "description": "已过计划结束日仍未完成的生产工单预警列表"},
@@ -54,7 +55,14 @@ API_ZH: dict[tuple[str, str], dict[str, str]] = {
     },
     ("GET", "/api/auth/me"): {
         "summary": "获取当前登录用户",
-        "description": "根据 Token 返回当前用户的 id、用户名和角色信息。",
+        "description": (
+            "根据 Token 返回当前用户的 id、用户名、角色以及 permissions 权限码列表；"
+            "前端据此过滤菜单，写接口另有服务端校验。"
+        ),
+    },
+    ("GET", "/api/audit-logs"): {
+        "summary": "审计日志列表",
+        "description": "分页查询登录与关键写操作审计；需 `audit.read`（admin 默认具备）。",
     },
     # ----- 工作台 -----
     ("GET", "/api/dashboard"): {

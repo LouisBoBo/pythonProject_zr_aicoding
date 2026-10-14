@@ -25,6 +25,7 @@ import MaterialInboundListView from '../views/warehouse/MaterialInboundListView.
 import ReportsIndex from '../views/reports/Index.vue'
 import { buildReportRoutes } from './reportRoutes.js'
 import SettingsIndex from '../views/settings/Index.vue'
+import AuditLogsView from '../views/settings/AuditLogsView.vue'
 import MessagesIndex from '../views/messages/Index.vue'
 import HelpIndex from '../views/help/Index.vue'
 import WorkOrdersView from '../views/WorkOrdersView.vue'
@@ -176,6 +177,12 @@ const router = createRouter({
         ...buildReportRoutes(authRequired),
         { path: 'reports/:pathMatch(.*)*', redirect: { name: 'reports' } },
         { path: 'settings', name: 'settings', component: SettingsIndex, meta: { title: '系统设置', ...authRequired } },
+        {
+          path: 'settings/audit-logs',
+          name: 'settings-audit-logs',
+          component: AuditLogsView,
+          meta: { title: '操作审计', ...authRequired },
+        },
         { path: 'messages', name: 'messages', component: MessagesIndex, meta: { title: '消息中心', ...authRequired } },
         { path: 'messages/:tab', redirect: '/messages' },
         { path: 'help', name: 'help', component: HelpIndex, meta: { title: '帮助文档', ...authRequired } },

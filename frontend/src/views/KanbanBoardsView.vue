@@ -37,7 +37,7 @@
     <el-card shadow="never" class="table-card">
       <div class="table-toolbar">
         <span class="table-title">看板列表</span>
-        <el-button type="primary" @click="openCreateDialog">新建看板</el-button>
+        <el-button v-if="canWrite" type="primary" @click="openCreateDialog">新建看板</el-button>
       </div>
 
       <el-table v-loading="loading" :data="boards" stripe border style="width: 100%">
@@ -65,7 +65,7 @@
         <el-table-column prop="description" label="描述" min-width="140" show-overflow-tooltip>
           <template #default="{ row }">{{ row.description || '-' }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="240" fixed="right">
+        <el-table-column v-if="canWrite" label="操作" width="240" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="openEditDialog(row)">编辑</el-button>
             <el-button
@@ -162,9 +162,10 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { usePermissions } from '../composables/usePermissions'
 import {
   createKanbanBoard,
   deleteKanbanBoard,
@@ -175,6 +176,8 @@ import {
 
 const router = useRouter()
 const route = useRoute()
+const { can } = usePermissions()
+const canWrite = computed(() => can('kanban.write'))
 
 const boards = ref([])
 const total = ref(0)
@@ -423,7 +426,7 @@ watch(
 onMounted(() => {
   applyRouteCategory()
   loadBoards()
-  if (route.query.create === '1' || route.query.create === 'true') {
+  if (canWrite.value && (route.query.create === '1' || route.query.create === 'true')) {
     openCreateDialog()
     router.replace({ path: route.path })
   }

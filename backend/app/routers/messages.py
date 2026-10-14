@@ -7,10 +7,12 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.audit import record_audit
 from app.auth import get_current_user
 from app.database import get_db
 from app.message_utils import CATEGORY_BY_MESSAGE_LEVEL
 from app.models import Message, User
+from app.permissions import MESSAGES_WRITE, require_permissions
 from app.schemas import (
     MessageCreate,
     MessageListResponse,
@@ -102,7 +104,7 @@ def list_messages(
 def create_message(
     payload: MessageCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(require_permissions(MESSAGES_WRITE)),
 ):
     """新建消息。"""
     message = Message(
@@ -116,6 +118,15 @@ def create_message(
         created_at=datetime.utcnow(),
     )
     db.add(message)
+    db.flush()
+    record_audit(
+        db,
+        username=current_user.username,
+        action="create",
+        resource="message",
+        resource_id=message.id,
+        detail={"title": message.title, "category": message.category},
+    )
     db.commit()
     db.refresh(message)
     return MessageResponse.model_validate(message)
@@ -136,7 +147,7 @@ def update_message(
     message_id: int,
     payload: MessageUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(require_permissions(MESSAGES_WRITE)),
 ):
     """更新消息。"""
     message = _get_message_or_404(message_id, db)
@@ -145,6 +156,14 @@ def update_message(
         if isinstance(value, str):
             value = value.strip()
         setattr(message, field, value)
+    record_audit(
+        db,
+        username=current_user.username,
+        action="update",
+        resource="message",
+        resource_id=message.id,
+        detail={"fields": sorted(update_data.keys())},
+    )
     db.commit()
     db.refresh(message)
     return MessageResponse.model_validate(message)
@@ -154,11 +173,20 @@ def update_message(
 def delete_message(
     message_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(require_permissions(MESSAGES_WRITE)),
 ):
     """删除消息。"""
     message = _get_message_or_404(message_id, db)
+    title = message.title
     db.delete(message)
+    record_audit(
+        db,
+        username=current_user.username,
+        action="delete",
+        resource="message",
+        resource_id=message_id,
+        detail={"title": title},
+    )
     db.commit()
 
 

@@ -5,7 +5,7 @@
         <h1 class="page-title">物料出库记录</h1>
         <p class="page-sub">按出库时间、物料、批次、领用部门查询历史出库记录</p>
       </div>
-      <el-button type="primary" @click="goCreate">新增出库</el-button>
+      <el-button v-if="canWrite" type="primary" @click="goCreate">新增出库</el-button>
     </header>
 
     <section class="filter-bar">
@@ -110,14 +110,17 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { fetchMaterialOutboundList } from '../../api/materialOutbound'
+import { usePermissions } from '../../composables/usePermissions'
 
 const STATUS_MAP = { pending: '待出库', completed: '已出库' }
 
 const router = useRouter()
+const { can } = usePermissions()
+const canWrite = computed(() => can('inventory.write'))
 
 const filters = reactive({
   materialCode: '',

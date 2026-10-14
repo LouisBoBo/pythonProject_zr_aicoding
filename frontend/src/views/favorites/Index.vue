@@ -168,9 +168,10 @@ onUnmounted(() => {
 
 .current-page-section {
   background: #fff;
+  border: 1px solid #e8ecf1;
   border-radius: 8px;
   padding: 16px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .section-title {
@@ -182,9 +183,10 @@ onUnmounted(() => {
 
 .table-section {
   background: #fff;
+  border: 1px solid #e8ecf1;
   border-radius: 8px;
   padding: 16px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .url-cell {

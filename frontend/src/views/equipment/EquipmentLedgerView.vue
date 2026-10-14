@@ -66,14 +66,16 @@
         </el-form-item>
       </el-form>
       <div class="action-group">
-        <el-button type="primary" :icon="Plus" @click="openCreateDialog">新增设备</el-button>
-        <el-upload
-          :show-file-list="false"
-          accept=".xlsx,.xls"
-          :before-upload="handleImport"
-        >
-          <el-button :icon="Upload">导入 Excel</el-button>
-        </el-upload>
+        <template v-if="canWrite">
+          <el-button type="primary" :icon="Plus" @click="openCreateDialog">新增设备</el-button>
+          <el-upload
+            :show-file-list="false"
+            accept=".xlsx,.xls"
+            :before-upload="handleImport"
+          >
+            <el-button :icon="Upload">导入 Excel</el-button>
+          </el-upload>
+        </template>
         <el-button :icon="Download" :loading="exporting" @click="handleExport">导出 Excel</el-button>
       </div>
     </div>
@@ -109,11 +111,11 @@
         <el-table-column prop="remark" label="备注" min-width="120" show-overflow-tooltip>
           <template #default="{ row }">{{ row.remark || '-' }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="180" fixed="right">
+        <el-table-column label="操作" :width="canWrite ? 180 : 90" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="goDetail(row)">详情</el-button>
-            <el-button link type="primary" size="small" @click="openEditDialog(row)">编辑</el-button>
-            <el-button link type="danger" size="small" @click="handleDelete(row)">删除</el-button>
+            <el-button v-if="canWrite" link type="primary" size="small" @click="openEditDialog(row)">编辑</el-button>
+            <el-button v-if="canWrite" link type="danger" size="small" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -202,6 +204,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Cpu, Plus, Upload, Download } from '@element-plus/icons-vue'
+import { usePermissions } from '../../composables/usePermissions'
 import {
   fetchEquipmentList,
   createEquipment,
@@ -212,6 +215,8 @@ import {
 } from '../../api/equipment'
 
 const router = useRouter()
+const { can } = usePermissions()
+const canWrite = computed(() => can('equipment.write'))
 
 const loading = ref(false)
 const exporting = ref(false)

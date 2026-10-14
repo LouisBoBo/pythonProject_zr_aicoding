@@ -15,6 +15,45 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(50), nullable=False, default="user")
 
 
+class Permission(Base):
+    """权限码字典。"""
+
+    __tablename__ = "permissions"
+
+    code: Mapped[str] = mapped_column(String(80), primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+
+
+class RolePermission(Base):
+    """角色 → 权限码映射。"""
+
+    __tablename__ = "role_permissions"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    role: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    permission_code: Mapped[str] = mapped_column(
+        String(80), ForeignKey("permissions.code"), nullable=False, index=True
+    )
+
+
+class AuditLog(Base):
+    """操作审计日志（只追加）。"""
+
+    __tablename__ = "audit_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    username: Mapped[str] = mapped_column(String(50), nullable=False, index=True, default="")
+    action: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    resource: Mapped[str] = mapped_column(String(50), nullable=False, index=True, default="")
+    resource_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    detail: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    success: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.utcnow, index=True
+    )
+
+
 class WorkOrder(Base):
     __tablename__ = "work_orders"
 
@@ -53,6 +92,11 @@ class KanbanBoard(Base):
     production_line: Mapped[str | None] = mapped_column(String(50), nullable=True)
     owner: Mapped[str | None] = mapped_column(String(50), nullable=True)
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    refresh_interval: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
+    remark: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.utcnow
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
     )

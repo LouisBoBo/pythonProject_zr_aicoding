@@ -10,6 +10,7 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
+from app.audit import record_audit
 from app.auth import get_current_user
 from app.database import get_db
 from app.models import (
@@ -22,6 +23,7 @@ from app.models import (
     Warehouse,
     WarehouseLocation,
 )
+from app.permissions import INVENTORY_WRITE, require_permissions
 from app.schemas import (
     InventoryStockListResponse,
     InventoryStockResponse,
@@ -532,7 +534,7 @@ def list_material_inbound(
 @router.post("/material-inbound", response_model=MaterialInboundResponse, status_code=201)
 def create_material_inbound(
     payload: MaterialInboundCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permissions(INVENTORY_WRITE)),
     db: Session = Depends(get_db),
 ):
     """新增物料入库：落库 material_inbounds；状态为已入库时同步更新库存。"""
@@ -584,6 +586,18 @@ def create_material_inbound(
         db.flush()
         if payload.status == "completed":
             _apply_inbound_to_inventory(db, inbound)
+        record_audit(
+            db,
+            username=current_user.username,
+            action="create",
+            resource="material_inbound",
+            resource_id=inbound.inbound_no,
+            detail={
+                "material_code": inbound.material_code,
+                "quantity": inbound.quantity,
+                "status": inbound.status,
+            },
+        )
         db.commit()
         db.refresh(inbound)
     except IntegrityError:

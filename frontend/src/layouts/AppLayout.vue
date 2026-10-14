@@ -204,7 +204,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, provide, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowDown,
@@ -249,6 +249,8 @@ import {
   isFavorited,
   removeFavoriteByUrl,
 } from '../utils/pageFavorites'
+import { CURRENT_USER_KEY } from '../composables/usePermissions'
+import { filterMenuByPermissions } from '../utils/permissions'
 
 const router = useRouter()
 const route = useRoute()
@@ -256,6 +258,7 @@ const route = useRoute()
 const sidebarCollapsed = ref(false)
 const searchKeyword = ref('')
 const user = ref(null)
+provide(CURRENT_USER_KEY, user)
 const unreadCount = ref(0)
 const favoriteTick = ref(0)
 
@@ -286,6 +289,7 @@ function buildReportMenuItem() {
     path: entry.path,
     title: entry.title,
     icon: resolveReportIcon(entry.icon, Document),
+    permission: 'reports.read',
   }))
 
   if (equipmentEntries.length) {
@@ -293,10 +297,12 @@ function buildReportMenuItem() {
       key: 'reports-equipment',
       title: '设备报表',
       icon: Cpu,
+      permission: 'reports.read',
       children: equipmentEntries.map((entry) => ({
         path: entry.path,
         title: entry.title,
         icon: resolveReportIcon(entry.icon, Cpu),
+        permission: 'reports.read',
       })),
     })
   }
@@ -306,6 +312,7 @@ function buildReportMenuItem() {
     key: 'reports',
     title: '报表中心',
     icon: DataLine,
+    permission: 'reports.read',
     children,
   }
 }
@@ -315,11 +322,17 @@ const menuGroups = computed(() => {
   const systemItems = [
     ...(reportMenu ? [reportMenu] : []),
     { path: '/cursor-coding', title: 'Cursor 写码过程', icon: EditPen },
-    { path: '/settings', title: '系统设置', icon: Setting },
+    { path: '/settings', title: '系统设置', icon: Setting, permission: 'settings.admin' },
+    {
+      path: '/settings/audit-logs',
+      title: '操作审计',
+      icon: Document,
+      permission: 'audit.read',
+    },
     { path: '/messages', title: '消息中心', icon: Bell, badge: 'messages' },
     { path: '/help', title: '帮助文档', icon: QuestionFilled },
   ]
-  return [
+  const groups = [
     {
       key: 'overview',
       title: '概览',
@@ -366,6 +379,7 @@ const menuGroups = computed(() => {
         },
         {
           key: 'equipment',
+          title: '设备管理',
           icon: Cpu,
           children: [
             { path: '/equipment/ledger', title: '设备台账', icon: Cpu },
@@ -381,26 +395,53 @@ const menuGroups = computed(() => {
           icon: Box,
           children: [
             { path: '/warehouse/inventory', title: '物料库存', icon: Box },
-            { path: '/warehouse/inbound', title: '物料入库', icon: List },
-            { path: '/warehouse/outbound', title: '物料出库', icon: Box },
+            {
+              path: '/warehouse/inbound',
+              title: '物料入库',
+              icon: List,
+              permission: 'inventory.write',
+            },
+            {
+              path: '/warehouse/outbound',
+              title: '物料出库',
+              icon: Box,
+              permission: 'inventory.write',
+            },
             { path: '/warehouse/low-stock', title: '低库存预警', icon: Warning },
           ],
         },
-        { path: '/materials', title: '物料管理', icon: Goods },
+        {
+          path: '/materials',
+          title: '物料管理',
+          icon: Goods,
+          permission: 'materials.read',
+        },
         {
           key: 'material-purchase',
           title: '物料采购',
           icon: ShoppingCart,
+          permission: 'materials.read',
           children: [
-            { path: '/material-purchases', title: '物料采购列表', icon: List },
+            {
+              path: '/material-purchases',
+              title: '物料采购列表',
+              icon: List,
+              permission: 'materials.read',
+            },
           ],
         },
         {
           key: 'employee-management',
           title: '员工管理',
           icon: User,
+          permission: 'employees.read',
           children: [
-            { path: '/employees', title: '员工列表', icon: List },
+            {
+              path: '/employees',
+              title: '员工列表',
+              icon: List,
+              permission: 'employees.read',
+            },
           ],
         },
       ],
@@ -411,6 +452,7 @@ const menuGroups = computed(() => {
       items: systemItems,
     },
   ]
+  return filterMenuByPermissions(groups, user.value)
 })
 
 const currentTitle = computed(() => route.meta.title || '首页')
@@ -426,7 +468,8 @@ const activeTab = computed(() => {
   const match = topTabs.find(
     (tab) => route.path === tab.path || route.path.startsWith(tab.path + '/'),
   )
-  return match?.path || '/home'
+  // 非顶栏路由时不误选「首页」，避免业务页仍高亮首页 Tab
+  return match?.path || ''
 })
 
 const showPageTab = computed(
@@ -567,19 +610,20 @@ onMounted(async () => {
   display: flex;
   height: 100vh;
   overflow: hidden;
-  background: #f0f2f5;
+  background: var(--erp-content-bg, #eef1f6);
 }
 
 .sidebar {
   width: 220px;
   height: 100%;
-  background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+  background: linear-gradient(180deg, #151b2e 0%, #1a2340 55%, #16213e 100%);
   display: flex;
   flex-direction: column;
   transition: width 0.25s ease;
   flex-shrink: 0;
   position: relative;
   overflow: hidden;
+  box-shadow: 2px 0 12px rgba(15, 23, 42, 0.12);
 }
 
 .sidebar.collapsed {
@@ -778,9 +822,10 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
   padding: 0 24px;
-  background: #3d3d3d;
+  background: linear-gradient(90deg, #2f3340 0%, #3a3f4b 100%);
   gap: 16px;
   min-height: 48px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .topbar-left {
@@ -982,9 +1027,9 @@ onMounted(async () => {
 .content-area {
   flex: 1;
   min-height: 0;
-  padding: 16px 20px;
+  padding: 16px 20px 20px;
   overflow-y: auto;
   overflow-x: hidden;
-  background: #f0f2f5;
+  background: var(--erp-content-bg, #eef1f6);
 }
 </style>

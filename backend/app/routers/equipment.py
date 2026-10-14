@@ -7,9 +7,11 @@ from openpyxl import Workbook, load_workbook
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.audit import record_audit
 from app.auth import get_current_user
 from app.database import get_db
 from app.models import Equipment, User
+from app.permissions import EQUIPMENT_WRITE, require_permissions
 from app.schemas import (
     EquipmentCreate,
     EquipmentImportResult,
@@ -195,7 +197,7 @@ def get_equipment(
 @router.post("", response_model=EquipmentResponse, status_code=201)
 def create_equipment(
     payload: EquipmentCreate,
-    _current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permissions(EQUIPMENT_WRITE)),
     db: Session = Depends(get_db),
 ):
     existing = (
@@ -209,6 +211,15 @@ def create_equipment(
     equipment = Equipment(**payload.model_dump())
     db.add(equipment)
     try:
+        db.flush()
+        record_audit(
+            db,
+            username=current_user.username,
+            action="create",
+            resource="equipment",
+            resource_id=equipment.equipment_code,
+            detail={"name": equipment.name},
+        )
         db.commit()
     except IntegrityError:
         db.rollback()
@@ -221,7 +232,7 @@ def create_equipment(
 def update_equipment(
     equipment_id: int,
     payload: EquipmentUpdate,
-    _current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permissions(EQUIPMENT_WRITE)),
     db: Session = Depends(get_db),
 ):
     equipment = _get_equipment_or_404(equipment_id, db)
@@ -247,6 +258,14 @@ def update_equipment(
     equipment.updated_at = datetime.utcnow()
 
     try:
+        record_audit(
+            db,
+            username=current_user.username,
+            action="update",
+            resource="equipment",
+            resource_id=equipment.equipment_code,
+            detail={"fields": sorted(update_data.keys())},
+        )
         db.commit()
     except IntegrityError:
         db.rollback()
@@ -258,18 +277,26 @@ def update_equipment(
 @router.delete("/{equipment_id}", status_code=204)
 def delete_equipment(
     equipment_id: int,
-    _current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permissions(EQUIPMENT_WRITE)),
     db: Session = Depends(get_db),
 ):
     equipment = _get_equipment_or_404(equipment_id, db)
+    code = equipment.equipment_code
     db.delete(equipment)
+    record_audit(
+        db,
+        username=current_user.username,
+        action="delete",
+        resource="equipment",
+        resource_id=code,
+    )
     db.commit()
 
 
 @router.post("/import", response_model=EquipmentImportResult)
 async def import_equipment(
     file: UploadFile = File(...),
-    _current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permissions(EQUIPMENT_WRITE)),
     db: Session = Depends(get_db),
 ):
     if not file.filename or not file.filename.lower().endswith((".xlsx", ".xls")):
@@ -335,5 +362,12 @@ async def import_equipment(
             skipped += 1
             errors.append(f"第 {idx} 行：设备编号 {code} 已存在")
 
+    record_audit(
+        db,
+        username=current_user.username,
+        action="import",
+        resource="equipment",
+        detail={"created": created, "skipped": skipped, "filename": file.filename},
+    )
     db.commit()
     return EquipmentImportResult(created=created, skipped=skipped, errors=errors)

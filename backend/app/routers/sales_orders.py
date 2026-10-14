@@ -5,9 +5,11 @@ from pydantic import BaseModel, Field
 from sqlalchemy import or_, update
 from sqlalchemy.orm import Session
 
+from app.audit import record_audit
 from app.auth import get_current_user
 from app.database import get_db
 from app.models import SalesOrder, ShipmentRecord, User
+from app.permissions import SALES_WRITE, require_permissions
 
 router = APIRouter(prefix="/api/sales-orders", tags=["销售订单与发货"])
 
@@ -162,7 +164,7 @@ def list_sales_orders(
 )
 def create_sales_order(
     body: SalesOrderCreateBody,
-    _current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permissions(SALES_WRITE)),
     db: Session = Depends(get_db),
 ):
     order_no = (body.order_no or "").strip() or _generate_order_no(db)
@@ -180,6 +182,15 @@ def create_sales_order(
         created_at=now,
     )
     db.add(order)
+    db.flush()
+    record_audit(
+        db,
+        username=current_user.username,
+        action="create",
+        resource="sales_order",
+        resource_id=order.order_no,
+        detail={"customer": order.customer, "plan_qty": order.plan_qty},
+    )
     db.commit()
     db.refresh(order)
     return _order_item(order)
@@ -219,7 +230,7 @@ def list_order_shipments(
 def register_sales_order_shipment(
     order_id: int,
     body: RegisterShipmentBody,
-    _current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permissions(SALES_WRITE)),
     db: Session = Depends(get_db),
 ):
     order = db.query(SalesOrder).filter(SalesOrder.id == order_id).first()
@@ -268,6 +279,14 @@ def register_sales_order_shipment(
             SalesOrder.shipped_qty >= SalesOrder.plan_qty,
         )
         .values(status="closed")
+    )
+    record_audit(
+        db,
+        username=current_user.username,
+        action="register_shipment",
+        resource="sales_order",
+        resource_id=order.order_no,
+        detail={"ship_qty": ship_qty},
     )
 
     db.commit()

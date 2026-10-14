@@ -5,7 +5,7 @@
         <h1 class="page-title">消息中心</h1>
         <p class="page-sub">系统通知 · 业务告警 · 公告消息</p>
       </div>
-      <el-button type="primary" @click="openCreate">新增消息</el-button>
+      <el-button v-if="canWrite" type="primary" @click="openCreate">新增消息</el-button>
     </header>
 
     <section class="filter-section">
@@ -71,7 +71,7 @@
             </span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="140" fixed="right" align="center">
+        <el-table-column v-if="canWrite" label="操作" width="140" fixed="right" align="center">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="openEdit(row)">编辑</el-button>
             <el-button link type="danger" size="small" @click="handleDelete(row)">删除</el-button>
@@ -137,14 +137,18 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { usePermissions } from '../../composables/usePermissions'
 import {
   createMessage,
   deleteMessage,
   fetchMessageList,
   updateMessage,
 } from '../../api/messages'
+
+const { can } = usePermissions()
+const canWrite = computed(() => can('messages.write'))
 
 const loading = ref(false)
 const saving = ref(false)

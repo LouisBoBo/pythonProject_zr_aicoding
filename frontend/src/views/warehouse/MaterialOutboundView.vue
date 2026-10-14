@@ -5,7 +5,7 @@
         <h1 class="page-title">物料出库</h1>
         <p class="page-sub">生产领料出库 · 单号自动生成 · 库存余量校验</p>
       </div>
-      <el-button type="primary" @click="openCreate">新增出库</el-button>
+      <el-button v-if="canWrite" type="primary" @click="openCreate">新增出库</el-button>
     </header>
 
     <section class="filter-bar">
@@ -258,10 +258,13 @@ import {
   fetchMaterialOptions,
   fetchWarehouseOptions,
 } from '../../api/warehouse'
+import { usePermissions } from '../../composables/usePermissions'
 
 const OUTBOUND_TYPE_LABEL = '生产领料出库'
 const STATUS_MAP = { pending: '待出库', completed: '已出库' }
 
+const { can } = usePermissions()
+const canWrite = computed(() => can('inventory.write'))
 const outboundTypeLabel = OUTBOUND_TYPE_LABEL
 
 const filters = reactive({

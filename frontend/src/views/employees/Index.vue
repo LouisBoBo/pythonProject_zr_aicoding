@@ -5,28 +5,31 @@
         <h2 class="page-title">员工列表</h2>
         <p class="page-desc">查看部门、员工资料与月工资</p>
       </div>
-      <el-form :model="filters" inline class="search-form">
+      <el-form :model="filters" inline class="search-form" @submit.prevent="handleSearch">
         <el-form-item label="工号">
           <el-input
             v-model="filters.employeeNo"
-            placeholder="工号"
+            placeholder="请输入工号"
             clearable
+            style="width: 160px"
             @keyup.enter="handleSearch"
           />
         </el-form-item>
         <el-form-item label="姓名">
           <el-input
             v-model="filters.employeeName"
-            placeholder="姓名"
+            placeholder="请输入姓名"
             clearable
+            style="width: 160px"
             @keyup.enter="handleSearch"
           />
         </el-form-item>
         <el-form-item label="部门">
           <el-input
             v-model="filters.departmentName"
-            placeholder="部门名称"
+            placeholder="请输入部门名称"
             clearable
+            style="width: 180px"
             @keyup.enter="handleSearch"
           />
         </el-form-item>
@@ -54,7 +57,13 @@
           <template #default="{ row }">{{ row.phone || '-' }}</template>
         </el-table-column>
         <el-table-column prop="hire_date" label="入职日期" width="120" />
-        <el-table-column prop="status" label="状态" width="80" align="center" />
+        <el-table-column prop="status" label="状态" width="90" align="center">
+          <template #default="{ row }">
+            <el-tag :type="statusTagType(row.status)" size="small" effect="light">
+              {{ statusLabel(row.status) }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="salary" label="工资" width="120" align="right">
           <template #default="{ row }">{{ formatSalary(row.salary) }}</template>
         </el-table-column>
@@ -105,6 +114,25 @@ function formatSalary(value) {
   })}`
 }
 
+function statusLabel(status) {
+  const map = {
+    active: '在职',
+    inactive: '离职',
+    leave: '请假',
+    probation: '试用',
+  }
+  return map[status] || status || '-'
+}
+
+function statusTagType(status) {
+  const label = statusLabel(status)
+  if (label === '在职' || status === 'active') return 'success'
+  if (label === '离职' || status === 'inactive') return 'info'
+  if (label === '请假' || status === 'leave') return 'warning'
+  if (label === '试用' || status === 'probation') return ''
+  return 'info'
+}
+
 async function loadList() {
   loading.value = true
   try {
@@ -152,7 +180,9 @@ onMounted(loadList)
 
 .search-card,
 .table-card {
-  border-radius: 4px;
+  border-radius: 8px;
+  border: 1px solid #e8ecf1;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .page-heading {
@@ -176,6 +206,15 @@ onMounted(loadList)
 
 .search-form {
   margin-bottom: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: center;
+}
+
+.search-form :deep(.el-form-item) {
+  margin-bottom: 8px;
+  margin-right: 12px;
 }
 
 .table-toolbar {

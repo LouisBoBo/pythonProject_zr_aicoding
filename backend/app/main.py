@@ -40,6 +40,7 @@ from app.models import (
     WarehouseLocation,
 )
 from app.routers import (
+    audit_logs,
     auth,
     cursor_coding,
     dev_pipeline,
@@ -68,6 +69,7 @@ from app.routers import employees as employees_router
 from app.routers import material_purchases
 from app.material_purchase import backfill_material_purchase_profiles
 from app.seed_analytics import backfill_recent_operational_data, seed_analytics_data
+from app.permissions import seed_rbac
 
 
 def seed_default_user():
@@ -131,6 +133,35 @@ def ensure_sales_orders_ordered_at():
                 """
             )
         )
+
+
+def ensure_kanban_board_fields():
+    """为已有 kanban_boards 表补齐 refresh_interval / remark / created_at。"""
+    inspector = inspect(engine)
+    if not inspector.has_table("kanban_boards"):
+        return
+    columns = {column["name"] for column in inspector.get_columns("kanban_boards")}
+    alters = []
+    if "refresh_interval" not in columns:
+        alters.append("ALTER TABLE kanban_boards ADD COLUMN refresh_interval INTEGER DEFAULT 60")
+    if "remark" not in columns:
+        alters.append("ALTER TABLE kanban_boards ADD COLUMN remark VARCHAR(500)")
+    if "created_at" not in columns:
+        alters.append("ALTER TABLE kanban_boards ADD COLUMN created_at DATETIME")
+    if alters:
+        with engine.begin() as conn:
+            for stmt in alters:
+                conn.execute(text(stmt))
+            if "created_at" not in columns:
+                conn.execute(
+                    text(
+                        """
+                        UPDATE kanban_boards
+                        SET created_at = COALESCE(updated_at, CURRENT_TIMESTAMP)
+                        WHERE created_at IS NULL
+                        """
+                    )
+                )
 
 
 def ensure_work_orders_actual_start_time():
@@ -1300,6 +1331,7 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     ensure_material_purchase_fields()
     ensure_sales_orders_ordered_at()
+    ensure_kanban_board_fields()
     ensure_work_orders_actual_start_time()
     ensure_work_orders_actual_end_time()
     ensure_work_orders_current_process()
@@ -1307,6 +1339,7 @@ async def lifespan(app: FastAPI):
     ensure_equipment_repairs_repair_completed_at()
     ensure_employee_work_hours_shift_type()
     seed_default_user()
+    seed_rbac()
     seed_inspection_data()
     seed_equipment_data()
     seed_equipment_maintenance_data()
@@ -1368,7 +1401,9 @@ def root_redirect():
     """根路径无页面，引导到 Swagger；日常请用前端 5175 登录。"""
     return RedirectResponse(url="/docs")
 
+
 app.include_router(auth.router)
+app.include_router(audit_logs.router)
 app.include_router(dashboard.router)
 app.include_router(work_order_alerts.router)
 app.include_router(work_orders.router)

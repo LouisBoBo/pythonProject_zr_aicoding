@@ -4,9 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.audit import record_audit
 from app.auth import get_current_user
 from app.database import get_db
 from app.models import KanbanBoard, User
+from app.permissions import KANBAN_WRITE, require_permissions
 from app.schemas import (
     KanbanBoardCreate,
     KanbanBoardListResponse,
@@ -85,7 +87,7 @@ def get_kanban_board(
 @router.post("", response_model=KanbanBoardResponse, status_code=201)
 def create_kanban_board(
     payload: KanbanBoardCreate,
-    _current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permissions(KANBAN_WRITE)),
     db: Session = Depends(get_db),
 ):
     existing = db.query(KanbanBoard).filter(KanbanBoard.board_code == payload.board_code).first()
@@ -104,6 +106,15 @@ def create_kanban_board(
     )
     db.add(board)
     try:
+        db.flush()
+        record_audit(
+            db,
+            username=current_user.username,
+            action="create",
+            resource="kanban_board",
+            resource_id=board.board_code,
+            detail={"board_name": board.board_name},
+        )
         db.commit()
     except IntegrityError:
         db.rollback()
@@ -116,7 +127,7 @@ def create_kanban_board(
 def update_kanban_board(
     board_id: int,
     payload: KanbanBoardUpdate,
-    _current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permissions(KANBAN_WRITE)),
     db: Session = Depends(get_db),
 ):
     board = _get_kanban_board_or_404(board_id, db)
@@ -136,6 +147,14 @@ def update_kanban_board(
     board.updated_at = datetime.utcnow()
 
     try:
+        record_audit(
+            db,
+            username=current_user.username,
+            action="update",
+            resource="kanban_board",
+            resource_id=board.board_code,
+            detail={"fields": sorted(update_data.keys())},
+        )
         db.commit()
     except IntegrityError:
         db.rollback()
@@ -148,7 +167,7 @@ def update_kanban_board(
 def update_kanban_board_status(
     board_id: int,
     payload: KanbanBoardStatusUpdate,
-    _current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permissions(KANBAN_WRITE)),
     db: Session = Depends(get_db),
 ):
     board = _get_kanban_board_or_404(board_id, db)
@@ -156,8 +175,17 @@ def update_kanban_board_status(
     if payload.status not in allowed:
         raise HTTPException(status_code=400, detail=f"无法从 {board.status} 流转到 {payload.status}")
 
+    old_status = board.status
     board.status = payload.status
     board.updated_at = datetime.utcnow()
+    record_audit(
+        db,
+        username=current_user.username,
+        action="status_change",
+        resource="kanban_board",
+        resource_id=board.board_code,
+        detail={"from": old_status, "to": payload.status},
+    )
     db.commit()
     db.refresh(board)
     return board
@@ -166,9 +194,17 @@ def update_kanban_board_status(
 @router.delete("/{board_id}", status_code=204)
 def delete_kanban_board(
     board_id: int,
-    _current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permissions(KANBAN_WRITE)),
     db: Session = Depends(get_db),
 ):
     board = _get_kanban_board_or_404(board_id, db)
+    code = board.board_code
     db.delete(board)
+    record_audit(
+        db,
+        username=current_user.username,
+        action="delete",
+        resource="kanban_board",
+        resource_id=code,
+    )
     db.commit()

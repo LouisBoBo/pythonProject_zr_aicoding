@@ -5,7 +5,7 @@
         <h1 class="page-title">物料入库</h1>
         <p class="page-sub">入库单查询 · 新增登记 · 状态跟踪</p>
       </div>
-      <el-button type="primary" @click="openCreate">新增入库</el-button>
+      <el-button v-if="canWrite" type="primary" @click="openCreate">新增入库</el-button>
     </header>
 
     <section class="filter-bar">
@@ -215,8 +215,11 @@ import {
   fetchMaterialOptions,
   fetchWarehouseOptions,
 } from '../../api/warehouse'
+import { usePermissions } from '../../composables/usePermissions'
 
 const STATUS_MAP = { pending: '待入库', completed: '已入库' }
+const { can } = usePermissions()
+const canWrite = computed(() => can('inventory.write'))
 
 const filters = reactive({
   inboundNo: '',

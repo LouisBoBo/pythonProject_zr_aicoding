@@ -49,7 +49,7 @@ def test_user(db_session):
     user = User(
         username="testuser",
         hashed_password=hash_password("password123"),
-        role="user",
+        role="admin",
     )
     db_session.add(user)
     db_session.commit()

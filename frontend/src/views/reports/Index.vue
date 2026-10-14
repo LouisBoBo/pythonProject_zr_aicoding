@@ -58,7 +58,13 @@ function iconOf(name) {
 
 <style scoped>
 .reports-hub {
-  max-width: 960px;
+  max-width: 1000px;
+}
+
+.reports-hub :deep(.el-card) {
+  border-radius: 8px;
+  border: 1px solid #e8ecf1;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .hub-header {
@@ -67,11 +73,13 @@ function iconOf(name) {
   gap: 8px;
   font-size: 16px;
   font-weight: 600;
+  color: #303133;
 }
 
 .hub-desc {
   color: var(--el-text-color-secondary);
   margin: 0 0 12px;
+  line-height: 1.6;
 }
 
 .prefs-collapse {
@@ -100,18 +108,21 @@ function iconOf(name) {
 .report-link-card {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 16px;
-  border: 1px solid var(--el-border-color-light);
+  gap: 8px;
+  padding: 18px 16px;
+  border: 1px solid #e8ecf1;
   border-radius: 8px;
+  background: #fafbfc;
   text-decoration: none;
   color: inherit;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s ease, background 0.2s;
 }
 
 .report-link-card:hover {
   border-color: var(--el-color-primary);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  background: #fff;
+  box-shadow: 0 4px 14px rgba(64, 158, 255, 0.12);
+  transform: translateY(-1px);
 }
 
 .link-title {

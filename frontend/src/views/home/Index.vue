@@ -39,7 +39,7 @@
             <div class="progress-fill" :style="{ width: dailyPercent + '%' }" />
           </div>
           <div class="daily-percent">{{ dailyPercent }}%</div>
-          <a class="detail-link light" href="javascript:;">详细信息</a>
+          <router-link class="detail-link light" to="/reports/daily-output">详细信息</router-link>
         </div>
       </div>
 
@@ -71,7 +71,7 @@
         <div class="card-body donut-body">
           <v-chart class="donut-chart" :option="anomalyDonutOption" autoresize />
           <div class="donut-center">{{ data.anomaly_percent }}%</div>
-          <a class="detail-link" href="javascript:;">详细信息</a>
+          <router-link class="detail-link" to="/quality/dashboard">详细信息</router-link>
         </div>
       </div>
     </div>
@@ -693,6 +693,7 @@ onMounted(async () => {
   color: #409eff;
   text-decoration: none;
   margin-top: 2px;
+  display: inline-block;
 }
 
 .detail-link.light {
@@ -701,6 +702,7 @@ onMounted(async () => {
 
 .detail-link:hover {
   text-decoration: underline;
+  opacity: 0.9;
 }
 
 .efficiency-body {

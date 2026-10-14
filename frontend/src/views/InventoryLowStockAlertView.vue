@@ -162,7 +162,9 @@ onMounted(() => {
 
 .search-card,
 .table-card {
-  border-radius: 4px;
+  border-radius: 8px;
+  border: 1px solid #e8ecf1;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .page-heading {
@@ -186,6 +188,15 @@ onMounted(() => {
 
 .search-form {
   margin-bottom: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: center;
+}
+
+.search-form :deep(.el-form-item) {
+  margin-bottom: 8px;
+  margin-right: 12px;
 }
 
 .table-toolbar {

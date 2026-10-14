@@ -37,7 +37,7 @@
     <el-card shadow="never" class="table-card">
       <div class="table-toolbar">
         <span class="table-title">生产工单列表</span>
-        <el-button type="primary" @click="openCreateDialog">新建工单</el-button>
+        <el-button v-if="canWrite" type="primary" @click="openCreateDialog">新建工单</el-button>
       </div>
 
       <el-table v-loading="loading" :data="workOrders" stripe border style="width: 100%">
@@ -79,7 +79,7 @@
         <el-table-column prop="end_date" label="计划结束" width="110">
           <template #default="{ row }">{{ row.end_date || '-' }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="240" fixed="right">
+        <el-table-column v-if="canWrite" label="操作" width="240" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="openEditDialog(row)">编辑</el-button>
             <el-button
@@ -184,9 +184,10 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { usePermissions } from '../composables/usePermissions'
 import {
   createWorkOrder,
   deleteWorkOrder,
@@ -197,6 +198,8 @@ import {
 
 const router = useRouter()
 const route = useRoute()
+const { can } = usePermissions()
+const canWrite = computed(() => can('work_orders.write'))
 
 const workOrders = ref([])
 const total = ref(0)
