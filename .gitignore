@@ -18,3 +18,6 @@ dist/
 .vscode/
 .dev-logs/
 frontend/.vite/
+
+# WorkBuddy 本机部署覆盖（私钥路径等，勿提交）
+.workbuddy/deploy.local.yaml

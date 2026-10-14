@@ -1,4 +1,4 @@
-import pytest
+﻿import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -46,10 +46,11 @@ def client(db_session):
 
 @pytest.fixture()
 def test_user(db_session):
+    # admin：具备工时审批权限（work_hours.approve）
     user = User(
         username="testuser",
         hashed_password=hash_password("password123"),
-        role="user",
+        role="admin",
     )
     db_session.add(user)
     db_session.commit()

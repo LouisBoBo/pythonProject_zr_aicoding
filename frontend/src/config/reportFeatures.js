@@ -8,6 +8,7 @@
 // cch-20261008-daily-output-null-line-id-guard
 // cch-20261009-report-center-add-employee-work-hours-menu
 // cch-20261014-report-center-remove-employee-work-hours-menu
+// cch-20261014-report-center-add-employee-work-hours-menu
 // cch-20261009-employee-work-hours-remove-employee-no-column
 /**
  * 报表功能注册表（唯一配置入口）。
@@ -55,7 +56,7 @@ export const REPORT_CATALOG = [
     icon: 'Timer',
     menu: false,
     hub: false,
-    enabled: false,
+    enabled: true,
   },
   {
     id: 'pcb-production-ops',

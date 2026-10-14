@@ -1,0 +1,30 @@
+# WorkBuddy 项目部署规则（可提交）
+# 部署时按当前工作区读取本文件；本机私钥只放同目录 deploy.local.yaml（勿提交）。
+version: 1
+
+preset: vite_backend
+unified_product: false
+auto_restart_engine: false
+auto_restart_bridge: false
+default_ref: HEAD
+
+build_where: local
+build_cmd: "npm run build"
+build_cwd: frontend
+sync_paths:
+  - frontend/dist
+  - backend
+dist_rel: frontend/dist
+
+ssh:
+  host: "175.178.238.31"
+  user: "root"
+  port: 22
+  app_path: "/www/wwwroot/zr-aicoding"
+
+entry_url: "http://175.178.238.31:8090/"
+health_url: "http://175.178.238.31:8090/"
+health_expect_status: 0
+health_timeout_sec: 8
+
+remote_restart_cmd: "systemctl restart zr-aicoding-api"

@@ -263,6 +263,7 @@ class DailyOutputLinesResponse(BaseModel):
 class EmployeeWorkHourReportItem(BaseModel):
     """员工工时报表行。"""
 
+    id: int | None = Field(default=None, description="明细记录 ID（仅 detail）")
     employee_name: str = Field(description="员工姓名")
     employee_no: str = Field(description="工号")
     department: str = Field(description="所属部门")
@@ -274,6 +275,9 @@ class EmployeeWorkHourReportItem(BaseModel):
     work_hours: float = Field(description="工时数")
     overtime_hours: float = Field(description="加班工时")
     approval_status: str | None = Field(default=None, description="审批/状态")
+    approval_status_code: str | None = Field(
+        default=None, description="审批状态码 pending/approved/rejected"
+    )
     record_count: int | None = Field(default=None, description="明细条数（汇总维度）")
 
 
@@ -283,8 +287,8 @@ class EmployeeWorkHourReportListResponse(BaseModel):
     page: int
     page_size: int
     dimension: str = Field(description="统计维度")
-    work_hours_sum: float = Field(description="工时合计")
-    overtime_hours_sum: float = Field(description="加班工时合计")
+    work_hours_sum: float = Field(description="工时合计（仅已通过）")
+    overtime_hours_sum: float = Field(description="加班工时合计（仅已通过）")
 
 
 class EmployeeWorkHourFilterEmployee(BaseModel):
@@ -296,6 +300,15 @@ class EmployeeWorkHourFiltersResponse(BaseModel):
     departments: list[str] = Field(description="部门选项")
     employees: list[EmployeeWorkHourFilterEmployee] = Field(description="员工选项")
     projects: list[str] = Field(description="项目选项")
+
+
+class EmployeeWorkHourBatchApprovalRequest(BaseModel):
+    ids: list[int] = Field(..., min_length=1, description="待审批记录 ID")
+    approval_status: str = Field(..., description="目标状态：approved / rejected")
+
+
+class EmployeeWorkHourBatchApprovalResponse(BaseModel):
+    updated: int = Field(description="实际更新条数（仅原 pending）")
 
 
 class EquipmentOeeFilterEquipment(BaseModel):

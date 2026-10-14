@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
+from app.audit import record_audit
 from app.auth import get_current_user
 from app.database import get_db
 from app.models import (
@@ -29,9 +30,12 @@ from app.models import (
     User,
     WorkOrder,
 )
+from app.permissions import WORK_HOURS_APPROVE, require_permissions
 from app.schemas import (
     DailyOutputLinesResponse,
     DailyOutputReportItem,
+    EmployeeWorkHourBatchApprovalRequest,
+    EmployeeWorkHourBatchApprovalResponse,
     EmployeeWorkHourFilterEmployee,
     EmployeeWorkHourFiltersResponse,
     EmployeeWorkHourReportItem,
@@ -597,6 +601,8 @@ WORK_HOUR_APPROVAL_LABELS = {
     "rejected": "已驳回",
 }
 
+WORK_HOUR_APPROVAL_CODES = frozenset(WORK_HOUR_APPROVAL_LABELS.keys())
+
 
 def _work_hour_approval_label(status: str | None) -> str:
     if not status:
@@ -617,6 +623,33 @@ def _normalize_work_hour_dimension(dimension: str) -> str:
             detail=f"dimension 无效，可选：{', '.join(WORK_HOUR_DIMENSIONS)}",
         )
     return dimension
+
+
+def _resolve_work_hour_approval_filter(
+    *,
+    dimension: str,
+    approval_status: str | None,
+    for_export: bool = False,
+) -> str | None:
+    """
+    返回要过滤的审批状态码；None 表示不过滤。
+    - detail 列表：默认不过滤（便于审批）；导出默认已通过
+    - 汇总维度：默认已通过
+    - approval_status=all：不过滤
+    """
+    if approval_status is not None:
+        value = approval_status.strip().lower()
+        if value == "all":
+            return None
+        if value not in WORK_HOUR_APPROVAL_CODES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"approval_status 无效，可选：{', '.join(sorted(WORK_HOUR_APPROVAL_CODES))}, all",
+            )
+        return value
+    if for_export or dimension != "detail":
+        return "approved"
+    return None
 
 
 def _default_work_hour_date_range(
@@ -641,6 +674,7 @@ def _apply_work_hour_report_filters(
     employee_no: str | None,
     project_name: str | None,
     shift_type: str | None,
+    approval_status: str | None = None,
 ):
     query = query.filter(
         EmployeeWorkHour.work_date >= date_from,
@@ -654,6 +688,8 @@ def _apply_work_hour_report_filters(
         query = query.filter(EmployeeWorkHour.project_name == project_name)
     if shift_type:
         query = query.filter(EmployeeWorkHour.shift_type == shift_type)
+    if approval_status:
+        query = query.filter(EmployeeWorkHour.approval_status == approval_status)
     return query
 
 
@@ -667,6 +703,7 @@ def _build_work_hour_report_items(
         ).all()
         return [
             EmployeeWorkHourReportItem(
+                id=row.id,
                 employee_name=row.employee_name,
                 employee_no=row.employee_no,
                 department=row.department,
@@ -677,6 +714,7 @@ def _build_work_hour_report_items(
                 work_hours=round(float(row.work_hours or 0), 2),
                 overtime_hours=round(float(row.overtime_hours or 0), 2),
                 approval_status=_work_hour_approval_label(row.approval_status),
+                approval_status_code=row.approval_status,
             )
             for row in rows
         ]
@@ -885,15 +923,53 @@ def list_employee_work_hour_filters(
     )
 
 
+def _query_employee_work_hours(
+    db: Session,
+    *,
+    date_from: date | None,
+    date_to: date | None,
+    department: str | None,
+    employee_no: str | None,
+    project_name: str | None,
+    shift_type: str | None,
+    approval_status: str | None,
+    dimension: str,
+    for_export: bool = False,
+):
+    dimension = _normalize_work_hour_dimension(dimension)
+    if shift_type is not None and shift_type not in WORK_HOUR_SHIFT_LABELS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"shift_type 无效，可选：{', '.join(WORK_HOUR_SHIFT_LABELS)}",
+        )
+    date_from, date_to = _default_work_hour_date_range(date_from, date_to)
+    status_filter = _resolve_work_hour_approval_filter(
+        dimension=dimension,
+        approval_status=approval_status,
+        for_export=for_export,
+    )
+    query = db.query(EmployeeWorkHour)
+    query = _apply_work_hour_report_filters(
+        query,
+        date_from=date_from,
+        date_to=date_to,
+        department=department,
+        employee_no=employee_no,
+        project_name=project_name,
+        shift_type=shift_type,
+        approval_status=status_filter,
+    )
+    return query, dimension
+
+
 @router.get(
     "/employee-work-hours",
     response_model=EmployeeWorkHourReportListResponse,
     summary="员工工时报表",
     description=(
         "基于 employee_work_hours 查询员工工时；默认近 7 日。"
-        "统计维度：detail（明细）、employee（按员工汇总）、"
-        "employee_date（按员工+日期）、employee_month（按员工+月份）、"
-        "project（按项目）、department（按部门）。"
+        "明细默认含全部审批状态，合计仅统计已通过；"
+        "汇总维度默认仅已通过。approval_status=all 可取消审批过滤。"
     ),
 )
 def list_employee_work_hours_report(
@@ -907,31 +983,46 @@ def list_employee_work_hours_report(
     shift_type: str | None = Query(
         None, description="班别：day=白班，night=晚班"
     ),
+    approval_status: str | None = Query(
+        None, description="审批：pending/approved/rejected/all"
+    ),
     dimension: str = Query("detail", description="统计维度"),
     _current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    dimension = _normalize_work_hour_dimension(dimension)
-    if shift_type is not None and shift_type not in WORK_HOUR_SHIFT_LABELS:
-        raise HTTPException(
-            status_code=422,
-            detail=f"shift_type 无效，可选：{', '.join(WORK_HOUR_SHIFT_LABELS)}",
-        )
-    date_from, date_to = _default_work_hour_date_range(date_from, date_to)
-    query = db.query(EmployeeWorkHour)
-    query = _apply_work_hour_report_filters(
-        query,
+    query, dimension = _query_employee_work_hours(
+        db,
         date_from=date_from,
         date_to=date_to,
         department=department,
         employee_no=employee_no,
         project_name=project_name,
         shift_type=shift_type,
+        approval_status=approval_status,
+        dimension=dimension,
     )
     all_items = _build_work_hour_report_items(query, dimension)
     total = len(all_items)
-    work_hours_sum = round(sum(i.work_hours for i in all_items), 2)
-    overtime_hours_sum = round(sum(i.overtime_hours for i in all_items), 2)
+    if dimension == "detail":
+        work_hours_sum = round(
+            sum(
+                i.work_hours
+                for i in all_items
+                if i.approval_status_code == "approved"
+            ),
+            2,
+        )
+        overtime_hours_sum = round(
+            sum(
+                i.overtime_hours
+                for i in all_items
+                if i.approval_status_code == "approved"
+            ),
+            2,
+        )
+    else:
+        work_hours_sum = round(sum(i.work_hours for i in all_items), 2)
+        overtime_hours_sum = round(sum(i.overtime_hours for i in all_items), 2)
     start = (page - 1) * page_size
     page_items = all_items[start : start + page_size]
     return EmployeeWorkHourReportListResponse(
@@ -942,6 +1033,125 @@ def list_employee_work_hours_report(
         dimension=dimension,
         work_hours_sum=work_hours_sum,
         overtime_hours_sum=overtime_hours_sum,
+    )
+
+
+@router.post(
+    "/employee-work-hours/batch-approval",
+    response_model=EmployeeWorkHourBatchApprovalResponse,
+    summary="批量审批员工工时",
+    description="仅更新当前为 pending 的记录；需 work_hours.approve。",
+)
+def batch_approve_employee_work_hours(
+    payload: EmployeeWorkHourBatchApprovalRequest,
+    current_user: User = Depends(require_permissions(WORK_HOURS_APPROVE)),
+    db: Session = Depends(get_db),
+):
+    target = (payload.approval_status or "").strip().lower()
+    if target not in ("approved", "rejected"):
+        raise HTTPException(
+            status_code=400,
+            detail="approval_status 仅支持 approved 或 rejected",
+        )
+    ids = sorted({int(i) for i in payload.ids})
+    rows = (
+        db.query(EmployeeWorkHour)
+        .filter(
+            EmployeeWorkHour.id.in_(ids),
+            EmployeeWorkHour.approval_status == "pending",
+        )
+        .all()
+    )
+    for row in rows:
+        row.approval_status = target
+    updated = len(rows)
+    if updated:
+        record_audit(
+            db,
+            username=current_user.username,
+            action="batch_approval",
+            resource="employee_work_hour",
+            detail={"ids": [r.id for r in rows], "to": target, "updated": updated},
+        )
+    db.commit()
+    return EmployeeWorkHourBatchApprovalResponse(updated=updated)
+
+
+@router.get(
+    "/employee-work-hours/export",
+    summary="导出员工工时报表",
+    description="导出 Excel；默认仅已通过（含明细）。approval_status=all 导出全部。",
+)
+def export_employee_work_hours_report(
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    department: str | None = Query(None),
+    employee_no: str | None = Query(None),
+    project_name: str | None = Query(None),
+    shift_type: str | None = Query(None),
+    approval_status: str | None = Query(None),
+    dimension: str = Query("detail"),
+    _current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    query, dimension = _query_employee_work_hours(
+        db,
+        date_from=date_from,
+        date_to=date_to,
+        department=department,
+        employee_no=employee_no,
+        project_name=project_name,
+        shift_type=shift_type,
+        approval_status=approval_status,
+        dimension=dimension,
+        for_export=True,
+    )
+    items = _build_work_hour_report_items(query, dimension)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "员工工时"
+    headers = [
+        "ID",
+        "员工",
+        "工号",
+        "部门",
+        "项目",
+        "任务",
+        "日期",
+        "月份",
+        "班别",
+        "工时",
+        "加班",
+        "审批",
+        "条数",
+    ]
+    ws.append(headers)
+    for item in items:
+        ws.append(
+            [
+                item.id,
+                item.employee_name,
+                item.employee_no,
+                item.department,
+                item.project_name,
+                item.task_name,
+                item.work_date.isoformat() if item.work_date else None,
+                item.work_month,
+                item.shift_type,
+                item.work_hours,
+                item.overtime_hours,
+                item.approval_status,
+                item.record_count,
+            ]
+        )
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    filename = f"employee-work-hours-{dimension}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

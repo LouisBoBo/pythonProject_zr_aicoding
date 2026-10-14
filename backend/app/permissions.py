@@ -18,6 +18,7 @@ SALES_WRITE = "sales.write"
 MESSAGES_WRITE = "messages.write"
 KANBAN_WRITE = "kanban.write"
 EQUIPMENT_WRITE = "equipment.write"
+WORK_HOURS_APPROVE = "work_hours.approve"
 REPORTS_READ = "reports.read"
 SETTINGS_ADMIN = "settings.admin"
 AUDIT_READ = "audit.read"
@@ -31,6 +32,7 @@ ALL_PERMISSION_CODES: list[tuple[str, str]] = [
     (MESSAGES_WRITE, "消息中心写操作"),
     (KANBAN_WRITE, "看板配置写操作"),
     (EQUIPMENT_WRITE, "设备台账写操作"),
+    (WORK_HOURS_APPROVE, "员工工时审批"),
     (REPORTS_READ, "报表只读"),
     (SETTINGS_ADMIN, "系统设置管理"),
     (AUDIT_READ, "审计日志查询"),
@@ -47,6 +49,7 @@ ROLE_DEFAULT_PERMISSIONS: dict[str, list[str]] = {
         MESSAGES_WRITE,
         KANBAN_WRITE,
         EQUIPMENT_WRITE,
+        WORK_HOURS_APPROVE,
         REPORTS_READ,
         EMPLOYEES_READ,
         MATERIALS_READ,
