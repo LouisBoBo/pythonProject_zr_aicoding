@@ -9,6 +9,7 @@
 // cch-20261009-report-center-add-employee-work-hours-menu
 // cch-20261014-report-center-remove-employee-work-hours-menu
 // cch-20261014-report-center-add-employee-work-hours-menu
+// cch-20261015-report-center-add-employee-work-hours-menu
 // cch-20261009-employee-work-hours-remove-employee-no-column
 /**
  * 报表功能注册表（唯一配置入口）。
@@ -54,8 +55,8 @@ export const REPORT_CATALOG = [
     // 列表展示：员工、部门、日期、班别、工时（不展示工号列）
     description: '按日期区间与部门查询员工工时明细，支持按员工汇总工时合计',
     icon: 'Timer',
-    menu: false,
-    hub: false,
+    menu: true,
+    hub: true,
     enabled: true,
   },
   {

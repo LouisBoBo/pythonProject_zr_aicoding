@@ -1,30 +1,43 @@
-# WorkBuddy 项目部署规则（可提交）
-# 部署时按当前工作区读取本文件；本机私钥只放同目录 deploy.local.yaml（勿提交）。
-version: 1
+# =============================================================================
+# WorkBuddy 项目部署规则（可提交到 Git）
+# -----------------------------------------------------------------------------
+# 作用：告诉 WorkBuddy「怎么构建、同步哪些目录、部署到哪台机器、怎么探活/重启」。
+# 读取：部署时读当前工作区里的本文件。
+# 密钥：本机私钥、敏感账号等只放同目录 deploy.local.yaml（已 gitignore，勿提交）。
+# =============================================================================
 
-preset: vite_backend
-unified_product: false
-auto_restart_engine: false
-auto_restart_bridge: false
-default_ref: HEAD
+version: 1  # 配置格式版本号，勿随意改
 
-build_where: local
-build_cmd: "npm run build"
-build_cwd: frontend
-sync_paths:
-  - frontend/dist
-  - backend
-dist_rel: frontend/dist
+# ---------- 产品 / 引擎行为 ----------
+preset: vite_backend          # 预设：前端 Vite + 后端（本仓库是 Vue + FastAPI）
+unified_product: false        # false=前后端分目录部署；true=合成单产品包（本项目不用）
+auto_restart_engine: false    # 部署后是否自动重启 WorkBuddy 引擎（一般保持 false）
+auto_restart_bridge: false    # 部署后是否自动重启桥接进程（一般保持 false）
+default_ref: HEAD             # 默认部署的 Git 引用（当前提交 HEAD）
 
+# ---------- 本地构建 ----------
+build_where: local            # 在哪构建：local=本机构建后上传；remote=在服务器上构建
+build_cmd: "npm run build"    # 前端构建命令
+build_cwd: frontend           # 构建命令的工作目录（相对仓库根）
+sync_paths:                   # 构建完成后，要同步到服务器的路径列表
+  - frontend/dist             # 前端打包产物（静态资源）
+  - backend                   # 后端 Python 代码（含 app、依赖清单等）
+dist_rel: frontend/dist       # 前端 dist 相对仓库根的路径（给探活/入口解析用）
+
+# ---------- SSH 目标机 ----------
+# 说明：host/user 可写在这里便于团队共享；真正连机用的私钥放 deploy.local.yaml
 ssh:
-  host: "175.178.238.31"
-  user: "root"
-  port: 22
-  app_path: "/www/wwwroot/zr-aicoding"
+  host: "175.178.238.31"      # 服务器公网 IP 或域名
+  user: "root"                # SSH 登录用户
+  port: 22                    # SSH 端口
+  app_path: "/www/wwwroot/zr-aicoding"  # 远端项目根目录（代码同步到这里）
 
-entry_url: "http://175.178.238.31:8090/"
-health_url: "http://175.178.238.31:8090/"
-health_expect_status: 0
-health_timeout_sec: 8
+# ---------- 入口与健康检查 ----------
+entry_url: "http://175.178.238.31:8090/"          # 部署完成后打开的业务入口地址
+health_url: "http://175.178.238.31:8090/"         # 探活请求地址（通常与入口相同或为 /health）
+health_expect_status: 0       # 期望的 HTTP 状态码；0 表示「任意成功响应即可」（工具约定）
+health_timeout_sec: 8         # 探活最长等待秒数
 
+# ---------- 远端重启 ----------
+# 同步文件后执行；需服务器已配置好同名 systemd 服务
 remote_restart_cmd: "systemctl restart zr-aicoding-api"
