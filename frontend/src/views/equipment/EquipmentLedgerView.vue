@@ -201,7 +201,7 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Cpu, Plus, Upload, Download } from '@element-plus/icons-vue'
 import { usePermissions } from '../../composables/usePermissions'
@@ -215,6 +215,7 @@ import {
 } from '../../api/equipment'
 
 const router = useRouter()
+const route = useRoute()
 const { can } = usePermissions()
 const canWrite = computed(() => can('equipment.write'))
 
@@ -455,6 +456,13 @@ async function handleExport() {
 }
 
 onMounted(() => {
+  const qCode =
+    typeof route.query.equipmentCode === 'string'
+      ? route.query.equipmentCode.trim()
+      : ''
+  if (qCode) {
+    filters.equipmentCode = qCode
+  }
   loadAllForStats()
   loadList()
 })

@@ -30,6 +30,18 @@ export async function fetchQualityAnomaliesList({ status, page = 1, pageSize = 1
   return authFetch(`/api/quality/anomalies?${params.toString()}`)
 }
 
+/** 关闭品质异常 */
+export async function closeQualityAnomaly(anomalyId, { handler, resolutionNote }) {
+  return authFetch(`/api/quality/anomalies/${anomalyId}/close`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      handler,
+      resolution_note: resolutionNote,
+    }),
+  })
+}
+
 export async function fetchTopDefects(limit = 10) {
   return authFetch(`/api/quality/top-defects?limit=${limit}`)
 }

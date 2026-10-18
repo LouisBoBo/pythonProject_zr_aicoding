@@ -1,10 +1,10 @@
-"""首页工作台 — 从工单 / 产量 / 品质 / 待办表聚合。"""
+"""首页仪表盘 + 工作台汇总 — 从工单 / 产量 / 品质 / 待办表聚合。"""
 
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -12,6 +12,8 @@ from app.auth import get_current_user
 from app.database import get_db
 from app.models import (
     DashboardTodo,
+    InventoryStock,
+    Message,
     ProductionOutputRecord,
     ProductionPlan,
     QualityAnomaly,
@@ -26,6 +28,9 @@ from app.schemas import (
     ManufacturingDashboard,
     ProductionTrendPoint,
     TodoItem,
+    WorkbenchCard,
+    WorkbenchResponse,
+    WorkbenchTodoItem,
     WorkOrderStatusItem,
 )
 
@@ -270,3 +275,127 @@ def get_dashboard(
     db: Session = Depends(get_db),
 ):
     return _dashboard(db)
+
+
+_OVERDUE_EXCLUDED = ("completed", "cancelled")
+
+
+def _workbench_cards(db: Session) -> list[WorkbenchCard]:
+    today = date.today()
+    overdue = (
+        db.query(WorkOrder)
+        .filter(
+            WorkOrder.end_date.isnot(None),
+            WorkOrder.end_date < today,
+            WorkOrder.status.notin_(_OVERDUE_EXCLUDED),
+        )
+        .count()
+    )
+    unread = db.query(Message).filter(Message.is_read.is_(False)).count()
+    open_anomalies = (
+        db.query(QualityAnomaly).filter(QualityAnomaly.status == "open").count()
+    )
+    low_stock = (
+        db.query(InventoryStock)
+        .filter(
+            InventoryStock.safety_stock > 0,
+            InventoryStock.quantity < InventoryStock.safety_stock,
+        )
+        .count()
+    )
+    return [
+        WorkbenchCard(
+            key="overdue_work_orders",
+            label="逾期工单",
+            value=overdue,
+            unit="单",
+            link="/work-orders/overdue",
+        ),
+        WorkbenchCard(
+            key="unread_messages",
+            label="未读消息",
+            value=unread,
+            unit="条",
+            link="/messages",
+        ),
+        WorkbenchCard(
+            key="open_quality_anomalies",
+            label="品质异常",
+            value=open_anomalies,
+            unit="项",
+            link="/quality-management/anomalies",
+        ),
+        WorkbenchCard(
+            key="low_stock_alerts",
+            label="低库存预警",
+            value=low_stock,
+            unit="项",
+            link="/warehouse/low-stock",
+        ),
+    ]
+
+
+@router.get(
+    "/workbench",
+    response_model=WorkbenchResponse,
+    summary="工作台汇总",
+    description=(
+        "四张业务数字卡（逾期工单 / 未读消息 / 品质异常 / 低库存）+ 待办列表；"
+        "待办默认仅 open，可用 todo_type 筛选。"
+    ),
+)
+def get_workbench(
+    todo_type: str | None = Query(None, description="待办类型筛选"),
+    _current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    query = db.query(DashboardTodo).filter(DashboardTodo.status == "open")
+    if todo_type:
+        query = query.filter(DashboardTodo.type == todo_type.strip())
+    todos = query.order_by(DashboardTodo.id.desc()).limit(50).all()
+    return WorkbenchResponse(
+        cards=_workbench_cards(db),
+        todos=[
+            WorkbenchTodoItem(
+                id=t.id,
+                type=t.type,
+                title=t.title,
+                description=t.description or "",
+                priority=t.priority,
+                link=t.link or "",
+                status=t.status,
+                created_at=t.created_at,
+            )
+            for t in todos
+        ],
+    )
+
+
+@router.patch(
+    "/todos/{todo_id}/complete",
+    response_model=WorkbenchTodoItem,
+    summary="完成工作台待办",
+    description="将待办标记为 done；已完成则幂等返回。",
+)
+def complete_dashboard_todo(
+    todo_id: int,
+    _current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    todo = db.query(DashboardTodo).filter(DashboardTodo.id == todo_id).first()
+    if not todo:
+        raise HTTPException(status_code=404, detail="待办不存在")
+    if todo.status != "done":
+        todo.status = "done"
+        db.commit()
+        db.refresh(todo)
+    return WorkbenchTodoItem(
+        id=todo.id,
+        type=todo.type,
+        title=todo.title,
+        description=todo.description or "",
+        priority=todo.priority,
+        link=todo.link or "",
+        status=todo.status,
+        created_at=todo.created_at,
+    )

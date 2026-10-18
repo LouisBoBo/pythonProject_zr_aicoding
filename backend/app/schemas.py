@@ -70,6 +70,38 @@ class UserResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ChangePasswordRequest(BaseModel):
+    old_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=6, max_length=128)
+
+
+class UserCreateRequest(BaseModel):
+    username: str = Field(min_length=2, max_length=50)
+    password: str = Field(min_length=6, max_length=128)
+    role: Literal["admin", "manager", "user"] = "user"
+
+
+class UserResetPasswordRequest(BaseModel):
+    new_password: str = Field(min_length=6, max_length=128)
+
+
+class UserUpdateRequest(BaseModel):
+    role: Literal["admin", "manager", "user"] | None = None
+
+
+class UserListItem(BaseModel):
+    id: int
+    username: str
+    role: str
+
+    model_config = {"from_attributes": True}
+
+
+class UserListResponse(BaseModel):
+    items: list[UserListItem]
+    total: int
+
+
 class DashboardStatItem(BaseModel):
     key: str
     label: str
@@ -133,6 +165,60 @@ class DashboardResponse(BaseModel):
     work_order_status: list[WorkOrderStatusItem]
     todos: list[TodoItem]
     manufacturing: ManufacturingDashboard
+
+
+class WorkbenchCard(BaseModel):
+    key: str
+    label: str
+    value: int
+    link: str
+    unit: str = ""
+
+
+class WorkbenchTodoItem(BaseModel):
+    id: int
+    type: str
+    title: str
+    description: str = ""
+    priority: str
+    link: str = ""
+    status: str
+    created_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class WorkbenchResponse(BaseModel):
+    cards: list[WorkbenchCard]
+    todos: list[WorkbenchTodoItem]
+
+
+class GlobalSearchWorkOrderItem(BaseModel):
+    id: int
+    order_no: str
+    product_name: str
+    status: str
+
+
+class GlobalSearchEquipmentItem(BaseModel):
+    id: int
+    equipment_code: str
+    name: str
+    status: str
+
+
+class GlobalSearchMaterialItem(BaseModel):
+    id: int
+    material_code: str
+    material_name: str
+    category: str
+
+
+class GlobalSearchResponse(BaseModel):
+    q: str
+    work_orders: list[GlobalSearchWorkOrderItem]
+    equipment: list[GlobalSearchEquipmentItem]
+    materials: list[GlobalSearchMaterialItem]
 
 
 WorkOrderPriority = Literal["low", "normal", "high", "urgent"]
@@ -258,57 +344,6 @@ class DailyOutputReportListResponse(BaseModel):
 
 class DailyOutputLinesResponse(BaseModel):
     lines: list[str] = Field(description="可选产线名称列表（用于筛选）")
-
-
-class EmployeeWorkHourReportItem(BaseModel):
-    """员工工时报表行。"""
-
-    id: int | None = Field(default=None, description="明细记录 ID（仅 detail）")
-    employee_name: str = Field(description="员工姓名")
-    employee_no: str = Field(description="工号")
-    department: str = Field(description="所属部门")
-    project_name: str | None = Field(default=None, description="项目名称")
-    task_name: str | None = Field(default=None, description="任务名称")
-    work_date: date | None = Field(default=None, description="日期")
-    work_month: str | None = Field(default=None, description="月份（YYYY-MM）")
-    shift_type: str | None = Field(default=None, description="班别（白班/晚班）")
-    work_hours: float = Field(description="工时数")
-    overtime_hours: float = Field(description="加班工时")
-    approval_status: str | None = Field(default=None, description="审批/状态")
-    approval_status_code: str | None = Field(
-        default=None, description="审批状态码 pending/approved/rejected"
-    )
-    record_count: int | None = Field(default=None, description="明细条数（汇总维度）")
-
-
-class EmployeeWorkHourReportListResponse(BaseModel):
-    items: list[EmployeeWorkHourReportItem]
-    total: int
-    page: int
-    page_size: int
-    dimension: str = Field(description="统计维度")
-    work_hours_sum: float = Field(description="工时合计（仅已通过）")
-    overtime_hours_sum: float = Field(description="加班工时合计（仅已通过）")
-
-
-class EmployeeWorkHourFilterEmployee(BaseModel):
-    employee_no: str
-    employee_name: str
-
-
-class EmployeeWorkHourFiltersResponse(BaseModel):
-    departments: list[str] = Field(description="部门选项")
-    employees: list[EmployeeWorkHourFilterEmployee] = Field(description="员工选项")
-    projects: list[str] = Field(description="项目选项")
-
-
-class EmployeeWorkHourBatchApprovalRequest(BaseModel):
-    ids: list[int] = Field(..., min_length=1, description="待审批记录 ID")
-    approval_status: str = Field(..., description="目标状态：approved / rejected")
-
-
-class EmployeeWorkHourBatchApprovalResponse(BaseModel):
-    updated: int = Field(description="实际更新条数（仅原 pending）")
 
 
 class EquipmentOeeFilterEquipment(BaseModel):
@@ -1211,6 +1246,7 @@ class QualityAnomalyItem(BaseModel):
     status: str
     discovered_at: datetime
     handler: str | None = None
+    resolution_note: str | None = None
 
 
 class QualityAnomalyListResponse(BaseModel):
@@ -1218,6 +1254,11 @@ class QualityAnomalyListResponse(BaseModel):
     total: int
     page: int | None = None
     page_size: int | None = None
+
+
+class QualityAnomalyCloseRequest(BaseModel):
+    handler: str = Field(min_length=1, max_length=50, description="处理人")
+    resolution_note: str = Field(min_length=1, max_length=500, description="处理说明")
 
 
 class QualityTopDefectItem(BaseModel):

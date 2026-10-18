@@ -2,11 +2,17 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.audit import record_audit
-from app.auth import authenticate_user, create_access_token, get_current_user
+from app.auth import (
+    authenticate_user,
+    create_access_token,
+    get_current_user,
+    hash_password,
+    verify_password,
+)
 from app.database import get_db
 from app.models import User
 from app.permissions import user_permission_codes
-from app.schemas import LoginRequest, Token, UserResponse
+from app.schemas import ChangePasswordRequest, LoginRequest, Token, UserResponse
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -72,3 +78,32 @@ def me(
         role=current_user.role,
         permissions=sorted(user_permission_codes(db, current_user)),
     )
+
+
+@router.post("/change-password", summary="本人修改密码")
+def change_password(
+    payload: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not verify_password(payload.old_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="原密码不正确",
+        )
+    if payload.old_password == payload.new_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="新密码不能与原密码相同",
+        )
+    current_user.hashed_password = hash_password(payload.new_password)
+    record_audit(
+        db,
+        username=current_user.username,
+        action="change_password",
+        resource="auth",
+        resource_id=current_user.id,
+        success=True,
+    )
+    db.commit()
+    return {"ok": True}

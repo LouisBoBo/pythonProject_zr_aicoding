@@ -457,6 +457,10 @@ async function loadWorkOrders() {
 }
 
 onMounted(() => {
+  const qOrderNo = typeof route.query.orderNo === 'string' ? route.query.orderNo.trim() : ''
+  if (qOrderNo) {
+    filters.orderNo = qOrderNo
+  }
   loadWorkOrders()
   if (route.query.create === '1' || route.query.create === 'true') {
     openCreateDialog()

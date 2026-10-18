@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
+from app.audit import record_audit
 from app.auth import get_current_user
 from app.database import SessionLocal, engine, get_db
 from app.models import QualityAnomaly, QualityDefectDetail, QualityMetrics, User, WorkOrder
@@ -16,6 +17,7 @@ from app.quality_inspection_record_store import (
     seed_quality_inspection_records,
 )
 from app.schemas import (
+    QualityAnomalyCloseRequest,
     QualityAnomalyItem,
     QualityAnomalyListResponse,
     QualityDefectDistributionItem,
@@ -73,6 +75,7 @@ def _to_anomaly_item(row: QualityAnomaly) -> QualityAnomalyItem:
         status=row.status,
         discovered_at=row.discovered_at,
         handler=row.handler,
+        resolution_note=getattr(row, "resolution_note", None),
     )
 
 
@@ -373,6 +376,45 @@ def get_anomalies(
         )
     rows = ordered.limit(limit).all()
     return QualityAnomalyListResponse(items=[_to_anomaly_item(r) for r in rows], total=total)
+
+
+@router.post(
+    "/anomalies/{anomaly_id}/close",
+    response_model=QualityAnomalyItem,
+    summary="关闭品质异常",
+    description="填写处理人与处理说明后关闭；已关闭不可重复关闭。看板仅展示 open。",
+)
+def close_anomaly(
+    anomaly_id: int,
+    payload: QualityAnomalyCloseRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    row = db.query(QualityAnomaly).filter(QualityAnomaly.id == anomaly_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="异常不存在")
+    if row.status == "closed":
+        raise HTTPException(status_code=400, detail="异常已关闭")
+    handler = payload.handler.strip()
+    note = payload.resolution_note.strip()
+    if not handler:
+        raise HTTPException(status_code=400, detail="处理人不能为空")
+    if not note:
+        raise HTTPException(status_code=400, detail="处理说明不能为空")
+    row.handler = handler
+    row.resolution_note = note
+    row.status = "closed"
+    record_audit(
+        db,
+        username=current_user.username,
+        action="close",
+        resource="quality_anomaly",
+        resource_id=row.id,
+        detail={"handler": handler, "defect_type": row.defect_type},
+    )
+    db.commit()
+    db.refresh(row)
+    return _to_anomaly_item(row)
 
 
 @router.get("/top-defects", response_model=QualityTopDefectResponse)

@@ -8,6 +8,7 @@ import WorkbenchIndex from '../views/workbench/Index.vue'
 import QualityIndex from '../views/quality/Index.vue'
 import QualityDashboardView from '../views/quality/DashboardView.vue'
 import QualityManagementIndex from '../views/quality-management/Index.vue'
+import QualityAnomaliesView from '../views/quality-management/AnomaliesView.vue'
 import ProductionIndex from '../views/production/Index.vue'
 import InspectionRecordsView from '../views/production/InspectionRecordsView.vue'
 import InspectionTasksView from '../views/production/InspectionTasksView.vue'
@@ -38,6 +39,7 @@ import WarehouseDashboard from '../views/board/WarehouseDashboard.vue'
 import MaterialManagementView from '../views/materials/Index.vue'
 import MaterialPurchaseListView from '../views/materials/PurchaseListView.vue'
 import EmployeeManagementView from '../views/employees/Index.vue'
+import SalesOrdersView from '../views/sales/OrdersView.vue'
 const authRequired = { requiresAuth: true }
 
 const kanbanRoutes = [
@@ -66,6 +68,12 @@ const router = createRouter({
           name: 'quality-management',
           component: QualityManagementIndex,
           meta: { title: '品质管理', ...authRequired },
+        },
+        {
+          path: 'quality-management/anomalies',
+          name: 'quality-anomalies',
+          component: QualityAnomaliesView,
+          meta: { title: '品质异常', ...authRequired },
         },
         {
           path: 'quality-management/inspection-records',
@@ -212,7 +220,14 @@ const router = createRouter({
           path: 'work-orders/:id?',
           name: 'work-orders',
           component: WorkOrdersView,
-          meta: { title: '生产工单', ...authRequired } },
+          meta: { title: '生产工单', ...authRequired },
+        },
+        {
+          path: 'sales/orders',
+          name: 'sales-orders',
+          component: SalesOrdersView,
+          meta: { title: '销售订单', ...authRequired },
+        },
         {
           path: 'kanban-boards/new',
           redirect: { path: '/kanban/production', query: { create: '1' } },

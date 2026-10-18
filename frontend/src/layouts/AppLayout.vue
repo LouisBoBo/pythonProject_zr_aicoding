@@ -128,16 +128,82 @@
         </div>
 
         <div class="topbar-right">
-          <div class="search-group">
-            <el-input
-              v-model="searchKeyword"
-              placeholder="请输入"
-              class="search-input"
-              clearable
-              @keyup.enter="handleSearch"
-            />
-            <el-button class="search-btn" :icon="Search" @click="handleSearch" />
-          </div>
+          <el-popover
+            :visible="searchPanelVisible"
+            placement="bottom-end"
+            :width="360"
+            trigger="manual"
+            popper-class="global-search-popper"
+          >
+            <template #reference>
+              <div class="search-group" @focusin="onSearchFocus">
+                <el-input
+                  v-model="searchKeyword"
+                  placeholder="工单/设备/物料"
+                  class="search-input"
+                  clearable
+                  @input="onSearchInput"
+                  @keyup.enter="handleSearch"
+                  @clear="clearSearchResults"
+                />
+                <el-button
+                  class="search-btn"
+                  :icon="Search"
+                  :loading="searchLoading"
+                  @click="handleSearch"
+                />
+              </div>
+            </template>
+            <div class="global-search-panel" v-loading="searchLoading">
+              <template v-if="searchKeyword.trim().length < 2">
+                <div class="search-hint">请输入至少 2 个字符</div>
+              </template>
+              <template v-else-if="searchEmpty">
+                <div class="search-hint">无匹配结果</div>
+              </template>
+              <template v-else>
+                <div v-if="searchResults.work_orders.length" class="search-group-block">
+                  <div class="search-group-title">工单</div>
+                  <button
+                    v-for="item in searchResults.work_orders"
+                    :key="'wo-' + item.id"
+                    type="button"
+                    class="search-item"
+                    @click="goSearchResult('work-order', item)"
+                  >
+                    <span class="search-item-code">{{ item.order_no }}</span>
+                    <span class="search-item-name">{{ item.product_name }}</span>
+                  </button>
+                </div>
+                <div v-if="searchResults.equipment.length" class="search-group-block">
+                  <div class="search-group-title">设备</div>
+                  <button
+                    v-for="item in searchResults.equipment"
+                    :key="'eq-' + item.id"
+                    type="button"
+                    class="search-item"
+                    @click="goSearchResult('equipment', item)"
+                  >
+                    <span class="search-item-code">{{ item.equipment_code }}</span>
+                    <span class="search-item-name">{{ item.name }}</span>
+                  </button>
+                </div>
+                <div v-if="searchResults.materials.length" class="search-group-block">
+                  <div class="search-group-title">物料</div>
+                  <button
+                    v-for="item in searchResults.materials"
+                    :key="'mat-' + item.id"
+                    type="button"
+                    class="search-item"
+                    @click="goSearchResult('material', item)"
+                  >
+                    <span class="search-item-code">{{ item.material_code }}</span>
+                    <span class="search-item-name">{{ item.material_name }}</span>
+                  </button>
+                </div>
+              </template>
+            </div>
+          </el-popover>
           <el-tooltip
             :content="pageFavorited ? '取消收藏当前页' : '收藏当前页'"
             placement="bottom"
@@ -204,7 +270,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, provide, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, provide, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowDown,
@@ -242,6 +308,7 @@ import {
 import { ElMessage } from 'element-plus'
 import { clearToken, fetchCurrentUser } from '../api/auth'
 import { fetchUnreadCount } from '../api/messages'
+import { globalSearch } from '../api/search'
 import { resolveReportIcon } from '../config/reportIcons.js'
 import { getReportMenuEntries } from '../router/reportRoutes.js'
 import {
@@ -257,6 +324,15 @@ const route = useRoute()
 
 const sidebarCollapsed = ref(false)
 const searchKeyword = ref('')
+const searchLoading = ref(false)
+const searchPanelVisible = ref(false)
+const searchResults = reactive({
+  work_orders: [],
+  equipment: [],
+  materials: [],
+})
+let searchTimer = null
+let searchSeq = 0
 const user = ref(null)
 provide(CURRENT_USER_KEY, user)
 const unreadCount = ref(0)
@@ -322,7 +398,7 @@ const menuGroups = computed(() => {
   const systemItems = [
     ...(reportMenu ? [reportMenu] : []),
     { path: '/cursor-coding', title: 'Cursor 写码过程', icon: EditPen },
-    { path: '/settings', title: '系统设置', icon: Setting, permission: 'settings.admin' },
+    { path: '/settings', title: '系统设置', icon: Setting },
     {
       path: '/settings/audit-logs',
       title: '操作审计',
@@ -354,6 +430,7 @@ const menuGroups = computed(() => {
           icon: Warning,
           children: [
             { path: '/quality-management', title: '品质概览', icon: Warning },
+            { path: '/quality-management/anomalies', title: '品质异常', icon: Warning },
             { path: '/quality-management/inspection-tasks', title: '检验任务', icon: Document },
             { path: '/quality-management/inspection-records', title: '检验记录', icon: List },
           ],
@@ -366,6 +443,11 @@ const menuGroups = computed(() => {
             { path: '/production', title: '生产概览', icon: SetUp },
             { path: '/work-orders', title: '生产工单', icon: Document },
             { path: '/work-orders/overdue', title: '工单逾期预警', icon: Timer },
+            {
+              path: '/sales/orders',
+              title: '销售订单',
+              icon: ShoppingCart,
+            },
           ],
         },
         {
@@ -487,10 +569,91 @@ function handleTabChange(path) {
   }
 }
 
-function handleSearch() {
-  if (searchKeyword.value.trim()) {
-    // placeholder for future search integration
+const searchEmpty = computed(() => {
+  const r = searchResults
+  return (
+    !r.work_orders.length && !r.equipment.length && !r.materials.length
+  )
+})
+
+function clearSearchResults() {
+  searchResults.work_orders = []
+  searchResults.equipment = []
+  searchResults.materials = []
+}
+
+function onSearchFocus() {
+  if (searchKeyword.value.trim().length >= 2) {
+    searchPanelVisible.value = true
   }
+}
+
+function onSearchInput() {
+  if (searchTimer) clearTimeout(searchTimer)
+  const kw = searchKeyword.value.trim()
+  if (kw.length < 2) {
+    clearSearchResults()
+    searchPanelVisible.value = kw.length > 0
+    return
+  }
+  searchPanelVisible.value = true
+  searchTimer = setTimeout(() => {
+    runGlobalSearch(kw)
+  }, 280)
+}
+
+async function runGlobalSearch(keyword) {
+  const seq = ++searchSeq
+  searchLoading.value = true
+  try {
+    const data = await globalSearch(keyword)
+    if (seq !== searchSeq) return
+    searchResults.work_orders = data.work_orders || []
+    searchResults.equipment = data.equipment || []
+    searchResults.materials = data.materials || []
+    searchPanelVisible.value = true
+  } catch (err) {
+    if (seq !== searchSeq) return
+    clearSearchResults()
+    ElMessage.error(err.message || '搜索失败')
+  } finally {
+    if (seq === searchSeq) searchLoading.value = false
+  }
+}
+
+function handleSearch() {
+  const kw = searchKeyword.value.trim()
+  if (kw.length < 2) {
+    searchPanelVisible.value = true
+    clearSearchResults()
+    return
+  }
+  if (searchTimer) clearTimeout(searchTimer)
+  runGlobalSearch(kw)
+}
+
+function goSearchResult(type, item) {
+  searchPanelVisible.value = false
+  if (type === 'work-order') {
+    router.push({ path: '/work-orders', query: { orderNo: item.order_no } })
+  } else if (type === 'equipment') {
+    router.push({
+      path: '/equipment/ledger',
+      query: { equipmentCode: item.equipment_code },
+    })
+  } else if (type === 'material') {
+    router.push({
+      path: '/materials',
+      query: { materialCode: item.material_code },
+    })
+  }
+}
+
+function onDocClick(e) {
+  const el = e.target
+  if (!(el instanceof Element)) return
+  if (el.closest('.search-group') || el.closest('.global-search-popper')) return
+  searchPanelVisible.value = false
 }
 
 const userInitial = computed(() => {
@@ -596,12 +759,18 @@ async function loadUnreadCount() {
 }
 
 onMounted(async () => {
+  document.addEventListener('click', onDocClick)
   try {
     user.value = await fetchCurrentUser()
     await loadUnreadCount()
   } catch {
     router.push('/login')
   }
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', onDocClick)
+  if (searchTimer) clearTimeout(searchTimer)
 })
 </script>
 
@@ -878,7 +1047,65 @@ onMounted(async () => {
 }
 
 .search-input {
-  width: 160px;
+  width: 180px;
+}
+
+.global-search-panel {
+  max-height: 360px;
+  overflow-y: auto;
+  min-height: 48px;
+}
+
+.search-hint {
+  padding: 12px 4px;
+  color: #909399;
+  font-size: 13px;
+  text-align: center;
+}
+
+.search-group-block + .search-group-block {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.search-group-title {
+  font-size: 12px;
+  color: #909399;
+  margin-bottom: 4px;
+  padding: 0 4px;
+}
+
+.search-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 8px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+  font-size: 13px;
+  color: #303133;
+}
+
+.search-item:hover {
+  background: #f5f7fa;
+}
+
+.search-item-code {
+  font-weight: 600;
+  color: #409eff;
+  flex-shrink: 0;
+}
+
+.search-item-name {
+  color: #606266;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .search-input :deep(.el-input__wrapper) {

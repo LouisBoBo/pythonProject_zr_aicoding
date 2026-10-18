@@ -11,6 +11,7 @@ OPENAPI_TAGS: list[dict] = [
     {"name": "认证", "description": "登录与当前用户信息（含权限码）"},
     {"name": "审计日志", "description": "操作审计查询（需 audit.read）"},
     {"name": "工作台", "description": "首页工作台统计、待办与制造看板数据"},
+    {"name": "search", "description": "顶栏全局搜索（工单/设备/物料）"},
     {"name": "生产工单", "description": "生产工单的增删改查与状态变更"},
     {"name": "工单逾期预警", "description": "已过计划结束日仍未完成的生产工单预警列表"},
     {"name": "生产总览", "description": "生产概览 KPI、趋势与产线负荷（查库聚合）"},
@@ -71,6 +72,13 @@ API_ZH: dict[tuple[str, str], dict[str, str]] = {
             "从工单、产量事实、品质异常、待办等表聚合首页数据，包括："
             "待处理工单数、今日产量、活跃异常、本月完成率、产量趋势、工单状态分布、待办列表，"
             "以及制造看板（月/日产量、效率、异常占比等）。"
+        ),
+    },
+    ("GET", "/api/search"): {
+        "summary": "顶栏全局搜索",
+        "description": (
+            "按关键字检索工单、设备、物料；关键字不足 2 字时返回空分组；"
+            "每组最多返回 5 条，供顶栏下拉跳转列表页。"
         ),
     },
     # ----- 生产工单 -----
@@ -452,18 +460,6 @@ API_ZH: dict[tuple[str, str], dict[str, str]] = {
     ("GET", "/api/reports/daily-output/lines"): {
         "summary": "日产报表产线选项",
         "description": "返回产线名称列表，供日产报表筛选下拉使用。",
-    },
-    ("GET", "/api/reports/employee-work-hours/filters"): {
-        "summary": "员工工时报表筛选选项",
-        "description": "返回部门、员工、项目下拉选项。",
-    },
-    ("GET", "/api/reports/employee-work-hours"): {
-        "summary": "员工工时报表",
-        "description": (
-            "基于 employee_work_hours 查询员工工时；默认近 7 日。"
-            "支持班别（白班 day / 晚班 night）筛选、明细与按员工/日期/月份/项目/部门等维度汇总与分页。"
-            "报表中心「员工工时报表」页使用本接口。"
-        ),
     },
     ("GET", "/api/reports/equipment-metrics"): {
         "summary": "设备报表",

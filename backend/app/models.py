@@ -371,6 +371,7 @@ class QualityAnomaly(Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="open")
     discovered_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
     handler: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    resolution_note: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     defect_details: Mapped[list["QualityDefectDetail"]] = relationship(
         back_populates="anomaly", cascade="all, delete-orphan"

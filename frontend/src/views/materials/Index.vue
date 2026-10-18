@@ -65,8 +65,11 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { fetchMaterialOptions } from '../../api/warehouse'
+
+const route = useRoute()
 
 const filters = reactive({
   materialCode: '',
@@ -125,7 +128,17 @@ function handleReset() {
   page.value = 1
 }
 
-onMounted(loadList)
+onMounted(async () => {
+  const qCode =
+    typeof route.query.materialCode === 'string'
+      ? route.query.materialCode.trim()
+      : ''
+  if (qCode) {
+    filters.materialCode = qCode
+    applied.materialCode = qCode
+  }
+  await loadList()
+})
 </script>
 
 <style scoped>

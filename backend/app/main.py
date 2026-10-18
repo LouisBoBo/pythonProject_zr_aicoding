@@ -42,6 +42,7 @@ from app.models import (
 from app.routers import (
     audit_logs,
     auth,
+    users,
     cursor_coding,
     dev_pipeline,
     workbuddy,
@@ -54,6 +55,7 @@ from app.routers import (
     inspection,
     inventory_low_stock,
     sales_orders,
+    search,
     kanban_boards,
     kanban_general,
     kanban_production,
@@ -133,6 +135,17 @@ def ensure_sales_orders_ordered_at():
                 """
             )
         )
+
+
+def ensure_quality_anomaly_resolution_note():
+    """为 quality_anomalies 补齐 resolution_note（关闭说明）。"""
+    inspector = inspect(engine)
+    if not inspector.has_table("quality_anomalies"):
+        return
+    columns = {c["name"] for c in inspector.get_columns("quality_anomalies")}
+    if "resolution_note" not in columns:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE quality_anomalies ADD COLUMN resolution_note VARCHAR(500)"))
 
 
 def ensure_kanban_board_fields():
@@ -1332,6 +1345,7 @@ async def lifespan(app: FastAPI):
     ensure_material_purchase_fields()
     ensure_sales_orders_ordered_at()
     ensure_kanban_board_fields()
+    ensure_quality_anomaly_resolution_note()
     ensure_work_orders_actual_start_time()
     ensure_work_orders_actual_end_time()
     ensure_work_orders_current_process()
@@ -1403,8 +1417,10 @@ def root_redirect():
 
 
 app.include_router(auth.router)
+app.include_router(users.router)
 app.include_router(audit_logs.router)
 app.include_router(dashboard.router)
+app.include_router(search.router)
 app.include_router(work_order_alerts.router)
 app.include_router(work_orders.router)
 app.include_router(kanban_boards.router)
