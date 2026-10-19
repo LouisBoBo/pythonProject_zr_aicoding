@@ -18,7 +18,27 @@
 // cch-20261019-report-center-add-employee-work-hours-menu-v2
 // cch-20261019-employee-work-hours-add-shift-type-column
 // cch-20261019-report-center-remove-employee-work-hours-menu-final
+// cch-20261019-report-center-add-employee-work-hours-menu-v3
+// cch-20261019-report-center-remove-employee-work-hours-menu-v4
 // cch-20261018-report-center-remove-equipment-downtime-menu
+// cch-20261019-report-center-add-equipment-downtime-menu
+// cch-20261019-report-center-remove-equipment-downtime-menu
+// cch-20261019-report-center-add-equipment-downtime-menu-v2
+// cch-20261019-report-center-remove-equipment-downtime-menu-final
+// cch-20261019-report-center-add-equipment-downtime-menu-v3
+// cch-20261019-report-center-remove-equipment-downtime-menu-v4
+// cch-20261019-report-center-add-equipment-downtime-menu-v5
+// cch-20261019-report-center-remove-equipment-downtime-menu-v6
+// cch-20261019-report-center-add-equipment-downtime-menu-v7
+// cch-20261019-report-center-remove-equipment-downtime-menu-v8
+// cch-20261019-report-center-add-equipment-downtime-menu-v9
+// cch-20261019-report-center-remove-equipment-downtime-menu-v10
+// cch-20261019-report-center-add-equipment-downtime-menu-v11
+// cch-20261019-report-center-remove-equipment-downtime-menu-v12
+// cch-20261019-report-center-remove-equipment-downtime-menu-v13
+// cch-20261019-report-center-add-equipment-downtime-menu-v14
+// parent_job_id=cch-20261019-143600-5d27
+// parent_job_id=cch-20261019-102121-9f51
 // cch-20261009-employee-work-hours-remove-employee-no-column
 /**
  * 报表功能注册表（唯一配置入口）。
@@ -51,6 +71,18 @@ export const REPORT_CATALOG = [
     description:
       '按日 / 车间 / 产线查看计划产量、订单号、实际产量、达成率、不良与工时、生产人员',
     icon: 'DataAnalysis',
+    menu: true,
+    hub: true,
+    enabled: true,
+  },
+  {
+    id: 'equipment-downtime',
+    routePath: 'equipment-downtime',
+    viewFile: 'EquipmentDowntimeReportView.vue',
+    apiFile: 'equipmentDowntime.js',
+    title: '停机报表',
+    description: '按时间范围、车间与设备查询停机时段明细与停机时长',
+    icon: 'Odometer',
     menu: true,
     hub: true,
     enabled: true,

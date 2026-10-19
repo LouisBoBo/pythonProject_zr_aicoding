@@ -476,22 +476,6 @@ API_ZH: dict[tuple[str, str], dict[str, str]] = {
         "summary": "导出设备报表 Excel",
         "description": "按当前筛选条件导出设备 OEE 与稼动指标明细 Excel。",
     },
-    ("GET", "/api/reports/equipment-downtime"): {
-        "summary": "停机报表",
-        "description": (
-            "按时间范围、车间、设备型号/单台设备、停机类型查询停机明细。"
-            "数据来自 equipment_runtime_logs（停机/维修/待机）；"
-            "返回汇总、趋势、按设备/产线/班次统计、原因 Pareto、MTBF/MTTR 与明细分页。"
-        ),
-    },
-    ("GET", "/api/reports/equipment-downtime/filters"): {
-        "summary": "停机报表筛选选项",
-        "description": "返回车间、设备型号/类型、设备列表与停机类型下拉选项。",
-    },
-    ("GET", "/api/reports/equipment-downtime/export"): {
-        "summary": "导出停机报表 Excel",
-        "description": "按当前筛选条件导出多 Sheet Excel（明细、统计、Pareto、MTBF/MTTR）。",
-    },
     ("GET", "/api/reports/equipment-inspection"): {
         "summary": "设备点检报表",
         "description": (

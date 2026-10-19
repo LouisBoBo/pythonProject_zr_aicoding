@@ -34,13 +34,8 @@ from app.schemas import (
     DailyOutputReportItem,
     EquipmentDowntimeFilterEquipment,
     EquipmentDowntimeFiltersResponse,
-    EquipmentDowntimeDimensionStat,
-    EquipmentDowntimeReasonParetoItem,
-    EquipmentDowntimeReliabilityMetric,
     EquipmentDowntimeReportItem,
     EquipmentDowntimeReportListResponse,
-    EquipmentDowntimeSummary,
-    EquipmentDowntimeTrendPoint,
     EquipmentOeeFilterEquipment,
     EquipmentOeeFiltersResponse,
     EquipmentOeeReportItem,
@@ -866,6 +861,132 @@ def get_equipment_repair_report_detail(
     return _repair_to_detail(repair)
 
 
+def _normalize_equipment_downtime_date_range(
+    date_from: date | None, date_to: date | None
+) -> tuple[date, date]:
+    today = date.today()
+    if date_to is None:
+        date_to = today
+    if date_from is None:
+        date_from = date_to - timedelta(days=6)
+    if date_from > date_to:
+        date_from, date_to = date_to, date_from
+    return date_from, date_to
+
+
+def _runtime_log_to_downtime_item(
+    log: EquipmentRuntimeLog, equipment: Equipment
+) -> EquipmentDowntimeReportItem:
+    return EquipmentDowntimeReportItem(
+        id=log.id,
+        equipment_code=equipment.equipment_code,
+        equipment_name=equipment.name,
+        workshop=equipment.department,
+        start_at=log.start_at,
+        end_at=log.end_at,
+        downtime_hours=round(float(log.runtime_hours or 0), 2),
+        status=log.status,
+    )
+
+
+def _build_equipment_downtime_report_items(
+    db: Session,
+    *,
+    date_from: date,
+    date_to: date,
+    workshop: str | None,
+    equipment_id: int | None,
+) -> list[EquipmentDowntimeReportItem]:
+    query = (
+        db.query(EquipmentRuntimeLog, Equipment)
+        .join(Equipment, EquipmentRuntimeLog.equipment_id == Equipment.id)
+        .filter(EquipmentRuntimeLog.status == "停机")
+    )
+    if workshop:
+        query = query.filter(Equipment.department == workshop)
+    if equipment_id:
+        query = query.filter(EquipmentRuntimeLog.equipment_id == equipment_id)
+    query = query.filter(
+        func.date(EquipmentRuntimeLog.start_at) >= date_from,
+        func.date(EquipmentRuntimeLog.start_at) <= date_to,
+    )
+    rows = query.order_by(
+        EquipmentRuntimeLog.start_at.desc(), EquipmentRuntimeLog.id.desc()
+    ).all()
+    return [_runtime_log_to_downtime_item(log, eq) for log, eq in rows]
+
+
+@router.get(
+    "/equipment-downtime/filters",
+    response_model=EquipmentDowntimeFiltersResponse,
+    summary="停机报表筛选选项",
+    description="返回车间与设备下拉选项。",
+)
+def list_equipment_downtime_filters(
+    _current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    workshops = [
+        name
+        for (name,) in db.query(Equipment.department)
+        .filter(Equipment.department.isnot(None), Equipment.department != "")
+        .distinct()
+        .order_by(Equipment.department)
+        .all()
+    ]
+    equipment_rows = db.query(Equipment).order_by(Equipment.equipment_code).all()
+    equipment = [
+        EquipmentDowntimeFilterEquipment(
+            id=eq.id,
+            equipment_code=eq.equipment_code,
+            name=eq.name,
+            workshop=eq.department,
+        )
+        for eq in equipment_rows
+    ]
+    return EquipmentDowntimeFiltersResponse(workshops=workshops, equipment=equipment)
+
+
+@router.get(
+    "/equipment-downtime",
+    response_model=EquipmentDowntimeReportListResponse,
+    summary="停机报表",
+    description=(
+        "按时间范围、车间、设备查询设备停机时段明细，"
+        "数据来自 equipment_runtime_logs（状态为停机）。"
+    ),
+)
+def list_equipment_downtime_report(
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(10, ge=1, le=100, description="每页条数"),
+    date_from: date | None = Query(None, description="停机开始日期起（含）"),
+    date_to: date | None = Query(None, description="停机开始日期止（含）"),
+    workshop: str | None = Query(None, description="车间筛选"),
+    equipment_id: int | None = Query(None, description="单台设备 ID"),
+    _current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    date_from, date_to = _normalize_equipment_downtime_date_range(date_from, date_to)
+    all_items = _build_equipment_downtime_report_items(
+        db,
+        date_from=date_from,
+        date_to=date_to,
+        workshop=workshop,
+        equipment_id=equipment_id,
+    )
+    total = len(all_items)
+    downtime_hours_sum = round(sum(item.downtime_hours for item in all_items), 2)
+    start = (page - 1) * page_size
+    page_items = all_items[start : start + page_size]
+    return EquipmentDowntimeReportListResponse(
+        items=page_items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        downtime_hours_sum=downtime_hours_sum,
+    )
+
+
 def _normalize_equipment_oee_date_range(
     date_from: date | None, date_to: date | None
 ) -> tuple[date, date]:
@@ -1223,478 +1344,6 @@ def export_equipment_oee_report(
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
-
-DOWNTIME_STATUSES = ("停机", "维修", "待机")
-
-
-def _normalize_equipment_downtime_date_range(
-    date_from: date | None, date_to: date | None
-) -> tuple[date, date]:
-    today = date.today()
-    if date_to is None:
-        date_to = today
-    if date_from is None:
-        date_from = date_to - timedelta(days=6)
-    if date_from > date_to:
-        date_from, date_to = date_to, date_from
-    return date_from, date_to
-
-
-def _filter_equipment_for_downtime_report(
-    db: Session,
-    workshop: str | None,
-    equipment_type: str | None,
-    equipment_id: int | None,
-) -> list[Equipment]:
-    query = db.query(Equipment)
-    if workshop:
-        query = query.filter(Equipment.department == workshop)
-    if equipment_type:
-        query = query.filter(Equipment.spec_model == equipment_type)
-    if equipment_id:
-        query = query.filter(Equipment.id == equipment_id)
-    return query.order_by(Equipment.equipment_code).all()
-
-
-def _build_equipment_downtime_report_items(
-    db: Session,
-    date_from: date,
-    date_to: date,
-    workshop: str | None,
-    equipment_type: str | None,
-    equipment_id: int | None,
-    status: str | None,
-) -> list[EquipmentDowntimeReportItem]:
-    equipment_list = _filter_equipment_for_downtime_report(
-        db, workshop=workshop, equipment_type=equipment_type, equipment_id=equipment_id
-    )
-    if not equipment_list:
-        return []
-
-    equipment_by_id = {eq.id: eq for eq in equipment_list}
-    equipment_ids = list(equipment_by_id.keys())
-
-    query = (
-        db.query(EquipmentRuntimeLog)
-        .filter(
-            EquipmentRuntimeLog.equipment_id.in_(equipment_ids),
-            EquipmentRuntimeLog.status.in_(DOWNTIME_STATUSES),
-            func.date(EquipmentRuntimeLog.start_at) >= date_from,
-            func.date(EquipmentRuntimeLog.start_at) <= date_to,
-        )
-        .order_by(EquipmentRuntimeLog.start_at.desc(), EquipmentRuntimeLog.id.desc())
-    )
-    if status:
-        query = query.filter(EquipmentRuntimeLog.status == status)
-
-    items: list[EquipmentDowntimeReportItem] = []
-    for row in query.all():
-        eq = equipment_by_id.get(row.equipment_id)
-        if not eq:
-            continue
-        items.append(
-            EquipmentDowntimeReportItem(
-                id=row.id,
-                equipment_id=row.equipment_id,
-                equipment_code=eq.equipment_code,
-                equipment_name=eq.name,
-                workshop=eq.department,
-                equipment_type=eq.spec_model,
-                start_at=row.start_at,
-                end_at=row.end_at,
-                status=row.status,
-                downtime_hours=round(float(row.runtime_hours or 0), 2),
-            )
-        )
-    return items
-
-
-def _empty_equipment_downtime_summary() -> EquipmentDowntimeSummary:
-    return EquipmentDowntimeSummary(
-        event_count=0,
-        total_downtime_hours=0,
-        avg_downtime_hours=0,
-        equipment_count=0,
-    )
-
-
-def _build_equipment_downtime_summary(
-    items: list[EquipmentDowntimeReportItem],
-) -> EquipmentDowntimeSummary:
-    if not items:
-        return _empty_equipment_downtime_summary()
-    total_hours = round(sum(item.downtime_hours for item in items), 2)
-    equipment_count = len({item.equipment_id for item in items})
-    event_count = len(items)
-    avg_hours = round(total_hours / event_count, 2) if event_count else 0.0
-    return EquipmentDowntimeSummary(
-        event_count=event_count,
-        total_downtime_hours=total_hours,
-        avg_downtime_hours=avg_hours,
-        equipment_count=equipment_count,
-    )
-
-
-def _build_equipment_downtime_trend(
-    items: list[EquipmentDowntimeReportItem],
-) -> list[EquipmentDowntimeTrendPoint]:
-    grouped: dict[date, list[EquipmentDowntimeReportItem]] = defaultdict(list)
-    for item in items:
-        grouped[item.start_at.date()].append(item)
-
-    trend: list[EquipmentDowntimeTrendPoint] = []
-    for period_date in sorted(grouped.keys()):
-        rows = grouped[period_date]
-        trend.append(
-            EquipmentDowntimeTrendPoint(
-                period_date=period_date,
-                event_count=len(rows),
-                downtime_hours=round(sum(row.downtime_hours for row in rows), 2),
-            )
-        )
-    return trend
-
-
-def _downtime_shift_label_from_datetime(start_at: datetime) -> str:
-    hour = start_at.hour
-    if 8 <= hour < 16:
-        return "早班"
-    if 16 <= hour < 24:
-        return "中班"
-    return "夜班"
-
-
-def _period_calendar_hours(date_from: date, date_to: date) -> float:
-    return float((date_to - date_from).days + 1) * 24.0
-
-
-def _build_equipment_downtime_dimension_stats(
-    items: list[EquipmentDowntimeReportItem],
-    key_fn,
-    label_fn,
-) -> list[EquipmentDowntimeDimensionStat]:
-    grouped: dict[str, list[EquipmentDowntimeReportItem]] = defaultdict(list)
-    labels: dict[str, str] = {}
-    for item in items:
-        key = key_fn(item)
-        grouped[key].append(item)
-        labels[key] = label_fn(item)
-
-    total_hours = round(sum(item.downtime_hours for item in items), 2)
-    stats: list[EquipmentDowntimeDimensionStat] = []
-    for key, rows in grouped.items():
-        hours = round(sum(row.downtime_hours for row in rows), 2)
-        stats.append(
-            EquipmentDowntimeDimensionStat(
-                dimension_key=key,
-                dimension_label=labels[key],
-                event_count=len(rows),
-                downtime_hours=hours,
-                downtime_pct=round(hours / total_hours * 100, 2) if total_hours else 0.0,
-            )
-        )
-    return sorted(stats, key=lambda row: row.downtime_hours, reverse=True)
-
-
-def _build_equipment_downtime_by_equipment(
-    items: list[EquipmentDowntimeReportItem],
-) -> list[EquipmentDowntimeDimensionStat]:
-    return _build_equipment_downtime_dimension_stats(
-        items,
-        key_fn=lambda item: str(item.equipment_id),
-        label_fn=lambda item: f"{item.equipment_name}（{item.equipment_code}）",
-    )
-
-
-def _build_equipment_downtime_by_line(
-    items: list[EquipmentDowntimeReportItem],
-) -> list[EquipmentDowntimeDimensionStat]:
-    return _build_equipment_downtime_dimension_stats(
-        items,
-        key_fn=lambda item: item.workshop or "未分配",
-        label_fn=lambda item: item.workshop or "未分配",
-    )
-
-
-def _build_equipment_downtime_by_shift(
-    items: list[EquipmentDowntimeReportItem],
-) -> list[EquipmentDowntimeDimensionStat]:
-    return _build_equipment_downtime_dimension_stats(
-        items,
-        key_fn=lambda item: _downtime_shift_label_from_datetime(item.start_at),
-        label_fn=lambda item: _downtime_shift_label_from_datetime(item.start_at),
-    )
-
-
-def _build_equipment_downtime_reason_pareto(
-    items: list[EquipmentDowntimeReportItem],
-) -> list[EquipmentDowntimeReasonParetoItem]:
-    grouped: dict[str, list[EquipmentDowntimeReportItem]] = defaultdict(list)
-    for item in items:
-        grouped[item.status].append(item)
-
-    total_hours = round(sum(item.downtime_hours for item in items), 2)
-    ranked = sorted(
-        grouped.items(),
-        key=lambda pair: sum(row.downtime_hours for row in pair[1]),
-        reverse=True,
-    )
-    pareto: list[EquipmentDowntimeReasonParetoItem] = []
-    cumulative = 0.0
-    for reason, rows in ranked:
-        hours = round(sum(row.downtime_hours for row in rows), 2)
-        cumulative += hours
-        pareto.append(
-            EquipmentDowntimeReasonParetoItem(
-                reason=reason,
-                event_count=len(rows),
-                downtime_hours=hours,
-                cumulative_pct=round(cumulative / total_hours * 100, 2) if total_hours else 0.0,
-            )
-        )
-    return pareto
-
-
-def _build_equipment_downtime_reliability(
-    items: list[EquipmentDowntimeReportItem],
-    date_from: date,
-    date_to: date,
-) -> list[EquipmentDowntimeReliabilityMetric]:
-    period_hours = _period_calendar_hours(date_from, date_to)
-    grouped: dict[int, list[EquipmentDowntimeReportItem]] = defaultdict(list)
-    for item in items:
-        grouped[item.equipment_id].append(item)
-
-    metrics: list[EquipmentDowntimeReliabilityMetric] = []
-    for equipment_id, rows in grouped.items():
-        total_downtime = round(sum(row.downtime_hours for row in rows), 2)
-        event_count = len(rows)
-        mttr = round(total_downtime / event_count, 2) if event_count else 0.0
-        operating_hours = max(period_hours - total_downtime, 0.0)
-        mtbf = round(operating_hours / event_count, 2) if event_count else 0.0
-        sample = rows[0]
-        metrics.append(
-            EquipmentDowntimeReliabilityMetric(
-                equipment_id=equipment_id,
-                equipment_code=sample.equipment_code,
-                equipment_name=sample.equipment_name,
-                event_count=event_count,
-                mtbf_hours=mtbf,
-                mttr_hours=mttr,
-            )
-        )
-    return sorted(metrics, key=lambda row: row.event_count, reverse=True)
-
-
-def _append_dimension_sheet(ws, title: str, rows: list[EquipmentDowntimeDimensionStat]) -> None:
-    ws.title = title
-    ws.append(["名称", "停机次数", "停机时长(h)", "时长占比(%)"])
-    for row in rows:
-        ws.append([row.dimension_label, row.event_count, row.downtime_hours, row.downtime_pct])
-
-
-def _append_pareto_sheet(ws, rows: list[EquipmentDowntimeReasonParetoItem]) -> None:
-    ws.title = "原因Pareto"
-    ws.append(["停机原因", "停机次数", "停机时长(h)", "累计占比(%)"])
-    for row in rows:
-        ws.append([row.reason, row.event_count, row.downtime_hours, row.cumulative_pct])
-
-
-def _append_reliability_sheet(ws, rows: list[EquipmentDowntimeReliabilityMetric]) -> None:
-    ws.title = "MTBF_MTTR"
-    ws.append(["设备编号", "设备名称", "停机次数", "MTBF(h)", "MTTR(h)"])
-    for row in rows:
-        ws.append(
-            [
-                row.equipment_code,
-                row.equipment_name,
-                row.event_count,
-                row.mtbf_hours,
-                row.mttr_hours,
-            ]
-        )
-
-
-@router.get(
-    "/equipment-downtime/filters",
-    response_model=EquipmentDowntimeFiltersResponse,
-    summary="设备停机报表筛选选项",
-    description="返回车间、设备类型、设备列表与停机类型下拉选项。",
-)
-def list_equipment_downtime_filters(
-    _current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    workshops = [
-        name
-        for (name,) in db.query(Equipment.department)
-        .filter(Equipment.department.isnot(None), Equipment.department != "")
-        .distinct()
-        .order_by(Equipment.department)
-        .all()
-    ]
-    equipment_types = [
-        name
-        for (name,) in db.query(Equipment.spec_model)
-        .filter(Equipment.spec_model.isnot(None), Equipment.spec_model != "")
-        .distinct()
-        .order_by(Equipment.spec_model)
-        .all()
-    ]
-    equipment_rows = db.query(Equipment).order_by(Equipment.equipment_code).all()
-    equipment = [
-        EquipmentDowntimeFilterEquipment(
-            id=eq.id,
-            equipment_code=eq.equipment_code,
-            name=eq.name,
-            workshop=eq.department,
-            equipment_type=eq.spec_model,
-        )
-        for eq in equipment_rows
-    ]
-    return EquipmentDowntimeFiltersResponse(
-        workshops=workshops,
-        equipment_types=equipment_types,
-        equipment=equipment,
-        downtime_statuses=list(DOWNTIME_STATUSES),
-    )
-
-
-@router.get(
-    "/equipment-downtime",
-    response_model=EquipmentDowntimeReportListResponse,
-    summary="设备停机报表",
-    description=(
-        "按时间范围、车间、设备类型/单台设备、停机类型查询设备停机明细，"
-        "数据来自 equipment_runtime_logs（状态为停机/维修/待机）。"
-        "返回汇总指标、趋势序列与明细分页。"
-    ),
-)
-def list_equipment_downtime_report(
-    page: int = Query(1, ge=1, description="页码"),
-    page_size: int = Query(10, ge=1, le=100, description="每页条数"),
-    date_from: date | None = Query(None, description="日期起（含）"),
-    date_to: date | None = Query(None, description="日期止（含）"),
-    workshop: str | None = Query(None, description="车间筛选"),
-    equipment_type: str | None = Query(None, description="设备类型（型号）筛选"),
-    equipment_id: int | None = Query(None, description="单台设备 ID"),
-    status: str | None = Query(None, description="停机类型：停机/维修/待机"),
-    _current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    if status and status not in DOWNTIME_STATUSES:
-        status = None
-    date_from, date_to = _normalize_equipment_downtime_date_range(date_from, date_to)
-    all_items = _build_equipment_downtime_report_items(
-        db,
-        date_from=date_from,
-        date_to=date_to,
-        workshop=workshop,
-        equipment_type=equipment_type,
-        equipment_id=equipment_id,
-        status=status,
-    )
-    total = len(all_items)
-    summary = _build_equipment_downtime_summary(all_items)
-    trend = _build_equipment_downtime_trend(all_items)
-    by_equipment = _build_equipment_downtime_by_equipment(all_items)
-    by_line = _build_equipment_downtime_by_line(all_items)
-    by_shift = _build_equipment_downtime_by_shift(all_items)
-    reason_pareto = _build_equipment_downtime_reason_pareto(all_items)
-    reliability = _build_equipment_downtime_reliability(all_items, date_from, date_to)
-    start = (page - 1) * page_size
-    page_items = all_items[start : start + page_size]
-    return EquipmentDowntimeReportListResponse(
-        items=page_items,
-        total=total,
-        page=page,
-        page_size=page_size,
-        summary=summary,
-        trend=trend,
-        by_equipment=by_equipment,
-        by_line=by_line,
-        by_shift=by_shift,
-        reason_pareto=reason_pareto,
-        reliability=reliability,
-    )
-
-
-@router.get(
-    "/equipment-downtime/export",
-    summary="导出设备停机报表 Excel",
-    description="按当前筛选条件导出设备停机明细 Excel 文件。",
-)
-def export_equipment_downtime_report(
-    date_from: date | None = Query(None, description="日期起（含）"),
-    date_to: date | None = Query(None, description="日期止（含）"),
-    workshop: str | None = Query(None, description="车间筛选"),
-    equipment_type: str | None = Query(None, description="设备类型（型号）筛选"),
-    equipment_id: int | None = Query(None, description="单台设备 ID"),
-    status: str | None = Query(None, description="停机类型：停机/维修/待机"),
-    _current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    if status and status not in DOWNTIME_STATUSES:
-        status = None
-    date_from, date_to = _normalize_equipment_downtime_date_range(date_from, date_to)
-    rows = _build_equipment_downtime_report_items(
-        db,
-        date_from=date_from,
-        date_to=date_to,
-        workshop=workshop,
-        equipment_type=equipment_type,
-        equipment_id=equipment_id,
-        status=status,
-    )
-    by_equipment = _build_equipment_downtime_by_equipment(rows)
-    by_line = _build_equipment_downtime_by_line(rows)
-    by_shift = _build_equipment_downtime_by_shift(rows)
-    reason_pareto = _build_equipment_downtime_reason_pareto(rows)
-    reliability = _build_equipment_downtime_reliability(rows, date_from, date_to)
-
-    wb = Workbook()
-    ws_detail = wb.active
-    ws_detail.title = "停机明细"
-    headers = [
-        "设备编号",
-        "设备名称",
-        "车间",
-        "设备型号",
-        "停机类型",
-        "开始时间",
-        "结束时间",
-        "停机时长(h)",
-    ]
-    ws_detail.append(headers)
-    for item in rows:
-        ws_detail.append(
-            [
-                item.equipment_code,
-                item.equipment_name,
-                item.workshop or "",
-                item.equipment_type or "",
-                item.status,
-                item.start_at.strftime("%Y-%m-%d %H:%M:%S") if item.start_at else "",
-                item.end_at.strftime("%Y-%m-%d %H:%M:%S") if item.end_at else "",
-                item.downtime_hours,
-            ]
-        )
-
-    _append_dimension_sheet(wb.create_sheet(), "按设备统计", by_equipment)
-    _append_dimension_sheet(wb.create_sheet(), "按产线统计", by_line)
-    _append_dimension_sheet(wb.create_sheet(), "按班次统计", by_shift)
-    _append_pareto_sheet(wb.create_sheet(), reason_pareto)
-    _append_reliability_sheet(wb.create_sheet(), reliability)
-
-    buffer = BytesIO()
-    wb.save(buffer)
-    buffer.seek(0)
-    filename = f"downtime_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-    return StreamingResponse(
-        buffer,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
 
 
 def _inspection_item_to_report_row(

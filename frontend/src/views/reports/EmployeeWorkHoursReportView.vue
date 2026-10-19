@@ -33,7 +33,6 @@
         <el-form-item label="视图">
           <el-radio-group v-model="viewMode" @change="handleViewModeChange">
             <el-radio-button value="detail">明细</el-radio-button>
-            <el-radio-button value="employee_date">按员工+日期</el-radio-button>
             <el-radio-button value="employee">按员工汇总</el-radio-button>
           </el-radio-group>
         </el-form-item>
@@ -48,11 +47,9 @@
       <div class="table-toolbar">
         <div class="toolbar-left">
           <span class="table-title">员工工时报表</span>
-          <el-tag size="small" type="info">{{ viewModeLabel }}</el-tag>
-        </div>
-        <div class="toolbar-right">
-          <span class="sum-text">工时合计 {{ formatHours(workHoursSum) }}</span>
-          <span class="sum-text">加班合计 {{ formatHours(overtimeHoursSum) }}</span>
+          <el-tag size="small" type="info">
+            {{ viewMode === 'employee' ? '按员工汇总工时合计' : '明细列表' }}
+          </el-tag>
         </div>
       </div>
 
@@ -62,14 +59,6 @@
         <el-table-column prop="department" label="部门" min-width="140" />
         <el-table-column
           v-if="viewMode === 'detail'"
-          prop="shift_type"
-          label="班别"
-          width="100"
-        >
-          <template #default="{ row }">{{ row.shift_type || '—' }}</template>
-        </el-table-column>
-        <el-table-column
-          v-if="viewMode !== 'employee'"
           prop="work_date"
           label="日期"
           width="130"
@@ -78,32 +67,6 @@
         </el-table-column>
         <el-table-column prop="work_hours" label="工时" width="120" align="right">
           <template #default="{ row }">{{ formatHours(row.work_hours) }}</template>
-        </el-table-column>
-        <el-table-column
-          v-if="viewMode === 'detail'"
-          prop="overtime_hours"
-          label="加班"
-          width="100"
-          align="right"
-        >
-          <template #default="{ row }">{{ formatHours(row.overtime_hours) }}</template>
-        </el-table-column>
-        <el-table-column
-          v-if="viewMode === 'detail'"
-          prop="project_name"
-          label="项目"
-          min-width="120"
-        >
-          <template #default="{ row }">{{ row.project_name || '—' }}</template>
-        </el-table-column>
-        <el-table-column
-          v-if="viewMode !== 'detail'"
-          prop="record_count"
-          label="明细条数"
-          width="100"
-          align="right"
-        >
-          <template #default="{ row }">{{ row.record_count ?? '—' }}</template>
         </el-table-column>
       </el-table>
 
@@ -124,7 +87,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   fetchEmployeeWorkHourFilters,
@@ -152,20 +115,9 @@ const pageSize = ref(10)
 const departmentOptions = ref([])
 const dateRange = ref(defaultDateRange())
 const viewMode = ref('detail')
-const workHoursSum = ref(0)
-const overtimeHoursSum = ref(0)
 
 const filters = reactive({
   department: '',
-})
-
-const viewModeLabel = computed(() => {
-  const map = {
-    detail: '明细列表',
-    employee_date: '按员工+日期汇总',
-    employee: '按员工汇总工时合计',
-  }
-  return map[viewMode.value] || '明细列表'
 })
 
 function formatHours(value) {
@@ -197,17 +149,13 @@ async function loadReport() {
       dateFrom: (dateRange.value && dateRange.value[0]) || '',
       dateTo: (dateRange.value && dateRange.value[1]) || '',
       department: filters.department || undefined,
-      dimension: viewMode.value,
+      dimension: viewMode.value === 'employee' ? 'employee' : 'detail',
     })
     items.value = resp.items || []
     total.value = resp.total || 0
-    workHoursSum.value = resp.work_hours_sum || 0
-    overtimeHoursSum.value = resp.overtime_hours_sum || 0
   } catch (err) {
     items.value = []
     total.value = 0
-    workHoursSum.value = 0
-    overtimeHoursSum.value = 0
     ElMessage.error(err.message || '加载员工工时报表失败')
   } finally {
     loading.value = false
@@ -242,11 +190,11 @@ onMounted(async () => {
 
 .search-card,
 .table-card {
-  border-radius: 4px;
+  border-radius: 8px;
 }
 
 .search-form {
-  margin-bottom: -8px;
+  margin-bottom: 0;
 }
 
 .table-toolbar {
@@ -254,26 +202,18 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 12px;
-  gap: 12px;
-  flex-wrap: wrap;
 }
 
-.toolbar-left,
-.toolbar-right {
+.toolbar-left {
   display: flex;
   align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .table-title {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
-}
-
-.sum-text {
-  font-size: 13px;
-  color: var(--el-text-color-secondary);
+  color: #303133;
 }
 
 .pagination-wrap {

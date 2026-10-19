@@ -1,4 +1,15 @@
-import { Calendar, Cpu, DataAnalysis, DataLine, Document, List, Odometer, Timer, Tools, User } from '@element-plus/icons-vue'
+import {
+  Calendar,
+  Cpu,
+  DataAnalysis,
+  DataLine,
+  Document,
+  List,
+  Odometer,
+  Timer,
+  Tools,
+  User,
+} from '@element-plus/icons-vue'
 
 export const REPORT_ICON_MAP = {
   Document,
