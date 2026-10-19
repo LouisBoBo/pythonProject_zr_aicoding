@@ -32,6 +32,10 @@ from app.models import (
 from app.schemas import (
     DailyOutputLinesResponse,
     DailyOutputReportItem,
+    EmployeeWorkHourFilterEmployee,
+    EmployeeWorkHourFiltersResponse,
+    EmployeeWorkHourReportItem,
+    EmployeeWorkHourReportListResponse,
     EquipmentDowntimeFilterEquipment,
     EquipmentDowntimeFiltersResponse,
     EquipmentDowntimeDimensionStat,
@@ -571,6 +575,261 @@ def list_daily_output_lines(
         for (name,) in db.query(ProductionLine.name).order_by(ProductionLine.id).all()
     ]
     return DailyOutputLinesResponse(lines=lines)
+
+
+WORK_HOUR_DIMENSIONS = ("detail", "employee", "employee_date")
+
+WORK_HOUR_APPROVAL_LABELS = {
+    "pending": "待审批",
+    "approved": "已通过",
+    "rejected": "已驳回",
+}
+
+
+def _work_hour_approval_label(status: str | None) -> str:
+    if not status:
+        return "—"
+    return WORK_HOUR_APPROVAL_LABELS.get(status, status)
+
+
+def _normalize_work_hour_date_range(
+    date_from: date | None, date_to: date | None
+) -> tuple[date, date]:
+    today = date.today()
+    if date_to is None:
+        date_to = today
+    if date_from is None:
+        date_from = date_to - timedelta(days=6)
+    if date_from > date_to:
+        date_from, date_to = date_to, date_from
+    return date_from, date_to
+
+
+def _apply_work_hour_report_filters(
+    query,
+    *,
+    date_from: date,
+    date_to: date,
+    department: str | None,
+    employee_no: str | None,
+):
+    query = query.filter(
+        EmployeeWorkHour.work_date >= date_from,
+        EmployeeWorkHour.work_date <= date_to,
+    )
+    if department:
+        query = query.filter(EmployeeWorkHour.department == department)
+    if employee_no:
+        query = query.filter(EmployeeWorkHour.employee_no == employee_no)
+    return query
+
+
+def _build_work_hour_report_items(
+    db: Session,
+    *,
+    date_from: date,
+    date_to: date,
+    department: str | None,
+    employee_no: str | None,
+    dimension: str,
+) -> list[EmployeeWorkHourReportItem]:
+    query = db.query(EmployeeWorkHour)
+    query = _apply_work_hour_report_filters(
+        query,
+        date_from=date_from,
+        date_to=date_to,
+        department=department,
+        employee_no=employee_no,
+    )
+
+    if dimension == "detail":
+        rows = query.order_by(
+            EmployeeWorkHour.work_date.desc(),
+            EmployeeWorkHour.employee_no,
+            EmployeeWorkHour.id.desc(),
+        ).all()
+        return [
+            EmployeeWorkHourReportItem(
+                employee_name=row.employee_name,
+                employee_no=row.employee_no,
+                department=row.department,
+                project_name=row.project_name,
+                task_name=row.task_name,
+                work_date=_as_date(row.work_date),
+                work_hours=round(float(row.work_hours or 0), 2),
+                overtime_hours=round(float(row.overtime_hours or 0), 2),
+                approval_status=_work_hour_approval_label(row.approval_status),
+            )
+            for row in rows
+        ]
+
+    if dimension == "employee":
+        rows = (
+            query.with_entities(
+                EmployeeWorkHour.employee_no,
+                EmployeeWorkHour.employee_name,
+                EmployeeWorkHour.department,
+                func.sum(EmployeeWorkHour.work_hours).label("work_hours"),
+                func.sum(EmployeeWorkHour.overtime_hours).label("overtime_hours"),
+                func.count(EmployeeWorkHour.id).label("record_count"),
+            )
+            .group_by(
+                EmployeeWorkHour.employee_no,
+                EmployeeWorkHour.employee_name,
+                EmployeeWorkHour.department,
+            )
+            .order_by(EmployeeWorkHour.employee_no)
+            .all()
+        )
+        return [
+            EmployeeWorkHourReportItem(
+                employee_name=row.employee_name,
+                employee_no=row.employee_no,
+                department=row.department,
+                work_hours=round(float(row.work_hours or 0), 2),
+                overtime_hours=round(float(row.overtime_hours or 0), 2),
+                approval_status="汇总",
+                record_count=int(row.record_count or 0),
+            )
+            for row in rows
+        ]
+
+    if dimension == "employee_date":
+        rows = (
+            query.with_entities(
+                EmployeeWorkHour.employee_no,
+                EmployeeWorkHour.employee_name,
+                EmployeeWorkHour.department,
+                EmployeeWorkHour.work_date,
+                func.sum(EmployeeWorkHour.work_hours).label("work_hours"),
+                func.sum(EmployeeWorkHour.overtime_hours).label("overtime_hours"),
+                func.count(EmployeeWorkHour.id).label("record_count"),
+            )
+            .group_by(
+                EmployeeWorkHour.employee_no,
+                EmployeeWorkHour.employee_name,
+                EmployeeWorkHour.department,
+                EmployeeWorkHour.work_date,
+            )
+            .order_by(EmployeeWorkHour.work_date.desc(), EmployeeWorkHour.employee_no)
+            .all()
+        )
+        return [
+            EmployeeWorkHourReportItem(
+                employee_name=row.employee_name,
+                employee_no=row.employee_no,
+                department=row.department,
+                work_date=_as_date(row.work_date),
+                work_hours=round(float(row.work_hours or 0), 2),
+                overtime_hours=round(float(row.overtime_hours or 0), 2),
+                approval_status="汇总",
+                record_count=int(row.record_count or 0),
+            )
+            for row in rows
+        ]
+
+    raise HTTPException(status_code=400, detail=f"不支持的统计维度: {dimension}")
+
+
+@router.get(
+    "/employee-work-hours/filters",
+    response_model=EmployeeWorkHourFiltersResponse,
+    summary="员工工时报表筛选选项",
+    description="返回部门、员工、项目下拉选项。",
+)
+def list_employee_work_hour_filters(
+    _current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    departments = sorted(
+        {
+            dept
+            for (dept,) in db.query(EmployeeWorkHour.department)
+            .filter(EmployeeWorkHour.department.isnot(None), EmployeeWorkHour.department != "")
+            .distinct()
+            .all()
+            if dept
+        }
+    )
+    employee_rows = (
+        db.query(EmployeeWorkHour.employee_no, EmployeeWorkHour.employee_name)
+        .distinct()
+        .order_by(EmployeeWorkHour.employee_no)
+        .all()
+    )
+    employees = [
+        EmployeeWorkHourFilterEmployee(employee_no=no, employee_name=name)
+        for no, name in employee_rows
+    ]
+    projects = sorted(
+        {
+            name
+            for (name,) in db.query(EmployeeWorkHour.project_name)
+            .filter(
+                EmployeeWorkHour.project_name.isnot(None),
+                EmployeeWorkHour.project_name != "",
+            )
+            .distinct()
+            .all()
+            if name
+        }
+    )
+    return EmployeeWorkHourFiltersResponse(
+        departments=departments,
+        employees=employees,
+        projects=projects,
+    )
+
+
+@router.get(
+    "/employee-work-hours",
+    response_model=EmployeeWorkHourReportListResponse,
+    summary="员工工时报表",
+    description=(
+        "查询 employee_work_hours 工时数据，支持日期区间、部门、员工筛选与分页。"
+        "统计维度：detail（明细）、employee（按员工汇总）、employee_date（按员工+日期汇总）。"
+        "默认查询近 7 日（含今天）。"
+    ),
+)
+def list_employee_work_hours_report(
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(10, ge=1, le=100, description="每页条数"),
+    date_from: date | None = Query(None, description="报工日期起（含）"),
+    date_to: date | None = Query(None, description="报工日期止（含）"),
+    department: str | None = Query(None, description="部门（精确匹配）"),
+    employee_no: str | None = Query(None, description="工号（精确匹配）"),
+    dimension: str = Query("detail", description="统计维度：detail / employee / employee_date"),
+    _current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if dimension not in WORK_HOUR_DIMENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"dimension 须为 {', '.join(WORK_HOUR_DIMENSIONS)} 之一",
+        )
+    date_from, date_to = _normalize_work_hour_date_range(date_from, date_to)
+    all_items = _build_work_hour_report_items(
+        db,
+        date_from=date_from,
+        date_to=date_to,
+        department=department,
+        employee_no=employee_no,
+        dimension=dimension,
+    )
+    total = len(all_items)
+    work_hours_sum = round(sum(i.work_hours for i in all_items), 2)
+    overtime_hours_sum = round(sum(i.overtime_hours for i in all_items), 2)
+    start = (page - 1) * page_size
+    page_items = all_items[start : start + page_size]
+    return EmployeeWorkHourReportListResponse(
+        items=page_items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        dimension=dimension,
+        work_hours_sum=work_hours_sum,
+        overtime_hours_sum=overtime_hours_sum,
+    )
 
 
 REPAIR_STATUS_LABELS = {

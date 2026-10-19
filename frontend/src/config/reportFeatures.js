@@ -11,6 +11,12 @@
 // cch-20261014-report-center-add-employee-work-hours-menu
 // cch-20261015-report-center-add-employee-work-hours-menu
 // cch-20261018-report-center-remove-employee-work-hours-menu
+// cch-20261018-report-center-add-employee-work-hours-menu
+// cch-20261018-report-center-remove-employee-work-hours-menu
+// cch-20261019-report-center-add-employee-work-hours-menu
+// cch-20261019-report-center-remove-employee-work-hours-menu
+// cch-20261019-report-center-add-employee-work-hours-menu-v2
+// cch-20261018-report-center-remove-equipment-downtime-menu
 // cch-20261009-employee-work-hours-remove-employee-no-column
 /**
  * 报表功能注册表（唯一配置入口）。
@@ -48,6 +54,18 @@ export const REPORT_CATALOG = [
     enabled: true,
   },
   {
+    id: 'employee-work-hours',
+    routePath: 'employee-work-hours',
+    viewFile: 'EmployeeWorkHoursReportView.vue',
+    apiFile: 'employeeWorkHours.js',
+    title: '员工工时报表',
+    description: '按日期区间与部门查询员工工时明细，支持按员工/日期汇总工时合计',
+    icon: 'Timer',
+    menu: true,
+    hub: true,
+    enabled: true,
+  },
+  {
     id: 'pcb-production-ops',
     routePath: 'pcb-production-ops',
     viewFile: 'PcbProductionOpsReportView.vue',
@@ -58,19 +76,6 @@ export const REPORT_CATALOG = [
     icon: 'TrendCharts',
     menu: false,
     hub: false,
-    enabled: true,
-  },
-  {
-    id: 'equipment-downtime',
-    routePath: 'equipment-downtime',
-    viewFile: 'EquipmentDowntimeReportView.vue',
-    apiFile: 'equipmentDowntime.js',
-    title: '停机报表',
-    description: '按时间、车间与设备查询停机/维修/待机明细，含趋势、维度统计与 MTBF/MTTR，支持 Excel 导出',
-    icon: 'Odometer',
-    menuGroup: 'equipment',
-    menu: true,
-    hub: true,
     enabled: true,
   },
   {
