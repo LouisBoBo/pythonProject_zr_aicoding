@@ -61,6 +61,14 @@
         <el-table-column prop="employee_no" label="工号" width="120" />
         <el-table-column prop="department" label="部门" min-width="140" />
         <el-table-column
+          v-if="viewMode === 'detail'"
+          prop="shift_type"
+          label="班别"
+          width="100"
+        >
+          <template #default="{ row }">{{ row.shift_type || '—' }}</template>
+        </el-table-column>
+        <el-table-column
           v-if="viewMode !== 'employee'"
           prop="work_date"
           label="日期"

@@ -585,6 +585,17 @@ WORK_HOUR_APPROVAL_LABELS = {
     "rejected": "已驳回",
 }
 
+WORK_HOUR_SHIFT_LABELS = {
+    "day": "白班",
+    "night": "晚班",
+}
+
+
+def _work_hour_shift_label(shift_type: str | None) -> str | None:
+    if not shift_type:
+        return None
+    return WORK_HOUR_SHIFT_LABELS.get(shift_type, shift_type)
+
 
 def _work_hour_approval_label(status: str | None) -> str:
     if not status:
@@ -656,6 +667,7 @@ def _build_work_hour_report_items(
                 project_name=row.project_name,
                 task_name=row.task_name,
                 work_date=_as_date(row.work_date),
+                shift_type=_work_hour_shift_label(row.shift_type),
                 work_hours=round(float(row.work_hours or 0), 2),
                 overtime_hours=round(float(row.overtime_hours or 0), 2),
                 approval_status=_work_hour_approval_label(row.approval_status),

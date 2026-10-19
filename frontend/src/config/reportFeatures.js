@@ -16,6 +16,7 @@
 // cch-20261019-report-center-add-employee-work-hours-menu
 // cch-20261019-report-center-remove-employee-work-hours-menu
 // cch-20261019-report-center-add-employee-work-hours-menu-v2
+// cch-20261019-employee-work-hours-add-shift-type-column
 // cch-20261018-report-center-remove-equipment-downtime-menu
 // cch-20261009-employee-work-hours-remove-employee-no-column
 /**
@@ -59,7 +60,9 @@ export const REPORT_CATALOG = [
     viewFile: 'EmployeeWorkHoursReportView.vue',
     apiFile: 'employeeWorkHours.js',
     title: '员工工时报表',
-    description: '按日期区间与部门查询员工工时明细，支持按员工/日期汇总工时合计',
+    // 明细列表在「日期」列前展示「班别」，数据来自 /api/reports/employee-work-hours 的 shift_type
+    description:
+      '按日期区间与部门查询员工工时明细（含班别），支持按员工/日期汇总工时合计',
     icon: 'Timer',
     menu: true,
     hub: true,
