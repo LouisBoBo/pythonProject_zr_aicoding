@@ -63,6 +63,7 @@ from app.routers import (
     production,
     quality,
     reports,
+    employee_work_hours_report,
     warehouse,
     work_order_alerts,
     work_orders,
@@ -992,6 +993,29 @@ def seed_message_data():
         db.close()
 
 
+def ensure_equipment_runtime_logs_downtime_reason():
+    """为 equipment_runtime_logs 补齐 downtime_reason 列，停机记录空值回填为「其他」。"""
+    inspector = inspect(engine)
+    if not inspector.has_table("equipment_runtime_logs"):
+        return
+    columns = {column["name"] for column in inspector.get_columns("equipment_runtime_logs")}
+    if "downtime_reason" not in columns:
+        with engine.begin() as conn:
+            conn.execute(
+                text("ALTER TABLE equipment_runtime_logs ADD COLUMN downtime_reason VARCHAR(50)")
+            )
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                UPDATE equipment_runtime_logs
+                SET downtime_reason = '其他'
+                WHERE status = '停机' AND (downtime_reason IS NULL OR downtime_reason = '')
+                """
+            )
+        )
+
+
 def ensure_employee_work_hours_shift_type():
     """为 employee_work_hours 表补齐 shift_type 列，并按报工时间回填班别。"""
     inspector = inspect(engine)
@@ -1352,6 +1376,7 @@ async def lifespan(app: FastAPI):
     ensure_maintenance_orders_plan_complete_date()
     ensure_equipment_repairs_repair_completed_at()
     ensure_employee_work_hours_shift_type()
+    ensure_equipment_runtime_logs_downtime_reason()
     seed_default_user()
     seed_rbac()
     seed_inspection_data()
@@ -1435,6 +1460,8 @@ app.include_router(equipment_maintenance.router)
 app.include_router(equipment_repair.router)
 app.include_router(quality.router)
 app.include_router(reports.router)
+# parent_job_id=cch-20261020-154052-c227 员工工时报表独立路由，确保 /api/reports/employee-work-hours 挂载
+app.include_router(employee_work_hours_report.router)
 app.include_router(inventory_low_stock.router)
 app.include_router(warehouse.router)
 app.include_router(material_purchases.router)

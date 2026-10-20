@@ -51,6 +51,10 @@
             {{ viewMode === 'employee' ? '按员工汇总工时合计' : '明细列表' }}
           </el-tag>
         </div>
+        <div class="toolbar-right">
+          <span class="sum-text">工时合计 {{ formatHours(workHoursSum) }}</span>
+          <span class="sum-text">加班合计 {{ formatHours(overtimeHoursSum) }}</span>
+        </div>
       </div>
 
       <el-table v-loading="loading" :data="items" stripe border style="width: 100%">
@@ -65,8 +69,27 @@
         >
           <template #default="{ row }">{{ row.work_date || '—' }}</template>
         </el-table-column>
+        <el-table-column
+          v-if="viewMode === 'detail'"
+          prop="project_name"
+          label="项目"
+          min-width="120"
+        >
+          <template #default="{ row }">{{ row.project_name || '—' }}</template>
+        </el-table-column>
         <el-table-column prop="work_hours" label="工时" width="120" align="right">
           <template #default="{ row }">{{ formatHours(row.work_hours) }}</template>
+        </el-table-column>
+        <el-table-column prop="overtime_hours" label="加班" width="100" align="right">
+          <template #default="{ row }">{{ formatHours(row.overtime_hours) }}</template>
+        </el-table-column>
+        <el-table-column
+          v-if="viewMode === 'detail'"
+          prop="approval_status"
+          label="审批状态"
+          width="100"
+        >
+          <template #default="{ row }">{{ row.approval_status || '—' }}</template>
         </el-table-column>
       </el-table>
 
@@ -110,6 +133,8 @@ function defaultDateRange() {
 const loading = ref(false)
 const items = ref([])
 const total = ref(0)
+const workHoursSum = ref(0)
+const overtimeHoursSum = ref(0)
 const page = ref(1)
 const pageSize = ref(10)
 const departmentOptions = ref([])
@@ -153,9 +178,13 @@ async function loadReport() {
     })
     items.value = resp.items || []
     total.value = resp.total || 0
+    workHoursSum.value = resp.work_hours_sum ?? 0
+    overtimeHoursSum.value = resp.overtime_hours_sum ?? 0
   } catch (err) {
     items.value = []
     total.value = 0
+    workHoursSum.value = 0
+    overtimeHoursSum.value = 0
     ElMessage.error(err.message || '加载员工工时报表失败')
   } finally {
     loading.value = false
@@ -202,6 +231,19 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 12px;
+}
+
+.toolbar-right {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+
+.sum-text {
+  white-space: nowrap;
 }
 
 .toolbar-left {

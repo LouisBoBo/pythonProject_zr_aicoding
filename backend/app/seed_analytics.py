@@ -1258,10 +1258,57 @@ def backfill_recent_operational_data(days: int | None = None) -> None:
         _normalize_production_output_facts(db, today, now, lines, products_by_line)
         _reconcile_sales_shipped_qty(db)
         _fix_work_order_plan_date_order(db)
+        _ensure_equipment_downtime_runtime_logs(db, start_day, today)
 
         db.commit()
     finally:
         db.close()
+
+
+_DOWNTIME_REASONS = ("计划停机", "故障停机", "换型调试", "缺料待料", "其他")
+
+
+def _ensure_equipment_downtime_runtime_logs(
+    db,
+    date_from: date,
+    date_to: date,
+) -> None:
+    """补齐停机时段演示数据（status=停机 + downtime_reason），已有同起点记录则跳过。"""
+    equipment_list = db.query(Equipment).order_by(Equipment.id).all()
+    if not equipment_list:
+        return
+
+    day = date_from
+    while day <= date_to:
+        for eq_idx, eq in enumerate(equipment_list):
+            if (eq_idx + day.toordinal()) % 3 != 0:
+                continue
+            hour = 9 + (eq_idx % 4)
+            start_at = datetime(day.year, day.month, day.day, hour, 15, 0)
+            exists = (
+                db.query(EquipmentRuntimeLog.id)
+                .filter(
+                    EquipmentRuntimeLog.equipment_id == eq.id,
+                    EquipmentRuntimeLog.start_at == start_at,
+                    EquipmentRuntimeLog.status == "停机",
+                )
+                .first()
+            )
+            if exists:
+                continue
+            duration = round(0.5 + (eq_idx % 5) * 0.3, 2)
+            reason = _DOWNTIME_REASONS[(eq_idx + day.day) % len(_DOWNTIME_REASONS)]
+            db.add(
+                EquipmentRuntimeLog(
+                    equipment_id=eq.id,
+                    start_at=start_at,
+                    end_at=start_at + timedelta(hours=1),
+                    status="停机",
+                    runtime_hours=duration,
+                    downtime_reason=reason,
+                )
+            )
+        day += timedelta(days=1)
 
 
 def _shift_date(value: date | None, delta: timedelta) -> date | None:

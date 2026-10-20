@@ -526,6 +526,7 @@ class EquipmentRuntimeLog(Base):
     end_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False)  # 运行/停机/待机/维修
     runtime_hours: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False, default=0)
+    downtime_reason: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     equipment: Mapped["Equipment"] = relationship(back_populates="runtime_logs")
 
