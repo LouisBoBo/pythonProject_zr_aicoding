@@ -115,12 +115,7 @@ def test_equipment_downtime_report_list(client, auth_headers, sample_downtime):
     assert data["total"] == 1
     assert data["summary"]["event_count"] == 1
     assert data["summary"]["total_duration_hours"] == 2.0
-    assert data["summary"]["avg_duration_hours"] == 2.0
-    assert data["summary"]["equipment_count"] == 1
     assert data["items"][0]["downtime_reason"] == "故障停机"
-    assert len(data["trend"]) >= 1
-    assert data["by_reason"][0]["label"] == "故障停机"
-    assert data["top_equipment"][0]["equipment_code"] == "EQ-DT-01"
 
 
 def test_equipment_downtime_report_reason_filter(client, auth_headers, sample_downtime):

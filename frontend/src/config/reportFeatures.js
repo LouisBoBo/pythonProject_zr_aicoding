@@ -14,45 +14,7 @@
 // cch-20261018-report-center-add-employee-work-hours-menu
 // cch-20261018-report-center-remove-employee-work-hours-menu
 // cch-20261019-report-center-add-employee-work-hours-menu
-// cch-20261019-report-center-remove-employee-work-hours-menu
-// cch-20261019-report-center-add-employee-work-hours-menu-v2
-// cch-20261019-employee-work-hours-add-shift-type-column
-// cch-20261019-report-center-remove-employee-work-hours-menu-final
-// cch-20261019-report-center-add-employee-work-hours-menu-v3
-// cch-20261019-report-center-remove-employee-work-hours-menu-v4
 // cch-20261018-report-center-remove-equipment-downtime-menu
-// cch-20261019-report-center-add-equipment-downtime-menu
-// cch-20261019-report-center-remove-equipment-downtime-menu
-// cch-20261019-report-center-add-equipment-downtime-menu-v2
-// cch-20261019-report-center-remove-equipment-downtime-menu-final
-// cch-20261019-report-center-add-equipment-downtime-menu-v3
-// cch-20261019-report-center-remove-equipment-downtime-menu-v4
-// cch-20261019-report-center-add-equipment-downtime-menu-v5
-// cch-20261019-report-center-remove-equipment-downtime-menu-v6
-// cch-20261019-report-center-add-equipment-downtime-menu-v7
-// cch-20261019-report-center-remove-equipment-downtime-menu-v8
-// cch-20261019-report-center-add-equipment-downtime-menu-v9
-// cch-20261019-report-center-remove-equipment-downtime-menu-v10
-// cch-20261019-report-center-add-equipment-downtime-menu-v11
-// cch-20261019-report-center-remove-equipment-downtime-menu-v12
-// cch-20261019-report-center-remove-equipment-downtime-menu-v13
-// cch-20261019-report-center-add-equipment-downtime-menu-v14
-// cch-20261020-report-center-remove-equipment-downtime-menu-final
-// cch-20261020-report-center-add-equipment-downtime-menu
-// cch-20261020-155954-64df-report-center-remove-equipment-downtime-menu
-// parent_job_id=cch-20261020-155954-64df
-// cch-20261020-report-center-add-employee-work-hours-menu
-// cch-20261020-report-center-remove-employee-work-hours-menu
-// cch-20261020-report-center-add-employee-work-hours-menu-v2
-// cch-20261020-report-center-remove-employee-work-hours-menu-v5
-// cch-20261020-report-center-add-employee-work-hours-menu-v6
-// cch-20261020-160153-4aaf-report-center-add-equipment-downtime-menu
-// parent_job_id=cch-20261020-160153-4aaf
-// parent_job_id=cch-20261020-155610-5e95
-// parent_job_id=cch-20261020-155148-0a0c
-// parent_job_id=cch-20261020-151518-57d1
-// parent_job_id=cch-20261019-143600-5d27
-// parent_job_id=cch-20261019-102121-9f51
 // cch-20261009-employee-work-hours-remove-employee-no-column
 /**
  * 报表功能注册表（唯一配置入口）。
@@ -71,18 +33,6 @@ export const REPORT_CATALOG = [
     title: '在制品报表',
     description: '按工单查看工序与在制数量（wip 口径）',
     icon: 'Document',
-    menu: true,
-    hub: true,
-    enabled: true,
-  },
-  {
-    id: 'equipment-downtime',
-    routePath: 'equipment-downtime',
-    viewFile: 'EquipmentDowntimeReportView.vue',
-    apiFile: 'equipmentDowntime.js',
-    title: '停机报表',
-    description: '按设备汇总停机时长与次数、原因分类占比及停机明细，支持日/周/月筛选',
-    icon: 'Timer',
     menu: true,
     hub: true,
     enabled: true,
@@ -107,8 +57,8 @@ export const REPORT_CATALOG = [
     viewFile: 'EmployeeWorkHoursReportView.vue',
     apiFile: 'employeeWorkHours.js',
     title: '员工工时报表',
-    description: '按日期区间与部门查询员工工时明细，支持按员工汇总工时合计',
-    icon: 'User',
+    description: '按日期区间与部门查询员工工时明细，支持按员工/日期汇总工时合计',
+    icon: 'Timer',
     menu: true,
     hub: true,
     enabled: true,

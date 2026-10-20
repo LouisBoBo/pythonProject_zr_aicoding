@@ -461,18 +461,6 @@ API_ZH: dict[tuple[str, str], dict[str, str]] = {
         "summary": "日产报表产线选项",
         "description": "返回产线名称列表，供日产报表筛选下拉使用。",
     },
-    ("GET", "/api/reports/employee-work-hours"): {
-        "summary": "员工工时报表",
-        "description": (
-            "基于 employee_work_hours 查询员工工时明细或多维汇总；"
-            "默认近 7 日，支持部门等筛选与分页。"
-            "报表中心「员工工时报表」页使用本接口。"
-        ),
-    },
-    ("GET", "/api/reports/employee-work-hours/filters"): {
-        "summary": "员工工时报表筛选选项",
-        "description": "返回部门、员工、项目下拉选项。",
-    },
     ("GET", "/api/reports/equipment-metrics"): {
         "summary": "设备报表",
         "description": (
@@ -515,7 +503,6 @@ API_ZH: dict[tuple[str, str], dict[str, str]] = {
         "description": (
             "按 equipment_runtime_logs 中 status=停机 的时段返回停机明细；"
             "支持日期区间、车间、设备、停机原因筛选与分页；默认近 7 日。"
-            "响应含按日趋势、停机原因/车间汇总及 Top 设备，供多维图表分析。"
         ),
     },
     ("GET", "/api/reports/equipment-downtime/filters"): {

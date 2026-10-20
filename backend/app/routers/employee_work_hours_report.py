@@ -61,6 +61,17 @@ def _work_hour_shift_label(shift: str | None) -> str | None:
     return WORK_HOUR_SHIFT_LABELS.get(shift, shift)
 
 
+def _normalize_shift_type_filter(shift_type: str | None) -> str | None:
+    if not shift_type:
+        return None
+    if shift_type in WORK_HOUR_SHIFT_LABELS:
+        return shift_type
+    for code, label in WORK_HOUR_SHIFT_LABELS.items():
+        if shift_type == label:
+            return code
+    return shift_type
+
+
 def _normalize_work_hour_dimension(dimension: str) -> str:
     if dimension not in WORK_HOUR_DIMENSIONS:
         raise HTTPException(
@@ -79,6 +90,7 @@ def _apply_work_hour_report_filters(
     employee_no: str | None,
     project_name: str | None,
     approval_status: str | None,
+    shift_type: str | None,
 ):
     query = query.filter(
         EmployeeWorkHour.work_date >= date_from,
@@ -92,6 +104,8 @@ def _apply_work_hour_report_filters(
         query = query.filter(EmployeeWorkHour.project_name == project_name)
     if approval_status:
         query = query.filter(EmployeeWorkHour.approval_status == approval_status)
+    if shift_type:
+        query = query.filter(EmployeeWorkHour.shift_type == shift_type)
     return query
 
 
@@ -112,10 +126,10 @@ def _build_work_hour_report_items(
                 employee_name=row.employee_name,
                 employee_no=row.employee_no,
                 department=row.department,
-                project_name=row.project_name,
-                task_name=row.task_name,
                 work_date=_as_date(row.work_date),
                 shift_type=_work_hour_shift_label(row.shift_type),
+                project_name=row.project_name,
+                task_name=row.task_name,
                 work_hours=round(float(row.work_hours or 0), 2),
                 overtime_hours=round(float(row.overtime_hours or 0), 2),
                 approval_status=_work_hour_approval_label(row.approval_status),
@@ -340,6 +354,7 @@ def list_employee_work_hour_filters(
         "统计维度：detail（明细）、employee（按员工汇总）、"
         "employee_date（按员工+日期）、employee_month（按员工+月份）、"
         "project（按项目）、department（按部门）。"
+        "明细 dimension 每行含 shift_type（班别：白班/晚班）。"
         "报表中心「员工工时报表」页使用本接口。"
     ),
 )
@@ -351,6 +366,9 @@ def list_employee_work_hours_report(
     department: str | None = Query(None, description="部门（精确匹配）"),
     employee_no: str | None = Query(None, description="工号（精确匹配）"),
     project_name: str | None = Query(None, description="项目名称（精确匹配）"),
+    shift_type: str | None = Query(
+        None, description="班别（白班/晚班，或 day/night）"
+    ),
     approval_status: str | None = Query(
         None, description="审批状态：pending / approved / rejected"
     ),
@@ -376,6 +394,7 @@ def list_employee_work_hours_report(
         employee_no=employee_no,
         project_name=project_name,
         approval_status=approval_status,
+        shift_type=_normalize_shift_type_filter(shift_type),
     )
     all_items = _build_work_hour_report_items(query, dimension)
     total = len(all_items)

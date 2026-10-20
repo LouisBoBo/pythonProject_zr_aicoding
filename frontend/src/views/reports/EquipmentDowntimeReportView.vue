@@ -59,59 +59,30 @@
         <el-form-item>
           <el-button type="primary" @click="handleSearch">查询</el-button>
           <el-button @click="handleReset">重置</el-button>
+          <el-button :loading="exporting" @click="handleExport">导出 Excel</el-button>
         </el-form-item>
       </el-form>
     </el-card>
 
-    <div class="metric-cards">
-      <el-card v-for="card in metricCards" :key="card.key" shadow="never" class="metric-card">
-        <div class="metric-label">{{ card.label }}</div>
-        <div class="metric-value" :class="{ highlight: card.highlight }">
-          {{ card.value }}<span v-if="card.unit" class="metric-unit">{{ card.unit }}</span>
-        </div>
+    <div class="summary-row">
+      <el-card shadow="never" class="summary-card">
+        <div class="summary-label">停机次数</div>
+        <div class="summary-value">{{ summary.event_count }}</div>
+      </el-card>
+      <el-card shadow="never" class="summary-card">
+        <div class="summary-label">停机时长合计</div>
+        <div class="summary-value">{{ formatHours(summary.total_duration_hours) }}<span class="unit">h</span></div>
       </el-card>
     </div>
-
-    <el-card shadow="never" class="chart-card">
-      <div class="section-title">停机趋势（按日）</div>
-      <VChart v-if="hasTrendData" class="trend-chart" :option="trendChartOption" autoresize />
-      <el-empty v-else description="所选条件下暂无停机趋势" :image-size="80" />
-    </el-card>
-
-    <div class="chart-row">
-      <el-card shadow="never" class="chart-card chart-half">
-        <div class="section-title">停机原因分布</div>
-        <VChart v-if="byReason.length" class="sub-chart" :option="reasonChartOption" autoresize />
-        <el-empty v-else description="暂无原因分布数据" :image-size="72" />
-      </el-card>
-      <el-card shadow="never" class="chart-card chart-half">
-        <div class="section-title">车间停机对比</div>
-        <VChart v-if="byWorkshop.length" class="sub-chart" :option="workshopChartOption" autoresize />
-        <el-empty v-else description="暂无车间对比数据" :image-size="72" />
-      </el-card>
-    </div>
-
-    <el-card shadow="never" class="chart-card">
-      <div class="section-title">停机时长 Top 设备</div>
-      <VChart
-        v-if="topEquipment.length"
-        class="rank-chart"
-        :style="{ height: rankChartHeight + 'px' }"
-        :option="equipmentChartOption"
-        autoresize
-      />
-      <el-empty v-else description="暂无设备排名数据" :image-size="80" />
-    </el-card>
 
     <el-card shadow="never" class="table-card">
       <div class="table-toolbar">
         <div class="toolbar-left">
-          <span class="table-title">停机明细</span>
+          <span class="table-title">设备停机报表</span>
           <el-tag size="small" type="info">运行日志 · 停机时段</el-tag>
-          <el-tag size="small" effect="plain">共 {{ total }} 条</el-tag>
         </div>
         <div class="toolbar-right">
-          <el-button :icon="Download" :loading="exporting" @click="handleExport">导出 Excel</el-button>
+          <span class="sum-text">共 {{ total }} 条</span>
         </div>
       </div>
 
@@ -159,22 +130,12 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { Download } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { use } from 'echarts/core'
-import { CanvasRenderer } from 'echarts/renderers'
-import { BarChart, LineChart, PieChart } from 'echarts/charts'
-import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/components'
-import VChart from 'vue-echarts'
 import {
   exportEquipmentDowntimeReport,
   fetchEquipmentDowntimeFilters,
   fetchEquipmentDowntimeReport,
 } from '../../api/reports/equipmentDowntime.js'
-
-use([CanvasRenderer, LineChart, BarChart, PieChart, GridComponent, TooltipComponent, LegendComponent])
-
-const REASON_COLORS = ['#409EFF', '#F56C6C', '#E6A23C', '#67C23A', '#909399', '#626aef']
 
 function defaultDateRange() {
   const end = new Date()
@@ -196,16 +157,9 @@ const total = ref(0)
 const page = ref(1)
 const pageSize = ref(10)
 const dateRange = ref(defaultDateRange())
-const trend = ref([])
-const byReason = ref([])
-const byWorkshop = ref([])
-const topEquipment = ref([])
-
 const summary = reactive({
   event_count: 0,
   total_duration_hours: 0,
-  avg_duration_hours: 0,
-  equipment_count: 0,
 })
 
 const filterOptions = reactive({
@@ -223,161 +177,6 @@ const filters = reactive({
 const equipmentOptions = computed(() => {
   if (!filters.workshop) return filterOptions.equipment
   return filterOptions.equipment.filter((eq) => eq.workshop === filters.workshop)
-})
-
-const metricCards = computed(() => [
-  {
-    key: 'events',
-    label: '停机次数',
-    value: summary.event_count,
-    highlight: true,
-  },
-  {
-    key: 'total',
-    label: '停机时长合计',
-    value: formatHours(summary.total_duration_hours),
-    unit: 'h',
-  },
-  {
-    key: 'avg',
-    label: '单次平均时长',
-    value: formatHours(summary.avg_duration_hours),
-    unit: 'h',
-  },
-  {
-    key: 'equip',
-    label: '涉及设备',
-    value: summary.equipment_count,
-    unit: '台',
-  },
-])
-
-const hasTrendData = computed(() =>
-  trend.value.some((p) => p.event_count > 0 || p.duration_hours > 0),
-)
-
-const rankChartHeight = computed(() =>
-  Math.max(240, topEquipment.value.length * 36 + 48),
-)
-
-const trendChartOption = computed(() => {
-  const dates = trend.value.map((p) => p.period_date)
-  return {
-    tooltip: { trigger: 'axis' },
-    legend: { data: ['停机次数', '停机时长'], bottom: 0 },
-    grid: { left: 48, right: 48, top: 28, bottom: 48 },
-    xAxis: { type: 'category', data: dates },
-    yAxis: [
-      { type: 'value', name: '次数', minInterval: 1 },
-      { type: 'value', name: '时长(h)', splitLine: { show: false } },
-    ],
-    series: [
-      {
-        name: '停机次数',
-        type: 'bar',
-        data: trend.value.map((p) => p.event_count),
-        itemStyle: { color: '#409EFF' },
-        barMaxWidth: 28,
-      },
-      {
-        name: '停机时长',
-        type: 'line',
-        yAxisIndex: 1,
-        smooth: true,
-        showSymbol: true,
-        data: trend.value.map((p) => p.duration_hours),
-        itemStyle: { color: '#E6A23C' },
-      },
-    ],
-  }
-})
-
-const reasonChartOption = computed(() => ({
-  color: REASON_COLORS,
-  tooltip: {
-    trigger: 'item',
-    formatter: '{b}<br/>时长 {c} h（{d}%）',
-  },
-  legend: { type: 'scroll', bottom: 0 },
-  series: [
-    {
-      type: 'pie',
-      radius: ['42%', '68%'],
-      center: ['50%', '46%'],
-      avoidLabelOverlap: true,
-      label: { formatter: '{b}\n{c}h' },
-      data: byReason.value.map((row) => ({
-        name: row.label,
-        value: row.duration_hours,
-      })),
-    },
-  ],
-}))
-
-const workshopChartOption = computed(() => ({
-  tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-  legend: { data: ['停机次数', '停机时长'], bottom: 0 },
-  grid: { left: 48, right: 24, top: 24, bottom: 48 },
-  xAxis: {
-    type: 'category',
-    data: byWorkshop.value.map((row) => row.label),
-    axisLabel: { interval: 0, rotate: byWorkshop.value.length > 4 ? 24 : 0 },
-  },
-  yAxis: [
-    { type: 'value', name: '次数', minInterval: 1 },
-    { type: 'value', name: '时长(h)', splitLine: { show: false } },
-  ],
-  series: [
-    {
-      name: '停机次数',
-      type: 'bar',
-      data: byWorkshop.value.map((row) => row.event_count),
-      itemStyle: { color: '#67C23A' },
-      barMaxWidth: 32,
-    },
-    {
-      name: '停机时长',
-      type: 'line',
-      yAxisIndex: 1,
-      smooth: true,
-      data: byWorkshop.value.map((row) => row.duration_hours),
-      itemStyle: { color: '#F56C6C' },
-    },
-  ],
-}))
-
-const equipmentChartOption = computed(() => {
-  const labels = topEquipment.value.map(
-    (row) => `${row.equipment_name}（${row.equipment_code}）`,
-  )
-  return {
-    tooltip: {
-      trigger: 'axis',
-      axisPointer: { type: 'shadow' },
-      formatter: (params) => {
-        const p = params[0]
-        const row = topEquipment.value[p.dataIndex]
-        if (!row) return ''
-        return `${row.equipment_name}<br/>编码 ${row.equipment_code}<br/>停机 ${row.event_count} 次 · ${row.duration_hours} h`
-      },
-    },
-    grid: { left: 160, right: 24, top: 16, bottom: 24 },
-    xAxis: { type: 'value', name: '时长(h)' },
-    yAxis: {
-      type: 'category',
-      data: labels,
-      inverse: true,
-      axisLabel: { width: 140, overflow: 'truncate' },
-    },
-    series: [
-      {
-        type: 'bar',
-        data: topEquipment.value.map((row) => row.duration_hours),
-        itemStyle: { color: '#409EFF' },
-        barMaxWidth: 22,
-      },
-    ],
-  }
 })
 
 watch(
@@ -410,17 +209,6 @@ function formatDateTime(value) {
   return `${y}-${m}-${day} ${h}:${min}:${s}`
 }
 
-function applyAnalytics(data) {
-  trend.value = data?.trend || []
-  byReason.value = data?.by_reason || []
-  byWorkshop.value = data?.by_workshop || []
-  topEquipment.value = data?.top_equipment || []
-  summary.event_count = data?.summary?.event_count ?? 0
-  summary.total_duration_hours = data?.summary?.total_duration_hours ?? 0
-  summary.avg_duration_hours = data?.summary?.avg_duration_hours ?? 0
-  summary.equipment_count = data?.summary?.equipment_count ?? 0
-}
-
 async function loadFilters() {
   try {
     const data = await fetchEquipmentDowntimeFilters()
@@ -447,11 +235,9 @@ async function loadReport() {
     })
     items.value = data.items || []
     total.value = data.total || 0
-    applyAnalytics(data)
+    summary.event_count = data.summary?.event_count ?? 0
+    summary.total_duration_hours = data.summary?.total_duration_hours ?? 0
   } catch (err) {
-    items.value = []
-    total.value = 0
-    applyAnalytics({})
     ElMessage.error(err.message || '加载设备停机报表失败')
   } finally {
     loading.value = false
@@ -510,79 +296,38 @@ onMounted(async () => {
   gap: 16px;
 }
 
-.search-card,
-.chart-card,
-.table-card {
-  border-radius: 8px;
-}
-
 .search-form {
   flex-wrap: wrap;
 }
 
-.metric-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 12px;
-}
-
-.metric-card {
-  border-radius: 8px;
-}
-
-.metric-label {
-  font-size: 13px;
-  color: var(--el-text-color-secondary);
-  margin-bottom: 8px;
-}
-
-.metric-value {
-  font-size: 22px;
-  font-weight: 600;
-  color: var(--el-text-color-primary);
-}
-
-.metric-value.highlight {
-  color: var(--el-color-primary);
-}
-
-.metric-unit {
-  font-size: 14px;
-  font-weight: normal;
-  margin-left: 4px;
-  color: var(--el-text-color-secondary);
-}
-
-.section-title {
-  font-weight: 600;
-  font-size: 15px;
-  margin-bottom: 12px;
-}
-
-.trend-chart {
-  width: 100%;
-  height: 320px;
-}
-
-.sub-chart {
-  width: 100%;
-  height: 280px;
-}
-
-.rank-chart {
-  width: 100%;
-  min-height: 240px;
-}
-
-.chart-row {
+.summary-row {
   display: flex;
   gap: 16px;
   flex-wrap: wrap;
 }
 
-.chart-half {
+.summary-card {
   flex: 1;
-  min-width: 280px;
+  min-width: 160px;
+}
+
+.summary-label {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  margin-bottom: 8px;
+}
+
+.summary-value {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.summary-value .unit {
+  font-size: 14px;
+  font-weight: normal;
+  margin-left: 4px;
+  color: var(--el-text-color-secondary);
 }
 
 .table-toolbar {
@@ -590,20 +335,22 @@ onMounted(async () => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 12px;
-  flex-wrap: wrap;
-  gap: 8px;
 }
 
 .toolbar-left {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
 }
 
 .table-title {
   font-weight: 600;
   font-size: 15px;
+}
+
+.sum-text {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
 }
 
 .cell-device {

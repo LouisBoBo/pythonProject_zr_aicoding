@@ -82,30 +82,19 @@
         </el-table-column>
         <el-table-column
           v-if="viewMode === 'detail'"
+          prop="shift_type"
+          label="班别"
+          width="110"
+        >
+          <template #default="{ row }">{{ row.shift_type || '—' }}</template>
+        </el-table-column>
+        <el-table-column
+          v-if="viewMode === 'detail'"
           prop="project_name"
           label="项目"
           min-width="120"
         >
           <template #default="{ row }">{{ row.project_name || '—' }}</template>
-        </el-table-column>
-        <el-table-column
-          v-if="viewMode === 'detail'"
-          prop="shift_type"
-          label="班别"
-          width="110"
-        >
-          <template #default="{ row }">
-            <el-select
-              v-model="row.shift_type"
-              size="small"
-              placeholder="请选择"
-              clearable
-              style="width: 96px"
-            >
-              <el-option label="白班" value="白班" />
-              <el-option label="晚班" value="晚班" />
-            </el-select>
-          </template>
         </el-table-column>
         <el-table-column prop="work_hours" label="工时" width="120" align="right">
           <template #default="{ row }">{{ formatHours(row.work_hours) }}</template>
@@ -183,12 +172,6 @@ function normalizeShiftType(value) {
   return value || ''
 }
 
-function applyShiftTypeFilter(rows) {
-  const selected = filters.shift_type
-  if (!selected) return rows
-  return rows.filter((row) => row.shift_type === selected)
-}
-
 function formatHours(value) {
   const n = Number(value)
   if (Number.isNaN(n)) return '—'
@@ -221,12 +204,10 @@ async function loadReport() {
       shiftType: filters.shift_type || undefined,
       dimension: viewMode.value === 'employee' ? 'employee' : 'detail',
     })
-    items.value = applyShiftTypeFilter(
-      (resp.items || []).map((row) => ({
-        ...row,
-        shift_type: normalizeShiftType(row.shift_type),
-      }))
-    )
+    items.value = (resp.items || []).map((row) => ({
+      ...row,
+      shift_type: normalizeShiftType(row.shift_type),
+    }))
     total.value = resp.total || 0
     workHoursSum.value = resp.work_hours_sum ?? 0
     overtimeHoursSum.value = resp.overtime_hours_sum ?? 0

@@ -1712,3 +1712,47 @@ class MessageStatsResponse(BaseModel):
     system: int
     alert: int
     announcement: int
+
+
+class EmployeeWorkHourFilterEmployee(BaseModel):
+    """员工工时报表筛选项：工号 + 姓名。"""
+
+    employee_no: str
+    employee_name: str
+
+
+class EmployeeWorkHourFiltersResponse(BaseModel):
+    """员工工时报表筛选下拉。"""
+
+    departments: list[str] = Field(default_factory=list)
+    employees: list[EmployeeWorkHourFilterEmployee] = Field(default_factory=list)
+    projects: list[str] = Field(default_factory=list)
+
+
+class EmployeeWorkHourReportItem(BaseModel):
+    """员工工时报表一行。汇总维度只填用到的字段。"""
+
+    employee_name: str = "—"
+    employee_no: str = "—"
+    department: str = ""
+    work_date: date | None = None
+    shift_type: str | None = Field(default=None, description="班别（白班/晚班）")
+    project_name: str | None = None
+    task_name: str | None = None
+    work_month: str | None = None
+    work_hours: float = 0
+    overtime_hours: float = 0
+    approval_status: str | None = None
+    record_count: int | None = None
+
+
+class EmployeeWorkHourReportListResponse(BaseModel):
+    """员工工时报表分页。"""
+
+    items: list[EmployeeWorkHourReportItem] = Field(default_factory=list)
+    total: int = 0
+    page: int = 1
+    page_size: int = 10
+    dimension: str = "detail"
+    work_hours_sum: float = 0
+    overtime_hours_sum: float = 0
