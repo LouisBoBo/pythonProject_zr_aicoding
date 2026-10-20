@@ -77,6 +77,29 @@
         >
           <template #default="{ row }">{{ row.project_name || '—' }}</template>
         </el-table-column>
+        <el-table-column
+          v-if="viewMode === 'detail'"
+          prop="shift_type"
+          label="班别"
+          width="110"
+        >
+          <template #default="{ row }">
+            <el-select
+              v-model="row.shift_type"
+              size="small"
+              placeholder="请选择"
+              clearable
+              style="width: 96px"
+            >
+              <el-option
+                v-for="opt in shiftTypeOptions"
+                :key="opt.value"
+                :label="opt.label"
+                :value="opt.value"
+              />
+            </el-select>
+          </template>
+        </el-table-column>
         <el-table-column prop="work_hours" label="工时" width="120" align="right">
           <template #default="{ row }">{{ formatHours(row.work_hours) }}</template>
         </el-table-column>
@@ -145,6 +168,19 @@ const filters = reactive({
   department: '',
 })
 
+/** 班别可选：白班、晚班 */
+const shiftTypeOptions = [
+  { label: '白班', value: '白班' },
+  { label: '晚班', value: '晚班' },
+]
+
+function normalizeShiftType(value) {
+  if (value === 'day') return '白班'
+  if (value === 'night') return '晚班'
+  if (value === '白班' || value === '晚班') return value
+  return value || ''
+}
+
 function formatHours(value) {
   const n = Number(value)
   if (Number.isNaN(n)) return '—'
@@ -176,7 +212,10 @@ async function loadReport() {
       department: filters.department || undefined,
       dimension: viewMode.value === 'employee' ? 'employee' : 'detail',
     })
-    items.value = resp.items || []
+    items.value = (resp.items || []).map((row) => ({
+      ...row,
+      shift_type: normalizeShiftType(row.shift_type),
+    }))
     total.value = resp.total || 0
     workHoursSum.value = resp.work_hours_sum ?? 0
     overtimeHoursSum.value = resp.overtime_hours_sum ?? 0

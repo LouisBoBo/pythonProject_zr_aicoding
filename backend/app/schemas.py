@@ -355,6 +355,7 @@ class EmployeeWorkHourReportItem(BaseModel):
     project_name: str | None = Field(default=None, description="项目名称")
     task_name: str | None = Field(default=None, description="任务名称")
     work_date: date | None = Field(default=None, description="日期")
+    shift_type: str | None = Field(default=None, description="班别（白班/晚班）")
     work_month: str | None = Field(default=None, description="月份（YYYY-MM）")
     work_hours: float = Field(description="工时数")
     overtime_hours: float = Field(description="加班工时")
