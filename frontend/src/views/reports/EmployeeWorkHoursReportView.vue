@@ -30,6 +30,17 @@
             />
           </el-select>
         </el-form-item>
+        <el-form-item label="班别">
+          <el-select
+            v-model="filters.shift_type"
+            placeholder="全部"
+            clearable
+            style="width: 120px"
+          >
+            <el-option label="白班" value="白班" />
+            <el-option label="晚班" value="晚班" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="视图">
           <el-radio-group v-model="viewMode" @change="handleViewModeChange">
             <el-radio-button value="detail">明细</el-radio-button>
@@ -91,12 +102,8 @@
               clearable
               style="width: 96px"
             >
-              <el-option
-                v-for="opt in shiftTypeOptions"
-                :key="opt.value"
-                :label="opt.label"
-                :value="opt.value"
-              />
+              <el-option label="白班" value="白班" />
+              <el-option label="晚班" value="晚班" />
             </el-select>
           </template>
         </el-table-column>
@@ -166,19 +173,20 @@ const viewMode = ref('detail')
 
 const filters = reactive({
   department: '',
+  shift_type: '',
 })
-
-/** 班别可选：白班、晚班 */
-const shiftTypeOptions = [
-  { label: '白班', value: '白班' },
-  { label: '晚班', value: '晚班' },
-]
 
 function normalizeShiftType(value) {
   if (value === 'day') return '白班'
   if (value === 'night') return '晚班'
   if (value === '白班' || value === '晚班') return value
   return value || ''
+}
+
+function applyShiftTypeFilter(rows) {
+  const selected = filters.shift_type
+  if (!selected) return rows
+  return rows.filter((row) => row.shift_type === selected)
 }
 
 function formatHours(value) {
@@ -210,12 +218,15 @@ async function loadReport() {
       dateFrom: (dateRange.value && dateRange.value[0]) || '',
       dateTo: (dateRange.value && dateRange.value[1]) || '',
       department: filters.department || undefined,
+      shiftType: filters.shift_type || undefined,
       dimension: viewMode.value === 'employee' ? 'employee' : 'detail',
     })
-    items.value = (resp.items || []).map((row) => ({
-      ...row,
-      shift_type: normalizeShiftType(row.shift_type),
-    }))
+    items.value = applyShiftTypeFilter(
+      (resp.items || []).map((row) => ({
+        ...row,
+        shift_type: normalizeShiftType(row.shift_type),
+      }))
+    )
     total.value = resp.total || 0
     workHoursSum.value = resp.work_hours_sum ?? 0
     overtimeHoursSum.value = resp.overtime_hours_sum ?? 0
@@ -237,6 +248,7 @@ function handleSearch() {
 
 function handleReset() {
   filters.department = ''
+  filters.shift_type = ''
   dateRange.value = defaultDateRange()
   viewMode.value = 'detail'
   page.value = 1
