@@ -1,0 +1,13 @@
+[Unit]
+Description=Daily 08:00 align today business data (zr-aicoding)
+Requires=zr-aicoding-align-today.service
+
+[Timer]
+# 每天 08:00（配合 service 内 TZ=Asia/Shanghai）
+OnCalendar=*-*-* 08:00:00
+Persistent=true
+RandomizedDelaySec=30
+Unit=zr-aicoding-align-today.service
+
+[Install]
+WantedBy=timers.target
