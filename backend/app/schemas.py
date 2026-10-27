@@ -346,44 +346,6 @@ class DailyOutputLinesResponse(BaseModel):
     lines: list[str] = Field(description="可选产线名称列表（用于筛选）")
 
 
-class EmployeeWorkHourReportItem(BaseModel):
-    """员工工时报表行。"""
-
-    employee_name: str = Field(description="员工姓名")
-    employee_no: str = Field(description="工号")
-    department: str = Field(description="所属部门")
-    project_name: str | None = Field(default=None, description="项目名称")
-    task_name: str | None = Field(default=None, description="任务名称")
-    work_date: date | None = Field(default=None, description="日期")
-    shift_type: str | None = Field(default=None, description="班别（白班/晚班）")
-    work_month: str | None = Field(default=None, description="月份（YYYY-MM）")
-    work_hours: float = Field(description="工时数")
-    overtime_hours: float = Field(description="加班工时")
-    approval_status: str | None = Field(default=None, description="审批/状态")
-    record_count: int | None = Field(default=None, description="明细条数（汇总维度）")
-
-
-class EmployeeWorkHourReportListResponse(BaseModel):
-    items: list[EmployeeWorkHourReportItem]
-    total: int
-    page: int
-    page_size: int
-    dimension: str = Field(description="统计维度")
-    work_hours_sum: float = Field(description="工时合计")
-    overtime_hours_sum: float = Field(description="加班工时合计")
-
-
-class EmployeeWorkHourFilterEmployee(BaseModel):
-    employee_no: str
-    employee_name: str
-
-
-class EmployeeWorkHourFiltersResponse(BaseModel):
-    departments: list[str] = Field(description="部门选项")
-    employees: list[EmployeeWorkHourFilterEmployee] = Field(description="员工选项")
-    projects: list[str] = Field(description="项目选项")
-
-
 class EquipmentOeeFilterEquipment(BaseModel):
     id: int = Field(description="设备 ID")
     equipment_code: str = Field(description="设备编码")
@@ -1712,47 +1674,3 @@ class MessageStatsResponse(BaseModel):
     system: int
     alert: int
     announcement: int
-
-
-class EmployeeWorkHourFilterEmployee(BaseModel):
-    """员工工时报表筛选项：工号 + 姓名。"""
-
-    employee_no: str
-    employee_name: str
-
-
-class EmployeeWorkHourFiltersResponse(BaseModel):
-    """员工工时报表筛选下拉。"""
-
-    departments: list[str] = Field(default_factory=list)
-    employees: list[EmployeeWorkHourFilterEmployee] = Field(default_factory=list)
-    projects: list[str] = Field(default_factory=list)
-
-
-class EmployeeWorkHourReportItem(BaseModel):
-    """员工工时报表一行。汇总维度只填用到的字段。"""
-
-    employee_name: str = "—"
-    employee_no: str = "—"
-    department: str = ""
-    work_date: date | None = None
-    shift_type: str | None = Field(default=None, description="班别（白班/晚班）")
-    project_name: str | None = None
-    task_name: str | None = None
-    work_month: str | None = None
-    work_hours: float = 0
-    overtime_hours: float = 0
-    approval_status: str | None = None
-    record_count: int | None = None
-
-
-class EmployeeWorkHourReportListResponse(BaseModel):
-    """员工工时报表分页。"""
-
-    items: list[EmployeeWorkHourReportItem] = Field(default_factory=list)
-    total: int = 0
-    page: int = 1
-    page_size: int = 10
-    dimension: str = "detail"
-    work_hours_sum: float = 0
-    overtime_hours_sum: float = 0
