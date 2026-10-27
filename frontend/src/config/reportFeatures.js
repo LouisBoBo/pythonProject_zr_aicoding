@@ -15,6 +15,11 @@
 // cch-20261018-report-center-remove-employee-work-hours-menu
 // cch-20261019-report-center-add-employee-work-hours-menu
 // cch-20261018-report-center-remove-equipment-downtime-menu
+// cch-20261021-report-center-add-equipment-downtime-menu
+// cch-20261021-report-center-remove-employee-work-hours-menu
+// cch-20261021-report-center-add-employee-work-hours-menu
+// cch-20261027-report-center-remove-equipment-downtime-menu
+// cch-20261027-report-center-add-employee-work-hours-menu
 // cch-20261009-employee-work-hours-remove-employee-no-column
 /**
  * 报表功能注册表（唯一配置入口）。
@@ -47,18 +52,6 @@ export const REPORT_CATALOG = [
     description:
       '按日 / 车间 / 产线查看计划产量、订单号、实际产量、达成率、不良与工时、生产人员',
     icon: 'DataAnalysis',
-    menu: true,
-    hub: true,
-    enabled: true,
-  },
-  {
-    id: 'employee-work-hours',
-    routePath: 'employee-work-hours',
-    viewFile: 'EmployeeWorkHoursReportView.vue',
-    apiFile: 'employeeWorkHours.js',
-    title: '员工工时报表',
-    description: '按日期区间与部门查询员工工时明细，支持按员工/日期汇总工时合计',
-    icon: 'Timer',
     menu: true,
     hub: true,
     enabled: true,
@@ -110,6 +103,19 @@ export const REPORT_CATALOG = [
     icon: 'Calendar',
     menu: false,
     hub: false,
+    enabled: true,
+  },
+  {
+    id: 'employee-work-hours',
+    routePath: 'employee-work-hours',
+    viewFile: 'EmployeeWorkHoursReportView.vue',
+    apiFile: 'employeeWorkHours.js',
+    title: '员工工时报表',
+    description:
+      '按日期区间、部门、员工查询工时明细；展示工时汇总统计与按员工汇总、明细列表',
+    icon: 'Timer',
+    menu: true,
+    hub: true,
     enabled: true,
   },
 ]

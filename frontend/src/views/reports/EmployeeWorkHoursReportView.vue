@@ -1,8 +1,14 @@
 <template>
   <div class="work-hours-page">
     <el-card shadow="never" class="search-card">
+      <div class="page-heading">
+        <h2 class="page-title">员工工时报表</h2>
+        <p class="page-desc">
+          按日期区间、部门、员工查询工时明细；展示工时汇总、按员工汇总与明细列表（数据来自 employee_work_hours）
+        </p>
+      </div>
       <el-form :model="filters" inline class="search-form">
-        <el-form-item label="日期范围">
+        <el-form-item label="日期区间">
           <el-date-picker
             v-model="dateRange"
             type="daterange"
@@ -21,31 +27,26 @@
             clearable
             filterable
             style="width: 160px"
+            @change="handleDepartmentChange"
           >
-            <el-option
-              v-for="dept in departmentOptions"
-              :key="dept"
-              :label="dept"
-              :value="dept"
-            />
+            <el-option v-for="dept in departmentOptions" :key="dept" :label="dept" :value="dept" />
           </el-select>
         </el-form-item>
-        <el-form-item label="班别">
+        <el-form-item label="员工">
           <el-select
-            v-model="filters.shift_type"
+            v-model="filters.employeeNo"
             placeholder="全部"
             clearable
-            style="width: 120px"
+            filterable
+            style="width: 180px"
           >
-            <el-option label="白班" value="白班" />
-            <el-option label="晚班" value="晚班" />
+            <el-option
+              v-for="emp in employeeOptions"
+              :key="emp.employee_no"
+              :label="emp.employee_name"
+              :value="emp.employee_no"
+            />
           </el-select>
-        </el-form-item>
-        <el-form-item label="视图">
-          <el-radio-group v-model="viewMode" @change="handleViewModeChange">
-            <el-radio-button value="detail">明细</el-radio-button>
-            <el-radio-button value="employee">按员工汇总</el-radio-button>
-          </el-radio-group>
         </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="handleSearch">查询</el-button>
@@ -54,60 +55,90 @@
       </el-form>
     </el-card>
 
+    <div class="summary-row">
+      <el-card shadow="never" class="summary-card">
+        <div class="summary-label">工时合计</div>
+        <div class="summary-value">
+          {{ formatHours(summary.workHoursSum) }}<span class="unit">h</span>
+        </div>
+      </el-card>
+      <el-card shadow="never" class="summary-card">
+        <div class="summary-label">加班合计</div>
+        <div class="summary-value">
+          {{ formatHours(summary.overtimeHoursSum) }}<span class="unit">h</span>
+        </div>
+      </el-card>
+      <el-card shadow="never" class="summary-card">
+        <div class="summary-label">涉及员工</div>
+        <div class="summary-value">
+          {{ summary.employeeCount }}<span class="unit">人</span>
+        </div>
+      </el-card>
+      <el-card shadow="never" class="summary-card">
+        <div class="summary-label">明细条数</div>
+        <div class="summary-value">
+          {{ summary.recordCount }}<span class="unit">条</span>
+        </div>
+      </el-card>
+    </div>
+
+    <el-card shadow="never" class="table-card">
+      <div class="table-toolbar">
+        <div class="toolbar-left">
+          <span class="table-title">按员工汇总</span>
+          <el-tag size="small" type="info">当前筛选条件下</el-tag>
+        </div>
+      </div>
+      <el-table
+        v-loading="summaryLoading"
+        :data="summaryByEmployee"
+        stripe
+        border
+        style="width: 100%"
+        empty-text="暂无汇总数据"
+      >
+        <el-table-column prop="employee_name" label="员工" min-width="120" />
+        <el-table-column prop="department" label="部门" min-width="140" />
+        <el-table-column prop="work_hours" label="工时" width="110" align="right">
+          <template #default="{ row }">{{ formatHours(row.work_hours) }}</template>
+        </el-table-column>
+        <el-table-column prop="overtime_hours" label="加班" width="110" align="right">
+          <template #default="{ row }">{{ formatHours(row.overtime_hours) }}</template>
+        </el-table-column>
+        <el-table-column prop="record_count" label="明细条数" width="100" align="right" />
+      </el-table>
+    </el-card>
+
     <el-card shadow="never" class="table-card">
       <div class="table-toolbar">
         <div class="toolbar-left">
           <span class="table-title">员工工时报表</span>
-          <el-tag size="small" type="info">
-            {{ viewMode === 'employee' ? '按员工汇总工时合计' : '明细列表' }}
-          </el-tag>
+          <el-tag size="small" type="info">明细列表</el-tag>
         </div>
         <div class="toolbar-right">
-          <span class="sum-text">工时合计 {{ formatHours(workHoursSum) }}</span>
-          <span class="sum-text">加班合计 {{ formatHours(overtimeHoursSum) }}</span>
+          <span class="sum-text">共 {{ total }} 条</span>
         </div>
       </div>
 
       <el-table v-loading="loading" :data="items" stripe border style="width: 100%">
         <el-table-column prop="employee_name" label="员工" min-width="120" />
-        <el-table-column prop="employee_no" label="工号" width="120" />
         <el-table-column prop="department" label="部门" min-width="140" />
-        <el-table-column
-          v-if="viewMode === 'detail'"
-          prop="work_date"
-          label="日期"
-          width="130"
-        >
+        <el-table-column prop="work_date" label="日期" width="130">
           <template #default="{ row }">{{ row.work_date || '—' }}</template>
         </el-table-column>
-        <el-table-column
-          v-if="viewMode === 'detail'"
-          prop="shift_type"
-          label="班别"
-          width="110"
-        >
-          <template #default="{ row }">{{ row.shift_type || '—' }}</template>
-        </el-table-column>
-        <el-table-column
-          v-if="viewMode === 'detail'"
-          prop="project_name"
-          label="项目"
-          min-width="120"
-        >
+        <el-table-column prop="project_name" label="项目" min-width="140">
           <template #default="{ row }">{{ row.project_name || '—' }}</template>
         </el-table-column>
-        <el-table-column prop="work_hours" label="工时" width="120" align="right">
+        <el-table-column prop="task_name" label="任务" min-width="140">
+          <template #default="{ row }">{{ row.task_name || '—' }}</template>
+        </el-table-column>
+        <el-table-column prop="work_hours" label="工时" width="100" align="right">
           <template #default="{ row }">{{ formatHours(row.work_hours) }}</template>
         </el-table-column>
         <el-table-column prop="overtime_hours" label="加班" width="100" align="right">
           <template #default="{ row }">{{ formatHours(row.overtime_hours) }}</template>
         </el-table-column>
-        <el-table-column
-          v-if="viewMode === 'detail'"
-          prop="approval_status"
-          label="审批状态"
-          width="100"
-        >
+        <el-table-column prop="approval_status" label="状态" width="100">
           <template #default="{ row }">{{ row.approval_status || '—' }}</template>
         </el-table-column>
       </el-table>
@@ -129,7 +160,7 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   fetchEmployeeWorkHourFilters,
@@ -150,27 +181,32 @@ function defaultDateRange() {
 }
 
 const loading = ref(false)
+const summaryLoading = ref(false)
 const items = ref([])
+const summaryByEmployee = ref([])
 const total = ref(0)
-const workHoursSum = ref(0)
-const overtimeHoursSum = ref(0)
 const page = ref(1)
 const pageSize = ref(10)
-const departmentOptions = ref([])
 const dateRange = ref(defaultDateRange())
-const viewMode = ref('detail')
+const allEmployees = ref([])
+const departmentOptions = ref([])
 
 const filters = reactive({
   department: '',
-  shift_type: '',
+  employeeNo: '',
 })
 
-function normalizeShiftType(value) {
-  if (value === 'day') return '白班'
-  if (value === 'night') return '晚班'
-  if (value === '白班' || value === '晚班') return value
-  return value || ''
-}
+const summary = reactive({
+  workHoursSum: 0,
+  overtimeHoursSum: 0,
+  employeeCount: 0,
+  recordCount: 0,
+})
+
+const employeeOptions = computed(() => {
+  if (!filters.department) return allEmployees.value
+  return allEmployees.value.filter((emp) => emp.department === filters.department)
+})
 
 function formatHours(value) {
   const n = Number(value)
@@ -178,47 +214,56 @@ function formatHours(value) {
   return n.toFixed(1)
 }
 
-function handleViewModeChange() {
-  page.value = 1
-  loadReport()
+function handleDepartmentChange() {
+  if (!filters.employeeNo) return
+  const stillValid = employeeOptions.value.some((e) => e.employee_no === filters.employeeNo)
+  if (!stillValid) filters.employeeNo = ''
 }
 
 async function loadFilters() {
   try {
     const resp = await fetchEmployeeWorkHourFilters()
     departmentOptions.value = resp.departments || []
+    allEmployees.value = resp.employees || []
   } catch {
     departmentOptions.value = []
+    allEmployees.value = []
   }
+}
+
+function applySummary(resp) {
+  summary.workHoursSum = resp.work_hours_sum ?? 0
+  summary.overtimeHoursSum = resp.overtime_hours_sum ?? 0
+  summary.employeeCount = resp.employee_count ?? 0
+  summary.recordCount = resp.record_count ?? 0
+  summaryByEmployee.value = resp.summary_by_employee || []
 }
 
 async function loadReport() {
   loading.value = true
+  summaryLoading.value = true
   try {
+    const [dateFrom, dateTo] = dateRange.value || []
     const resp = await fetchEmployeeWorkHoursReport({
       page: page.value,
       pageSize: pageSize.value,
-      dateFrom: (dateRange.value && dateRange.value[0]) || '',
-      dateTo: (dateRange.value && dateRange.value[1]) || '',
+      dateFrom,
+      dateTo,
       department: filters.department || undefined,
-      shiftType: filters.shift_type || undefined,
-      dimension: viewMode.value === 'employee' ? 'employee' : 'detail',
+      employeeNo: filters.employeeNo || undefined,
+      dimension: 'detail',
     })
-    items.value = (resp.items || []).map((row) => ({
-      ...row,
-      shift_type: normalizeShiftType(row.shift_type),
-    }))
+    items.value = resp.items || []
     total.value = resp.total || 0
-    workHoursSum.value = resp.work_hours_sum ?? 0
-    overtimeHoursSum.value = resp.overtime_hours_sum ?? 0
+    applySummary(resp)
   } catch (err) {
     items.value = []
+    summaryByEmployee.value = []
     total.value = 0
-    workHoursSum.value = 0
-    overtimeHoursSum.value = 0
     ElMessage.error(err.message || '加载员工工时报表失败')
   } finally {
     loading.value = false
+    summaryLoading.value = false
   }
 }
 
@@ -229,9 +274,8 @@ function handleSearch() {
 
 function handleReset() {
   filters.department = ''
-  filters.shift_type = ''
+  filters.employeeNo = ''
   dateRange.value = defaultDateRange()
-  viewMode.value = 'detail'
   page.value = 1
   loadReport()
 }
@@ -254,8 +298,56 @@ onMounted(async () => {
   border-radius: 8px;
 }
 
+.page-heading {
+  margin-bottom: 16px;
+}
+
+.page-title {
+  margin: 0 0 8px;
+  font-size: 20px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.page-desc {
+  margin: 0;
+  font-size: 13px;
+  color: #909399;
+  line-height: 1.5;
+}
+
 .search-form {
   margin-bottom: 0;
+}
+
+.summary-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.summary-card {
+  border-radius: 8px;
+}
+
+.summary-label {
+  font-size: 13px;
+  color: #909399;
+  margin-bottom: 8px;
+}
+
+.summary-value {
+  font-size: 24px;
+  font-weight: 600;
+  color: #303133;
+  line-height: 1.2;
+}
+
+.summary-value .unit {
+  font-size: 14px;
+  font-weight: 400;
+  color: #909399;
+  margin-left: 4px;
 }
 
 .table-toolbar {
@@ -265,23 +357,16 @@ onMounted(async () => {
   margin-bottom: 12px;
 }
 
-.toolbar-right {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-  font-size: 13px;
-  color: var(--el-text-color-secondary);
-}
-
-.sum-text {
-  white-space: nowrap;
-}
-
 .toolbar-left {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .table-title {
@@ -290,9 +375,20 @@ onMounted(async () => {
   color: #303133;
 }
 
+.sum-text {
+  font-size: 13px;
+  color: #606266;
+}
+
 .pagination-wrap {
   display: flex;
   justify-content: flex-end;
   margin-top: 16px;
+}
+
+@media (max-width: 960px) {
+  .summary-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 </style>

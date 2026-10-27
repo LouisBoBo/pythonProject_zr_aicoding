@@ -355,7 +355,6 @@ class EmployeeWorkHourReportItem(BaseModel):
     project_name: str | None = Field(default=None, description="项目名称")
     task_name: str | None = Field(default=None, description="任务名称")
     work_date: date | None = Field(default=None, description="日期")
-    shift_type: str | None = Field(default=None, description="班别（白班/晚班）")
     work_month: str | None = Field(default=None, description="月份（YYYY-MM）")
     work_hours: float = Field(description="工时数")
     overtime_hours: float = Field(description="加班工时")
@@ -371,11 +370,18 @@ class EmployeeWorkHourReportListResponse(BaseModel):
     dimension: str = Field(description="统计维度")
     work_hours_sum: float = Field(description="工时合计")
     overtime_hours_sum: float = Field(description="加班工时合计")
+    employee_count: int = Field(default=0, description="涉及员工人数")
+    record_count: int = Field(default=0, description="原始明细条数")
+    summary_by_employee: list[EmployeeWorkHourReportItem] = Field(
+        default_factory=list,
+        description="按员工汇总（供页面展示，最多 50 条）",
+    )
 
 
 class EmployeeWorkHourFilterEmployee(BaseModel):
     employee_no: str
     employee_name: str
+    department: str = Field(description="所属部门")
 
 
 class EmployeeWorkHourFiltersResponse(BaseModel):
@@ -444,72 +450,6 @@ class EquipmentOeeReportListResponse(BaseModel):
     page_size: int
     summary: EquipmentOeeSummary
     trend: list[EquipmentOeeTrendPoint]
-
-
-class EquipmentDowntimeReportItem(BaseModel):
-    """设备停机报表行（运行日志中 status=停机 的时段）。"""
-
-    id: int = Field(description="运行日志 ID")
-    equipment_id: int = Field(description="设备 ID")
-    equipment_code: str = Field(description="设备编码")
-    equipment_name: str = Field(description="设备名称")
-    workshop: str | None = Field(default=None, description="车间/部门")
-    start_at: datetime = Field(description="停机开始时间")
-    end_at: datetime | None = Field(default=None, description="停机结束时间")
-    duration_hours: float = Field(description="停机时长（小时）")
-    downtime_reason: str | None = Field(default=None, description="停机原因")
-
-
-class EquipmentDowntimeReportSummary(BaseModel):
-    event_count: int = Field(description="停机次数")
-    total_duration_hours: float = Field(description="停机时长合计（小时）")
-    avg_duration_hours: float = Field(default=0, description="单次平均停机时长（小时）")
-    equipment_count: int = Field(default=0, description="涉及设备台数")
-
-
-class EquipmentDowntimeTrendPoint(BaseModel):
-    period_date: date = Field(description="日期")
-    event_count: int = Field(description="当日停机次数")
-    duration_hours: float = Field(description="当日停机时长合计（小时）")
-
-
-class EquipmentDowntimeDimensionRow(BaseModel):
-    label: str = Field(description="维度名称（原因/车间等）")
-    event_count: int = Field(description="停机次数")
-    duration_hours: float = Field(description="停机时长合计（小时）")
-
-
-class EquipmentDowntimeEquipmentRankItem(BaseModel):
-    equipment_id: int = Field(description="设备 ID")
-    equipment_code: str = Field(description="设备编码")
-    equipment_name: str = Field(description="设备名称")
-    workshop: str | None = Field(default=None, description="车间")
-    event_count: int = Field(description="停机次数")
-    duration_hours: float = Field(description="停机时长合计（小时）")
-
-
-class EquipmentDowntimeReportListResponse(BaseModel):
-    items: list[EquipmentDowntimeReportItem]
-    total: int
-    page: int
-    page_size: int
-    summary: EquipmentDowntimeReportSummary
-    trend: list[EquipmentDowntimeTrendPoint] = Field(default_factory=list, description="按日趋势")
-    by_reason: list[EquipmentDowntimeDimensionRow] = Field(
-        default_factory=list, description="按停机原因汇总"
-    )
-    by_workshop: list[EquipmentDowntimeDimensionRow] = Field(
-        default_factory=list, description="按车间汇总"
-    )
-    top_equipment: list[EquipmentDowntimeEquipmentRankItem] = Field(
-        default_factory=list, description="停机时长 Top 设备"
-    )
-
-
-class EquipmentDowntimeFiltersResponse(BaseModel):
-    workshops: list[str] = Field(description="车间选项")
-    downtime_reasons: list[str] = Field(description="停机原因选项")
-    equipment: list[EquipmentOeeFilterEquipment] = Field(description="设备选项")
 
 
 KanbanBoardCategory = Literal["production", "quality", "equipment", "warehouse", "general"]
@@ -1712,47 +1652,3 @@ class MessageStatsResponse(BaseModel):
     system: int
     alert: int
     announcement: int
-
-
-class EmployeeWorkHourFilterEmployee(BaseModel):
-    """员工工时报表筛选项：工号 + 姓名。"""
-
-    employee_no: str
-    employee_name: str
-
-
-class EmployeeWorkHourFiltersResponse(BaseModel):
-    """员工工时报表筛选下拉。"""
-
-    departments: list[str] = Field(default_factory=list)
-    employees: list[EmployeeWorkHourFilterEmployee] = Field(default_factory=list)
-    projects: list[str] = Field(default_factory=list)
-
-
-class EmployeeWorkHourReportItem(BaseModel):
-    """员工工时报表一行。汇总维度只填用到的字段。"""
-
-    employee_name: str = "—"
-    employee_no: str = "—"
-    department: str = ""
-    work_date: date | None = None
-    shift_type: str | None = Field(default=None, description="班别（白班/晚班）")
-    project_name: str | None = None
-    task_name: str | None = None
-    work_month: str | None = None
-    work_hours: float = 0
-    overtime_hours: float = 0
-    approval_status: str | None = None
-    record_count: int | None = None
-
-
-class EmployeeWorkHourReportListResponse(BaseModel):
-    """员工工时报表分页。"""
-
-    items: list[EmployeeWorkHourReportItem] = Field(default_factory=list)
-    total: int = 0
-    page: int = 1
-    page_size: int = 10
-    dimension: str = "detail"
-    work_hours_sum: float = 0
-    overtime_hours_sum: float = 0

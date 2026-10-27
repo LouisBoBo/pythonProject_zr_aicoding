@@ -1,0 +1,39 @@
+# =============================================================================
+# 服务器业务数据库连接信息（可提交）
+# -----------------------------------------------------------------------------
+# 说明：本项目服务器业务库为 SQLite 文件库（非 Postgres）。
+# 应用进程在服务器本机通过 DATABASE_URL 连接；本机可用 SSH/SCP 访问该文件。
+# 私钥等敏感项放在 .workbuddy/deploy.local.yaml，勿写入本文件。
+# =============================================================================
+
+version: 1
+
+database:
+  engine: sqlite
+  # 服务器上业务库文件绝对路径
+  file_path: "/www/wwwroot/zr-aicoding/backend/erp.db"
+  # 远端 API 进程工作目录下的连接串（WorkingDirectory=backend）
+  database_url: "sqlite:///./erp.db"
+  # 若用绝对路径连接（任意 cwd）可用：
+  # database_url_abs: "sqlite:////www/wwwroot/zr-aicoding/backend/erp.db"
+
+server:
+  host: "175.178.238.31"
+  ssh_user: "root"
+  ssh_port: 22
+  app_path: "/www/wwwroot/zr-aicoding"
+  api_bind: "127.0.0.1:8009"
+  entry_url: "http://175.178.238.31:8090/"
+  health_url: "http://175.178.238.31:8090/"
+  systemd_service: "zr-aicoding-api"
+
+# 本机常用命令（私钥见 .workbuddy/deploy.local.yaml → ssh.key_path）
+#
+# 上传本地库到服务器（先备份远端）：
+#   scp -i <key> backend/erp.db root@175.178.238.31:/www/wwwroot/zr-aicoding/backend/erp.db
+#   ssh -i <key> root@175.178.238.31 "systemctl restart zr-aicoding-api"
+#
+# 从服务器拉回库到本机：
+#   scp -i <key> root@175.178.238.31:/www/wwwroot/zr-aicoding/backend/erp.db ./backend/erp.server.db
+#
+# 本机用 DB Browser / DBeaver 打开下载下来的 erp.server.db 即可查看服务器业务数据。

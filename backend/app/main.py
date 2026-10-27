@@ -63,7 +63,6 @@ from app.routers import (
     production,
     quality,
     reports,
-    employee_work_hours_report,
     warehouse,
     work_order_alerts,
     work_orders,
@@ -1460,8 +1459,6 @@ app.include_router(equipment_maintenance.router)
 app.include_router(equipment_repair.router)
 app.include_router(quality.router)
 app.include_router(reports.router)
-# parent_job_id=cch-20261020-154052-c227 员工工时报表独立路由，确保 /api/reports/employee-work-hours 挂载
-app.include_router(employee_work_hours_report.router)
 app.include_router(inventory_low_stock.router)
 app.include_router(warehouse.router)
 app.include_router(material_purchases.router)

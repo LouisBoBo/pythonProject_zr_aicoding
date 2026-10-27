@@ -498,21 +498,6 @@ API_ZH: dict[tuple[str, str], dict[str, str]] = {
         "summary": "导出设备保养报表 Excel",
         "description": "按当前筛选条件导出计划执行情况与保养记录明细 Excel 文件。",
     },
-    ("GET", "/api/reports/equipment-downtime"): {
-        "summary": "设备停机报表",
-        "description": (
-            "按 equipment_runtime_logs 中 status=停机 的时段返回停机明细；"
-            "支持日期区间、车间、设备、停机原因筛选与分页；默认近 7 日。"
-        ),
-    },
-    ("GET", "/api/reports/equipment-downtime/filters"): {
-        "summary": "设备停机报表筛选选项",
-        "description": "返回车间、停机原因与设备下拉选项。",
-    },
-    ("GET", "/api/reports/equipment-downtime/export"): {
-        "summary": "导出设备停机报表 Excel",
-        "description": "按当前筛选条件导出停机明细 Excel 文件。",
-    },
     # ----- 消息中心 -----
     ("GET", "/api/messages/unread-count"): {
         "summary": "未读消息数量",
