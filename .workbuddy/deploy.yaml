@@ -41,3 +41,8 @@ health_timeout_sec: 8         # 探活最长等待秒数
 # ---------- 远端重启 ----------
 # 同步文件后执行；需服务器已配置好同名 systemd 服务
 remote_restart_cmd: "systemctl restart zr-aicoding-api"
+
+# ---------- 每日业务对齐（说明项，非 WorkBuddy 自动读取字段）----------
+# 服务器安装：sudo bash deploy/install-align-timer.sh
+# 每天 08:00 Asia/Shanghai 执行 align_today_business_data.py，并可重启 zr-aicoding-api
+# 详见 .workbuddy/README.md「每天 08:00 对齐今日业务数据」

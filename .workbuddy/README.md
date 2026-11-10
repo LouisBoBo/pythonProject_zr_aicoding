@@ -28,3 +28,28 @@ ssh:
 1. 编辑本目录 `deploy.yaml`（团队共享的远端与构建约定）。
 2. 本机复制/新建 `deploy.local.yaml`，填自己的私钥路径。
 3. 打开 WorkBuddy，工作区选本工程，说「部署到预发」并确认。
+
+## 每天 08:00 对齐今日业务数据（服务器 systemd timer）
+
+不依赖本机开机。代码在仓库 `deploy/`：
+
+| 文件 | 作用 |
+|------|------|
+| `backend/scripts/align_today_business_data.py` | 对齐脚本（幂等） |
+| `deploy/systemd/zr-aicoding-align-today.service` | oneshot 服务 |
+| `deploy/systemd/zr-aicoding-align-today.timer` | 每天 08:00（Asia/Shanghai） |
+| `deploy/install-align-timer.sh` | 服务器一键安装 |
+
+在服务器（已同步最新代码后）执行：
+
+```bash
+cd /www/wwwroot/zr-aicoding
+sudo bash deploy/install-align-timer.sh
+# 立即试跑
+sudo systemctl start zr-aicoding-align-today.service
+sudo journalctl -u zr-aicoding-align-today.service -n 80 --no-pager
+```
+
+默认对齐完成后会 `systemctl restart zr-aicoding-api`。若不需要重启，编辑
+`/etc/systemd/system/zr-aicoding-align-today.service`，去掉 ExecStart 里的 `--restart`，再
+`systemctl daemon-reload`。

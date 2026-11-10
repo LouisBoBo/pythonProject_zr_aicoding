@@ -36,6 +36,10 @@ from app.schemas import (
     EmployeeWorkHourFiltersResponse,
     EmployeeWorkHourReportItem,
     EmployeeWorkHourReportListResponse,
+    EquipmentDowntimeFiltersResponse,
+    EquipmentDowntimeReportItem,
+    EquipmentDowntimeReportListResponse,
+    EquipmentDowntimeReportSummary,
     EquipmentOeeFilterEquipment,
     EquipmentOeeFiltersResponse,
     EquipmentOeeReportItem,
@@ -66,6 +70,8 @@ from app.work_order_utils import (
 from app.zr_esc_mes_query import query_pcb_production_ops
 
 router = APIRouter(prefix="/api/reports", tags=["报表中心"])
+
+_DOWNTIME_REASON_OPTIONS = ("计划停机", "故障停机", "换型调试", "缺料待料", "其他")
 
 WIP_METRIC = "wip"
 
@@ -1960,6 +1966,217 @@ def export_equipment_maintenance_report(
     wb.save(buffer)
     buffer.seek(0)
     filename = f"equipment_maintenance_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+def _downtime_log_duration_hours(log: EquipmentRuntimeLog) -> float:
+    if log.runtime_hours is not None and float(log.runtime_hours) > 0:
+        return round(float(log.runtime_hours), 2)
+    if log.end_at and log.start_at:
+        delta = (log.end_at - log.start_at).total_seconds() / 3600
+        return round(max(delta, 0), 2)
+    return 0.0
+
+
+def _runtime_log_to_downtime_item(
+    log: EquipmentRuntimeLog, equipment: Equipment
+) -> EquipmentDowntimeReportItem:
+    return EquipmentDowntimeReportItem(
+        id=log.id,
+        equipment_id=equipment.id,
+        equipment_code=equipment.equipment_code,
+        equipment_name=equipment.name,
+        workshop=equipment.department,
+        start_at=log.start_at,
+        end_at=log.end_at,
+        duration_hours=_downtime_log_duration_hours(log),
+        downtime_reason=log.downtime_reason or "其他",
+    )
+
+
+def _query_equipment_downtime_logs(
+    db: Session,
+    *,
+    date_from: date,
+    date_to: date,
+    workshop: str | None,
+    equipment_id: int | None,
+    downtime_reason: str | None,
+) -> list[EquipmentDowntimeReportItem]:
+    query = (
+        db.query(EquipmentRuntimeLog, Equipment)
+        .join(Equipment, EquipmentRuntimeLog.equipment_id == Equipment.id)
+        .filter(EquipmentRuntimeLog.status == "停机")
+    )
+    query = query.filter(
+        func.date(EquipmentRuntimeLog.start_at) >= date_from,
+        func.date(EquipmentRuntimeLog.start_at) <= date_to,
+    )
+    if workshop:
+        query = query.filter(Equipment.department == workshop)
+    if equipment_id:
+        query = query.filter(Equipment.id == equipment_id)
+    if downtime_reason:
+        if downtime_reason == "其他":
+            query = query.filter(
+                (EquipmentRuntimeLog.downtime_reason == downtime_reason)
+                | (EquipmentRuntimeLog.downtime_reason.is_(None))
+                | (EquipmentRuntimeLog.downtime_reason == "")
+            )
+        else:
+            query = query.filter(EquipmentRuntimeLog.downtime_reason == downtime_reason)
+    query = query.order_by(EquipmentRuntimeLog.start_at.desc(), EquipmentRuntimeLog.id.desc())
+    rows = query.all()
+    return [_runtime_log_to_downtime_item(log, eq) for log, eq in rows]
+
+
+def _summarize_downtime_items(items: list[EquipmentDowntimeReportItem]) -> EquipmentDowntimeReportSummary:
+    return EquipmentDowntimeReportSummary(
+        event_count=len(items),
+        total_duration_hours=round(sum(item.duration_hours for item in items), 2),
+    )
+
+
+@router.get(
+    "/equipment-downtime/filters",
+    response_model=EquipmentDowntimeFiltersResponse,
+    summary="设备停机报表筛选选项",
+    description="返回车间、停机原因与设备下拉选项。",
+)
+def list_equipment_downtime_filters(
+    _current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    workshops = [
+        name
+        for (name,) in db.query(Equipment.department)
+        .filter(Equipment.department.isnot(None), Equipment.department != "")
+        .distinct()
+        .order_by(Equipment.department)
+        .all()
+    ]
+    equipment_rows = db.query(Equipment).order_by(Equipment.equipment_code).all()
+    equipment = [
+        EquipmentOeeFilterEquipment(
+            id=eq.id,
+            equipment_code=eq.equipment_code,
+            name=eq.name,
+            workshop=eq.department,
+            equipment_type=eq.spec_model,
+        )
+        for eq in equipment_rows
+    ]
+    return EquipmentDowntimeFiltersResponse(
+        workshops=workshops,
+        downtime_reasons=list(_DOWNTIME_REASON_OPTIONS),
+        equipment=equipment,
+    )
+
+
+@router.get(
+    "/equipment-downtime",
+    response_model=EquipmentDowntimeReportListResponse,
+    summary="设备停机报表",
+    description=(
+        "按 equipment_runtime_logs 中 status=停机 的时段返回停机明细；"
+        "支持日期区间、车间、设备、停机原因筛选与分页；默认近 7 日。"
+    ),
+)
+def list_equipment_downtime_report(
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(10, ge=1, le=100, description="每页条数"),
+    date_from: date | None = Query(None, description="停机开始日期起（含）"),
+    date_to: date | None = Query(None, description="停机开始日期止（含）"),
+    workshop: str | None = Query(None, description="车间筛选"),
+    equipment_id: int | None = Query(None, description="单台设备 ID"),
+    downtime_reason: str | None = Query(None, description="停机原因"),
+    _current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    date_from, date_to = _normalize_equipment_oee_date_range(date_from, date_to)
+    all_items = _query_equipment_downtime_logs(
+        db,
+        date_from=date_from,
+        date_to=date_to,
+        workshop=workshop,
+        equipment_id=equipment_id,
+        downtime_reason=downtime_reason,
+    )
+    summary = _summarize_downtime_items(all_items)
+    total = len(all_items)
+    start = (page - 1) * page_size
+    items = all_items[start : start + page_size]
+    return EquipmentDowntimeReportListResponse(
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        summary=summary,
+    )
+
+
+@router.get(
+    "/equipment-downtime/export",
+    summary="导出设备停机报表 Excel",
+    description="按当前筛选条件导出停机明细 Excel 文件。",
+)
+def export_equipment_downtime_report(
+    date_from: date | None = Query(None, description="停机开始日期起（含）"),
+    date_to: date | None = Query(None, description="停机开始日期止（含）"),
+    workshop: str | None = Query(None, description="车间筛选"),
+    equipment_id: int | None = Query(None, description="单台设备 ID"),
+    downtime_reason: str | None = Query(None, description="停机原因"),
+    _current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    date_from, date_to = _normalize_equipment_oee_date_range(date_from, date_to)
+    rows = _query_equipment_downtime_logs(
+        db,
+        date_from=date_from,
+        date_to=date_to,
+        workshop=workshop,
+        equipment_id=equipment_id,
+        downtime_reason=downtime_reason,
+    )
+    summary = _summarize_downtime_items(rows)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "设备停机报表"
+    ws.append(["停机次数", summary.event_count])
+    ws.append(["停机时长合计(h)", summary.total_duration_hours])
+    ws.append([])
+    headers = [
+        "设备编码",
+        "设备名称",
+        "车间",
+        "停机开始",
+        "停机结束",
+        "时长(h)",
+        "停机原因",
+    ]
+    ws.append(headers)
+    for row in rows:
+        ws.append(
+            [
+                row.equipment_code,
+                row.equipment_name,
+                row.workshop or "",
+                row.start_at.strftime("%Y-%m-%d %H:%M:%S"),
+                row.end_at.strftime("%Y-%m-%d %H:%M:%S") if row.end_at else "",
+                row.duration_hours,
+                row.downtime_reason or "",
+            ]
+        )
+
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    filename = f"equipment_downtime_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
     return StreamingResponse(
         buffer,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
