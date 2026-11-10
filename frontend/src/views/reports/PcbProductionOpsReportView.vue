@@ -30,7 +30,7 @@
     <el-card shadow="never" class="table-card">
       <div class="table-toolbar">
         <span class="table-title">近7日产出与工单趋势</span>
-        <el-tag size="small" type="info">仅实际量与工时</el-tag>
+        <el-tag size="small" type="info">仅实际量（工时已下线）</el-tag>
       </div>
       <el-table v-loading="loading" :data="outputTrend" stripe border empty-text="暂无趋势数据">
         <el-table-column prop="stat_date" label="日期" width="120" />

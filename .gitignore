@@ -5,6 +5,10 @@ backend/_mes_test_done.json
 __pycache__/
 *.py[cod]
 *.db
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+.pytest_cache/
 .env
 .venv/
 venv/

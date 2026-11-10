@@ -15,9 +15,44 @@
 // cch-20261018-report-center-remove-employee-work-hours-menu
 // cch-20261019-report-center-add-employee-work-hours-menu
 // cch-20261027-report-center-remove-employee-work-hours
+// cch-20261027-report-center-add-employee-work-hours-menu
 // cch-20261018-report-center-remove-equipment-downtime-menu
 // cch-20261027-report-center-add-equipment-downtime-menu
+// cch-20261105-report-center-remove-equipment-downtime-menu
+// cch-20261105-report-center-remove-employee-work-hours-menu
+// cch-20261105-report-center-add-employee-work-hours-menu
+// cch-20261105-report-center-remove-employee-work-hours-full
 // cch-20261009-employee-work-hours-remove-employee-no-column
+// cch-20261106-report-center-add-employee-work-hours-menu
+// cch-20261106-report-center-remove-employee-work-hours-full
+// cch-20261106-report-center-add-employee-work-hours-implement
+// cch-20261106-report-center-remove-employee-work-hours-menu-route-page
+// cch-20261106-report-center-add-downtime-report-menu
+// cch-20261106-report-center-remove-downtime-report-menu-route-page-api
+// cch-20261106-report-center-add-employee-work-hours-by-employee
+// cch-20261106-report-center-remove-employee-work-hours-menu-route-page-api
+// cch-20261106-report-center-add-employee-work-hours-report-full
+// cch-20261106-report-center-add-downtime-report-menu-route-page-api
+// cch-20261106-report-center-remove-downtime-report-full-chain
+// cch-20261106-report-center-remove-employee-work-hours-full-chain
+// cch-20261106-report-center-add-employee-work-hours-report-full-implement
+// cch-20261106-report-center-add-downtime-report-full-implement
+// cch-20261106-report-center-add-employee-work-hours-daily-menu
+// cch-20261106-report-center-remove-downtime-report-full-chain
+// cch-20261106-report-center-remove-employee-work-hours-menu-route-page
+// cch-20261106-report-center-add-employee-work-hours-by-employee-attendance
+// cch-20261106-report-center-add-downtime-report-menu-route-page-api-full
+// cch-20261106-report-center-remove-downtime-report-menu-route-page-api-full-chain
+// cch-20261106-report-center-remove-employee-work-hours-menu-route-page
+// cch-20261106-report-center-add-employee-work-hours-menu-route-page-api-full
+// cch-20261106-report-center-remove-employee-work-hours-menu-route-page
+// cch-20261106-report-center-add-downtime-report-menu-route-page-api-full-implement
+// cch-20261106-report-center-remove-downtime-report-menu-route-page-only
+// cch-20261106-report-center-enable-downtime-report-menu-hub-route
+// cch-20261106-report-center-remove-downtime-report-menu-route-page-api-backend-full
+// cch-20261106-report-center-add-employee-work-hours-mvp-menu
+// cch-20261106-report-center-remove-employee-work-hours-menu-route-page-api-full-chain
+// cch-20261109-report-center-add-employee-work-hours-menu-route-page-api-full
 /**
  * 报表功能注册表（唯一配置入口）。
  * 开发流水线偏好见 mesDevPipelinePreferences.js；侧栏「报表中心」菜单由此表驱动。
@@ -25,7 +60,6 @@
  * - hub: false → 报表中心首页不展示入口
  * - enabled: false → 强制下线（即使文件还在）
  * 路由/菜单仅注册「enabled + 视图文件存在 + api 文件存在（若声明）」的项，缺文件不会拖垮整站。
- * 员工工时报表（employee-work-hours）已于 cch-20261027 整页下线：不注册 catalog、无侧栏/Hub 入口。
  */
 export const REPORT_CATALOG = [
   {
@@ -41,6 +75,19 @@ export const REPORT_CATALOG = [
     enabled: true,
   },
   {
+    id: 'employee-work-hours',
+    routePath: 'employee-work-hours',
+    viewFile: 'EmployeeWorkHoursReportView.vue',
+    apiFile: 'employeeWorkHours.js',
+    title: '员工工时报表',
+    description:
+      '按工单报工明细查看员工、部门、日期、工单号、工序与工时，支持筛选与分页',
+    icon: 'User',
+    menu: true,
+    hub: true,
+    enabled: true,
+  },
+  {
     id: 'daily-output',
     routePath: 'daily-output',
     viewFile: 'DailyOutputReportView.vue',
@@ -48,7 +95,7 @@ export const REPORT_CATALOG = [
     title: '日产报表',
     // 列表在「计划产量」与「实际产量」之间展示「订单号」，数据来自 /api/reports/daily-output 的 order_no
     description:
-      '按日 / 车间 / 产线查看计划产量、订单号、实际产量、达成率、不良与工时、生产人员',
+      '按日 / 车间 / 产线查看计划产量、订单号、实际产量、达成率、不良与生产人员（工时数据已下线，列恒为 0）',
     icon: 'DataAnalysis',
     menu: true,
     hub: true,
@@ -61,7 +108,7 @@ export const REPORT_CATALOG = [
     apiFile: 'pcbProductionOps.js',
     title: 'PCB 生产运营分析',
     description:
-      'MES 连通与近 7 日产出/工单趋势、在制与异常核查；仅实际量与工时，作废口径列为盲区',
+      'MES 连通与近 7 日产出/工单趋势、在制与异常核查；仅实际量（工时数据已下线），作废口径列为盲区',
     icon: 'TrendCharts',
     menu: false,
     hub: false,
@@ -101,20 +148,6 @@ export const REPORT_CATALOG = [
     icon: 'Calendar',
     menu: false,
     hub: false,
-    enabled: true,
-  },
-  {
-    id: 'equipment-downtime',
-    routePath: 'equipment-downtime',
-    viewFile: 'EquipmentDowntimeReportView.vue',
-    apiFile: 'equipmentDowntime.js',
-    title: '设备停机报表',
-    description:
-      '按运行日志停机时段查询设备编码、车间、起止时间与停机原因，支持筛选与 Excel 导出',
-    icon: 'Timer',
-    menu: true,
-    hub: true,
-    menuGroup: 'equipment',
     enabled: true,
   },
 ]

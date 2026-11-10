@@ -3,7 +3,6 @@ from io import BytesIO
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
-from openpyxl import Workbook, load_workbook
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -156,6 +155,8 @@ def export_equipment(
     query = _apply_filters(query, equipment_code, name, department, status, search)
     items = query.order_by(Equipment.equipment_code).all()
 
+    from openpyxl import Workbook  # 延迟导入，避免启动时 openpyxl 读盘卡住
+
     wb = Workbook()
     ws = wb.active
     ws.title = "设备台账"
@@ -307,6 +308,8 @@ async def import_equipment(
         raise HTTPException(status_code=400, detail="上传文件为空")
 
     try:
+        from openpyxl import load_workbook  # 延迟导入，避免启动时 openpyxl 读盘卡住
+
         wb = load_workbook(BytesIO(content), read_only=True, data_only=True)
     except Exception as exc:
         raise HTTPException(status_code=400, detail="无法解析 Excel 文件") from exc

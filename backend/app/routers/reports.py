@@ -4,7 +4,6 @@ from io import BytesIO
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from openpyxl import Workbook
 from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
@@ -13,7 +12,6 @@ from app.auth import get_current_user
 from app.database import get_db
 from app.models import (
     Device,
-    EmployeeWorkHour,
     Equipment,
     EquipmentMaintenanceOrder,
     EquipmentOeeSnapshot,
@@ -32,10 +30,6 @@ from app.models import (
 from app.schemas import (
     DailyOutputLinesResponse,
     DailyOutputReportItem,
-    EquipmentDowntimeFiltersResponse,
-    EquipmentDowntimeReportItem,
-    EquipmentDowntimeReportListResponse,
-    EquipmentDowntimeReportSummary,
     EquipmentOeeFilterEquipment,
     EquipmentOeeFiltersResponse,
     EquipmentOeeReportItem,
@@ -66,8 +60,6 @@ from app.work_order_utils import (
 from app.zr_esc_mes_query import query_pcb_production_ops
 
 router = APIRouter(prefix="/api/reports", tags=["报表中心"])
-
-_DOWNTIME_REASON_OPTIONS = ("计划停机", "故障停机", "换型调试", "缺料待料", "其他")
 
 WIP_METRIC = "wip"
 
@@ -198,40 +190,6 @@ def _resolve_daily_output_line_ids(
     return line_ids
 
 
-def _build_work_hour_staff_maps(
-    db: Session,
-    *,
-    date_from: date,
-    date_to: date,
-) -> tuple[dict[tuple[date, str], float], dict[tuple[date, str], set[str]], dict[date, float], dict[date, set[str]]]:
-    """构建 (日期, 部门/车间) 与日期维度的工时、人员映射。"""
-    workshop_hours: dict[tuple[date, str], float] = defaultdict(float)
-    workshop_staff: dict[tuple[date, str], set[str]] = defaultdict(set)
-    date_hours: dict[date, float] = defaultdict(float)
-    date_staff: dict[date, set[str]] = defaultdict(set)
-
-    rows = (
-        db.query(EmployeeWorkHour)
-        .filter(
-            EmployeeWorkHour.work_date >= date_from,
-            EmployeeWorkHour.work_date <= date_to,
-        )
-        .all()
-    )
-    for row in rows:
-        work_date = _as_date(row.work_date)
-        hours = float(row.work_hours or 0)
-        dept = (row.department or "").strip()
-        date_hours[work_date] += hours
-        date_staff[work_date].add(row.employee_name)
-        if dept:
-            key = (work_date, dept)
-            workshop_hours[key] += hours
-            workshop_staff[key].add(row.employee_name)
-
-    return workshop_hours, workshop_staff, date_hours, date_staff
-
-
 def _build_daily_output_line_device_map(
     db: Session,
     line_rows: list[ProductionLine],
@@ -307,28 +265,6 @@ def _build_daily_output_order_no_map(
     }
 
 
-def _lookup_work_hour_staff(
-    report_date: date,
-    workshop: str | None,
-    *,
-    workshop_hours: dict[tuple[date, str], float],
-    workshop_staff: dict[tuple[date, str], set[str]],
-    date_hours: dict[date, float],
-    date_staff: dict[date, set[str]],
-) -> tuple[float, str | None]:
-    """优先按车间匹配工时记录，否则回退到当日汇总。"""
-    hours = 0.0
-    names: set[str] = set()
-    if workshop:
-        hours = workshop_hours.get((report_date, workshop), 0.0)
-        names = workshop_staff.get((report_date, workshop), set())
-    if not hours and not names:
-        hours = date_hours.get(report_date, 0.0)
-        names = date_staff.get(report_date, set())
-    staff = "、".join(sorted(names)) if names else None
-    return round(hours, 2), staff
-
-
 def _build_daily_output_rows(
     db: Session,
     *,
@@ -337,7 +273,7 @@ def _build_daily_output_rows(
     production_line: str | None,
     workshop: str | None,
 ) -> list[DailyOutputReportItemOut]:
-    """按日 / 车间 / 产线聚合产量事实与计划，并关联设备、工时与生产人员。"""
+    """按日 / 车间 / 产线聚合产量事实与计划，并关联设备（工时与生产人员已下线，恒为 0 / 空）。"""
     line_ids = _resolve_daily_output_line_ids(
         db, production_line=production_line, workshop=workshop
     )
@@ -405,9 +341,6 @@ def _build_daily_output_rows(
         db, day_start=day_start, day_end=day_end, line_ids=line_ids
     )
 
-    wh_maps = _build_work_hour_staff_maps(db, date_from=date_from, date_to=date_to)
-    workshop_hours, workshop_staff, date_hours, date_staff = wh_maps
-
     keys: set[tuple] = set()
     out_map: dict[tuple, tuple[int, int, float]] = {}
     for row in output_rows:
@@ -432,14 +365,8 @@ def _build_daily_output_rows(
         actual_qty, defect_qty, area_output = out_map.get((report_date, line_id), (0, 0, 0.0))
         plan_qty = plan_map.get((report_date, line_id), 0)
         line_workshop = workshop_map.get(line_id)
-        work_hours, production_staff = _lookup_work_hour_staff(
-            report_date,
-            line_workshop,
-            workshop_hours=workshop_hours,
-            workshop_staff=workshop_staff,
-            date_hours=date_hours,
-            date_staff=date_staff,
-        )
+        work_hours = 0.0
+        production_staff = None
         achievement = round(actual_qty / plan_qty * 100, 2) if plan_qty else 0.0
         defect_rate = (
             round(defect_qty / (actual_qty + defect_qty) * 100, 2)
@@ -475,8 +402,8 @@ def _build_daily_output_rows(
     description=(
         "按生产日期、车间、产线聚合日产量："
         "实际/不良来自 production_output_records，计划来自 production_plans，"
-        "设备来自 equipment / line_capacity_snapshots，"
-        "工时与生产人员来自 employee_work_hours。"
+        "设备来自 equipment / line_capacity_snapshots；"
+        "工时与生产人员已下线，列恒为 0 / 空。"
         "默认查询近 7 日（含今天）；支持单日/区间、车间、产线筛选与分页。"
         "报表中心「日产报表」页数据来自本接口。"
     ),
@@ -793,6 +720,8 @@ def export_equipment_repair_report(
         fault_category=fault_category,
     )
     rows = query.order_by(EquipmentRepair.created_at.desc(), EquipmentRepair.id.desc()).all()
+
+    from openpyxl import Workbook  # 延迟导入，避免启动时 openpyxl 读盘卡住
 
     wb = Workbook()
     ws = wb.active
@@ -1172,6 +1101,8 @@ def export_equipment_oee_report(
         equipment_id=equipment_id,
     )
 
+    from openpyxl import Workbook  # 延迟导入，避免启动时 openpyxl 读盘卡住
+
     wb = Workbook()
     ws = wb.active
     ws.title = "设备OEE报表"
@@ -1219,7 +1150,6 @@ def export_equipment_oee_report(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
-
 
 
 def _inspection_item_to_report_row(
@@ -1569,6 +1499,8 @@ def export_equipment_maintenance_report(
     summary = _calc_maintenance_report_summary(orders)
     rows = _flatten_maintenance_orders_for_report(orders)
 
+    from openpyxl import Workbook  # 延迟导入，避免启动时 openpyxl 读盘卡住
+
     wb = Workbook()
     summary_ws = wb.active
     summary_ws.title = "计划执行情况"
@@ -1619,223 +1551,12 @@ def export_equipment_maintenance_report(
     )
 
 
-def _downtime_log_duration_hours(log: EquipmentRuntimeLog) -> float:
-    if log.runtime_hours is not None and float(log.runtime_hours) > 0:
-        return round(float(log.runtime_hours), 2)
-    if log.end_at and log.start_at:
-        delta = (log.end_at - log.start_at).total_seconds() / 3600
-        return round(max(delta, 0), 2)
-    return 0.0
-
-
-def _runtime_log_to_downtime_item(
-    log: EquipmentRuntimeLog, equipment: Equipment
-) -> EquipmentDowntimeReportItem:
-    return EquipmentDowntimeReportItem(
-        id=log.id,
-        equipment_id=equipment.id,
-        equipment_code=equipment.equipment_code,
-        equipment_name=equipment.name,
-        workshop=equipment.department,
-        start_at=log.start_at,
-        end_at=log.end_at,
-        duration_hours=_downtime_log_duration_hours(log),
-        downtime_reason=log.downtime_reason or "其他",
-    )
-
-
-def _query_equipment_downtime_logs(
-    db: Session,
-    *,
-    date_from: date,
-    date_to: date,
-    workshop: str | None,
-    equipment_id: int | None,
-    downtime_reason: str | None,
-) -> list[EquipmentDowntimeReportItem]:
-    query = (
-        db.query(EquipmentRuntimeLog, Equipment)
-        .join(Equipment, EquipmentRuntimeLog.equipment_id == Equipment.id)
-        .filter(EquipmentRuntimeLog.status == "停机")
-    )
-    query = query.filter(
-        func.date(EquipmentRuntimeLog.start_at) >= date_from,
-        func.date(EquipmentRuntimeLog.start_at) <= date_to,
-    )
-    if workshop:
-        query = query.filter(Equipment.department == workshop)
-    if equipment_id:
-        query = query.filter(Equipment.id == equipment_id)
-    if downtime_reason:
-        if downtime_reason == "其他":
-            query = query.filter(
-                (EquipmentRuntimeLog.downtime_reason == downtime_reason)
-                | (EquipmentRuntimeLog.downtime_reason.is_(None))
-                | (EquipmentRuntimeLog.downtime_reason == "")
-            )
-        else:
-            query = query.filter(EquipmentRuntimeLog.downtime_reason == downtime_reason)
-    query = query.order_by(EquipmentRuntimeLog.start_at.desc(), EquipmentRuntimeLog.id.desc())
-    rows = query.all()
-    return [_runtime_log_to_downtime_item(log, eq) for log, eq in rows]
-
-
-def _summarize_downtime_items(items: list[EquipmentDowntimeReportItem]) -> EquipmentDowntimeReportSummary:
-    return EquipmentDowntimeReportSummary(
-        event_count=len(items),
-        total_duration_hours=round(sum(item.duration_hours for item in items), 2),
-    )
-
-
-@router.get(
-    "/equipment-downtime/filters",
-    response_model=EquipmentDowntimeFiltersResponse,
-    summary="设备停机报表筛选选项",
-    description="返回车间、停机原因与设备下拉选项。",
-)
-def list_equipment_downtime_filters(
-    _current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    workshops = [
-        name
-        for (name,) in db.query(Equipment.department)
-        .filter(Equipment.department.isnot(None), Equipment.department != "")
-        .distinct()
-        .order_by(Equipment.department)
-        .all()
-    ]
-    equipment_rows = db.query(Equipment).order_by(Equipment.equipment_code).all()
-    equipment = [
-        EquipmentOeeFilterEquipment(
-            id=eq.id,
-            equipment_code=eq.equipment_code,
-            name=eq.name,
-            workshop=eq.department,
-            equipment_type=eq.spec_model,
-        )
-        for eq in equipment_rows
-    ]
-    return EquipmentDowntimeFiltersResponse(
-        workshops=workshops,
-        downtime_reasons=list(_DOWNTIME_REASON_OPTIONS),
-        equipment=equipment,
-    )
-
-
-@router.get(
-    "/equipment-downtime",
-    response_model=EquipmentDowntimeReportListResponse,
-    summary="设备停机报表",
-    description=(
-        "按 equipment_runtime_logs 中 status=停机 的时段返回停机明细；"
-        "支持日期区间、车间、设备、停机原因筛选与分页；默认近 7 日。"
-    ),
-)
-def list_equipment_downtime_report(
-    page: int = Query(1, ge=1, description="页码"),
-    page_size: int = Query(10, ge=1, le=100, description="每页条数"),
-    date_from: date | None = Query(None, description="停机开始日期起（含）"),
-    date_to: date | None = Query(None, description="停机开始日期止（含）"),
-    workshop: str | None = Query(None, description="车间筛选"),
-    equipment_id: int | None = Query(None, description="单台设备 ID"),
-    downtime_reason: str | None = Query(None, description="停机原因"),
-    _current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    date_from, date_to = _normalize_equipment_oee_date_range(date_from, date_to)
-    all_items = _query_equipment_downtime_logs(
-        db,
-        date_from=date_from,
-        date_to=date_to,
-        workshop=workshop,
-        equipment_id=equipment_id,
-        downtime_reason=downtime_reason,
-    )
-    summary = _summarize_downtime_items(all_items)
-    total = len(all_items)
-    start = (page - 1) * page_size
-    items = all_items[start : start + page_size]
-    return EquipmentDowntimeReportListResponse(
-        items=items,
-        total=total,
-        page=page,
-        page_size=page_size,
-        summary=summary,
-    )
-
-
-@router.get(
-    "/equipment-downtime/export",
-    summary="导出设备停机报表 Excel",
-    description="按当前筛选条件导出停机明细 Excel 文件。",
-)
-def export_equipment_downtime_report(
-    date_from: date | None = Query(None, description="停机开始日期起（含）"),
-    date_to: date | None = Query(None, description="停机开始日期止（含）"),
-    workshop: str | None = Query(None, description="车间筛选"),
-    equipment_id: int | None = Query(None, description="单台设备 ID"),
-    downtime_reason: str | None = Query(None, description="停机原因"),
-    _current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    date_from, date_to = _normalize_equipment_oee_date_range(date_from, date_to)
-    rows = _query_equipment_downtime_logs(
-        db,
-        date_from=date_from,
-        date_to=date_to,
-        workshop=workshop,
-        equipment_id=equipment_id,
-        downtime_reason=downtime_reason,
-    )
-    summary = _summarize_downtime_items(rows)
-
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "设备停机报表"
-    ws.append(["停机次数", summary.event_count])
-    ws.append(["停机时长合计(h)", summary.total_duration_hours])
-    ws.append([])
-    headers = [
-        "设备编码",
-        "设备名称",
-        "车间",
-        "停机开始",
-        "停机结束",
-        "时长(h)",
-        "停机原因",
-    ]
-    ws.append(headers)
-    for row in rows:
-        ws.append(
-            [
-                row.equipment_code,
-                row.equipment_name,
-                row.workshop or "",
-                row.start_at.strftime("%Y-%m-%d %H:%M:%S"),
-                row.end_at.strftime("%Y-%m-%d %H:%M:%S") if row.end_at else "",
-                row.duration_hours,
-                row.downtime_reason or "",
-            ]
-        )
-
-    buffer = BytesIO()
-    wb.save(buffer)
-    buffer.seek(0)
-    filename = f"equipment_downtime_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-    return StreamingResponse(
-        buffer,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
-
-
 @router.get(
     "/pcb-production-ops",
     summary="PCB 生产运营分析",
     description=(
         "MES 状态、近 7 日产出/工单趋势（按实际返回日期对齐时间窗）、"
-        "在制 10 单与异常三单核查；作废口径列为盲区，仅展示实际量与工时。"
+        "在制 10 单与异常三单核查；作废口径列为盲区，仅展示实际量（工时数据已下线）。"
     ),
 )
 def get_pcb_production_ops_report(

@@ -12,7 +12,6 @@ from sqlalchemy import func, text
 
 from app.database import SessionLocal
 from app.models import (
-    EmployeeWorkHour,
     EquipmentOeeSnapshot,
     EquipmentRepair,
     InventoryBalance,
@@ -24,6 +23,7 @@ from app.models import (
     QualityMetrics,
     SalesOrder,
     WorkOrder,
+    WorkOrderLaborRecord,
 )
 
 
@@ -243,18 +243,17 @@ def main() -> None:
             ok.append("产量无未来时间")
 
         bad_hours = (
-            db.query(EmployeeWorkHour)
+            db.query(WorkOrderLaborRecord)
             .filter(
-                (EmployeeWorkHour.work_hours < 0)
-                | (EmployeeWorkHour.work_hours > 24)
-                | (EmployeeWorkHour.overtime_hours < 0)
+                (WorkOrderLaborRecord.work_hours < 0)
+                | (WorkOrderLaborRecord.work_hours > 24)
             )
             .count()
         )
         if bad_hours:
-            issues.append({"area": "员工工时", "rule": "单日工时范围", "count": bad_hours})
+            issues.append({"area": "工单报工工时", "rule": "单条工时范围", "count": bad_hours})
         else:
-            ok.append("员工工时取值合理")
+            ok.append("工单报工工时取值合理")
 
         open_repairs = (
             db.query(EquipmentRepair)

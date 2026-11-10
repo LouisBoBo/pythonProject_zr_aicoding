@@ -5,9 +5,10 @@ export default defineConfig({
   plugins: [vue()],
   server: {
     // 本机 localhost / 127.0.0.1 / 局域网 IP 均可访问（勿只开后端 8009）
-    host: true,
+    host: '0.0.0.0',
     port: 5175,
     strictPort: true,
+    // 避免本机 HTTP 代理把 Vite/HMR 拖死或把浏览器请求拐走
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:8009',

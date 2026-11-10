@@ -1,9 +1,25 @@
 <template>
-  <div class="work-hours-page">
+  <div class="employee-work-hours-page">
     <el-card shadow="never" class="search-card">
       <el-form :model="filters" inline class="search-form">
-        <el-form-item label="日期范围">
+        <el-form-item label="日期模式">
+          <el-radio-group v-model="dateMode" @change="handleDateModeChange">
+            <el-radio-button value="single">单日</el-radio-button>
+            <el-radio-button value="range">区间</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="报工日期">
           <el-date-picker
+            v-if="dateMode === 'single'"
+            v-model="singleDate"
+            type="date"
+            placeholder="选择日期"
+            value-format="YYYY-MM-DD"
+            clearable
+            style="width: 160px"
+          />
+          <el-date-picker
+            v-else
             v-model="dateRange"
             type="daterange"
             range-separator="至"
@@ -14,13 +30,28 @@
             style="width: 260px"
           />
         </el-form-item>
-        <el-form-item label="部门">
+        <el-form-item label="员工">
           <el-select
-            v-model="filters.department"
+            v-model="filters.employeeNo"
             placeholder="全部"
             clearable
             filterable
             style="width: 160px"
+          >
+            <el-option
+              v-for="emp in employeeOptions"
+              :key="emp.employee_no"
+              :label="`${emp.employee_name}（${emp.employee_no}）`"
+              :value="emp.employee_no"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="部门/班组">
+          <el-select
+            v-model="filters.departmentName"
+            placeholder="全部"
+            clearable
+            style="width: 140px"
           >
             <el-option
               v-for="dept in departmentOptions"
@@ -29,23 +60,6 @@
               :value="dept"
             />
           </el-select>
-        </el-form-item>
-        <el-form-item label="班别">
-          <el-select
-            v-model="filters.shift_type"
-            placeholder="全部"
-            clearable
-            style="width: 120px"
-          >
-            <el-option label="白班" value="白班" />
-            <el-option label="晚班" value="晚班" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="视图">
-          <el-radio-group v-model="viewMode" @change="handleViewModeChange">
-            <el-radio-button value="detail">明细</el-radio-button>
-            <el-radio-button value="employee">按员工汇总</el-radio-button>
-          </el-radio-group>
         </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="handleSearch">查询</el-button>
@@ -58,57 +72,24 @@
       <div class="table-toolbar">
         <div class="toolbar-left">
           <span class="table-title">员工工时报表</span>
-          <el-tag size="small" type="info">
-            {{ viewMode === 'employee' ? '按员工汇总工时合计' : '明细列表' }}
-          </el-tag>
+          <el-tag size="small" type="info">工单报工明细（员工 × 日期 × 工单）</el-tag>
         </div>
         <div class="toolbar-right">
           <span class="sum-text">工时合计 {{ formatHours(workHoursSum) }}</span>
-          <span class="sum-text">加班合计 {{ formatHours(overtimeHoursSum) }}</span>
         </div>
       </div>
 
-      <el-table v-loading="loading" :data="items" stripe border style="width: 100%">
-        <el-table-column prop="employee_name" label="员工" min-width="120" />
-        <el-table-column prop="employee_no" label="工号" width="120" />
-        <el-table-column prop="department" label="部门" min-width="140" />
-        <el-table-column
-          v-if="viewMode === 'detail'"
-          prop="work_date"
-          label="日期"
-          width="130"
-        >
-          <template #default="{ row }">{{ row.work_date || '—' }}</template>
-        </el-table-column>
-        <el-table-column
-          v-if="viewMode === 'detail'"
-          prop="shift_type"
-          label="班别"
-          width="110"
-        >
-          <template #default="{ row }">{{ row.shift_type || '—' }}</template>
-        </el-table-column>
-        <el-table-column
-          v-if="viewMode === 'detail'"
-          prop="project_name"
-          label="项目"
-          min-width="120"
-        >
-          <template #default="{ row }">{{ row.project_name || '—' }}</template>
-        </el-table-column>
-        <el-table-column prop="work_hours" label="工时" width="120" align="right">
-          <template #default="{ row }">{{ formatHours(row.work_hours) }}</template>
-        </el-table-column>
-        <el-table-column prop="overtime_hours" label="加班" width="100" align="right">
-          <template #default="{ row }">{{ formatHours(row.overtime_hours) }}</template>
-        </el-table-column>
-        <el-table-column
-          v-if="viewMode === 'detail'"
-          prop="approval_status"
-          label="审批状态"
-          width="100"
-        >
-          <template #default="{ row }">{{ row.approval_status || '—' }}</template>
+      <el-table v-loading="loading" :data="tableRows" stripe border style="width: 100%">
+        <el-table-column prop="employee_name" label="员工" min-width="100" />
+        <el-table-column prop="department_name" label="部门/班组" min-width="110" />
+        <el-table-column prop="work_date" label="日期" width="120" />
+        <el-table-column prop="order_no" label="工单号" min-width="130" />
+        <el-table-column prop="process" label="工序" min-width="100" />
+        <el-table-column prop="work_hours" label="工时（小时）" width="120" align="right">
+          <template #default="{ row }">
+            <template v-if="!row._isTotal">{{ formatHours(row.work_hours) }}</template>
+            <strong v-else>{{ formatHours(row.work_hours) }}</strong>
+          </template>
         </el-table-column>
       </el-table>
 
@@ -129,12 +110,62 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
-  fetchEmployeeWorkHourFilters,
+  fetchEmployeeWorkHoursFilters,
   fetchEmployeeWorkHoursReport,
 } from '../../api/reports/employeeWorkHours.js'
+
+const loading = ref(false)
+const items = ref([])
+const total = ref(0)
+const workHoursSum = ref(0)
+const page = ref(1)
+const pageSize = ref(10)
+const dateMode = ref('range')
+const singleDate = ref('')
+const dateRange = ref([])
+const employeeOptions = ref([])
+const departmentOptions = ref([])
+
+const filters = reactive({
+  employeeNo: '',
+  departmentName: '',
+})
+
+const tableRows = computed(() => {
+  const rows = items.value || []
+  if (!rows.length) return rows
+  return [
+    ...rows,
+    {
+      _isTotal: true,
+      employee_name: '合计',
+      department_name: '—',
+      work_date: '—',
+      order_no: '—',
+      process: '—',
+      work_hours: workHoursSum.value,
+    },
+  ]
+})
+
+function formatHours(value) {
+  const n = Number(value)
+  if (Number.isNaN(n)) return '0'
+  return n % 1 === 0 ? String(n) : n.toFixed(2)
+}
+
+function resolveDateRange() {
+  if (dateMode.value === 'single' && singleDate.value) {
+    return { dateFrom: singleDate.value, dateTo: singleDate.value }
+  }
+  if (dateMode.value === 'range' && dateRange.value?.length === 2) {
+    return { dateFrom: dateRange.value[0], dateTo: dateRange.value[1] }
+  }
+  return { dateFrom: undefined, dateTo: undefined }
+}
 
 function defaultDateRange() {
   const end = new Date()
@@ -146,77 +177,46 @@ function defaultDateRange() {
     const day = String(d.getDate()).padStart(2, '0')
     return `${y}-${m}-${day}`
   }
-  return [fmt(start), fmt(end)]
+  dateRange.value = [fmt(start), fmt(end)]
 }
 
-const loading = ref(false)
-const items = ref([])
-const total = ref(0)
-const workHoursSum = ref(0)
-const overtimeHoursSum = ref(0)
-const page = ref(1)
-const pageSize = ref(10)
-const departmentOptions = ref([])
-const dateRange = ref(defaultDateRange())
-const viewMode = ref('detail')
-
-const filters = reactive({
-  department: '',
-  shift_type: '',
-})
-
-function normalizeShiftType(value) {
-  if (value === 'day') return '白班'
-  if (value === 'night') return '晚班'
-  if (value === '白班' || value === '晚班') return value
-  return value || ''
-}
-
-function formatHours(value) {
-  const n = Number(value)
-  if (Number.isNaN(n)) return '—'
-  return n.toFixed(1)
-}
-
-function handleViewModeChange() {
-  page.value = 1
-  loadReport()
+function handleDateModeChange() {
+  if (dateMode.value === 'range' && !dateRange.value?.length) {
+    defaultDateRange()
+  }
 }
 
 async function loadFilters() {
   try {
-    const resp = await fetchEmployeeWorkHourFilters()
+    const resp = await fetchEmployeeWorkHoursFilters()
     departmentOptions.value = resp.departments || []
+    employeeOptions.value = resp.employees || []
   } catch {
     departmentOptions.value = []
+    employeeOptions.value = []
   }
 }
 
 async function loadReport() {
   loading.value = true
   try {
+    const { dateFrom, dateTo } = resolveDateRange()
     const resp = await fetchEmployeeWorkHoursReport({
       page: page.value,
       pageSize: pageSize.value,
-      dateFrom: (dateRange.value && dateRange.value[0]) || '',
-      dateTo: (dateRange.value && dateRange.value[1]) || '',
-      department: filters.department || undefined,
-      shiftType: filters.shift_type || undefined,
-      dimension: viewMode.value === 'employee' ? 'employee' : 'detail',
+      dateFrom,
+      dateTo,
+      employeeNo: filters.employeeNo || undefined,
+      departmentName: filters.departmentName || undefined,
     })
-    items.value = (resp.items || []).map((row) => ({
-      ...row,
-      shift_type: normalizeShiftType(row.shift_type),
-    }))
+    items.value = resp.items || []
     total.value = resp.total || 0
     workHoursSum.value = resp.work_hours_sum ?? 0
-    overtimeHoursSum.value = resp.overtime_hours_sum ?? 0
   } catch (err) {
+    ElMessage.error(err.message || '加载报表失败')
     items.value = []
     total.value = 0
     workHoursSum.value = 0
-    overtimeHoursSum.value = 0
-    ElMessage.error(err.message || '加载员工工时报表失败')
   } finally {
     loading.value = false
   }
@@ -228,34 +228,34 @@ function handleSearch() {
 }
 
 function handleReset() {
-  filters.department = ''
-  filters.shift_type = ''
-  dateRange.value = defaultDateRange()
-  viewMode.value = 'detail'
+  filters.employeeNo = ''
+  filters.departmentName = ''
+  dateMode.value = 'range'
+  defaultDateRange()
   page.value = 1
   loadReport()
 }
 
 onMounted(async () => {
+  defaultDateRange()
   await loadFilters()
   await loadReport()
 })
 </script>
 
 <style scoped>
-.work-hours-page {
+.employee-work-hours-page {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.search-card,
-.table-card {
-  border-radius: 8px;
+.search-card :deep(.el-card__body) {
+  padding-bottom: 4px;
 }
 
-.search-form {
-  margin-bottom: 0;
+.table-card :deep(.el-card__body) {
+  padding-top: 12px;
 }
 
 .table-toolbar {
@@ -263,19 +263,8 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 12px;
-}
-
-.toolbar-right {
-  display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-  font-size: 13px;
-  color: var(--el-text-color-secondary);
-}
-
-.sum-text {
-  white-space: nowrap;
+  gap: 8px;
 }
 
 .toolbar-left {
@@ -285,14 +274,18 @@ onMounted(async () => {
 }
 
 .table-title {
-  font-size: 16px;
   font-weight: 600;
-  color: #303133;
+  font-size: 15px;
+}
+
+.sum-text {
+  font-size: 13px;
+  color: var(--el-text-color-regular);
 }
 
 .pagination-wrap {
+  margin-top: 16px;
   display: flex;
   justify-content: flex-end;
-  margin-top: 16px;
 }
 </style>

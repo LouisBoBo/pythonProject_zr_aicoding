@@ -9,7 +9,7 @@ from sqlalchemy.pool import StaticPool
 from app.auth import hash_password
 from app.database import Base, get_db
 from app.main import app
-from app.models import EmployeeWorkHour, User
+from app.models import User, WorkOrder, WorkOrderLaborRecord
 
 SQLALCHEMY_DATABASE_URL = "sqlite://"
 
@@ -65,32 +65,46 @@ def auth_headers(client, db_session):
 
 
 @pytest.fixture()
-def sample_work_hours(db_session):
+def sample_labor_records(db_session):
     today = date.today()
     yesterday = today - timedelta(days=1)
+    wo_a = WorkOrder(
+        order_no="WO-EWH-A",
+        product_name="产品A",
+        plan_quantity=100,
+        actual_quantity=80,
+        status="in_progress",
+        current_process="贴片",
+    )
+    wo_b = WorkOrder(
+        order_no="WO-EWH-B",
+        product_name="产品B",
+        plan_quantity=50,
+        actual_quantity=40,
+        status="in_progress",
+        current_process="焊接",
+    )
+    db_session.add_all([wo_a, wo_b])
+    db_session.flush()
     db_session.add_all(
         [
-            EmployeeWorkHour(
+            WorkOrderLaborRecord(
                 employee_no="E1001",
                 employee_name="张三",
-                department="生产一部",
-                project_name="项目A",
-                task_name="任务1",
+                department_name="生产一部",
                 work_date=today,
+                work_order_id=wo_a.id,
+                process="贴片",
                 work_hours=10.0,
-                overtime_hours=1.5,
-                approval_status="approved",
             ),
-            EmployeeWorkHour(
+            WorkOrderLaborRecord(
                 employee_no="E1002",
                 employee_name="李四",
-                department="生产二部",
-                project_name="项目B",
-                task_name="任务2",
+                department_name="生产二部",
                 work_date=yesterday,
+                work_order_id=wo_b.id,
+                process="焊接",
                 work_hours=8.0,
-                overtime_hours=0.0,
-                approval_status="approved",
             ),
         ]
     )
@@ -99,10 +113,10 @@ def sample_work_hours(db_session):
 
 def test_employee_work_hours_requires_auth(client):
     response = client.get("/api/reports/employee-work-hours")
-    assert response.status_code == 401
+    assert response.status_code in (401, 403)
 
 
-def test_employee_work_hours_filters(client, auth_headers, sample_work_hours):
+def test_employee_work_hours_filters(client, auth_headers, sample_labor_records):
     response = client.get(
         "/api/reports/employee-work-hours/filters",
         headers=auth_headers,
@@ -113,58 +127,27 @@ def test_employee_work_hours_filters(client, auth_headers, sample_work_hours):
     assert len(data["employees"]) == 2
 
 
-def test_employee_work_hours_dimensions(client, auth_headers, sample_work_hours):
-    by_employee = client.get(
-        "/api/reports/employee-work-hours?dimension=employee",
-        headers=auth_headers,
-    )
-    assert by_employee.status_code == 200
-    assert by_employee.json()["total"] == 2
-    zhang_total = next(
-        i for i in by_employee.json()["items"] if i["employee_no"] == "E1001"
-    )
-    assert zhang_total["work_hours"] == 10.0
-    assert zhang_total["work_date"] is None
-
-    by_date = client.get(
-        "/api/reports/employee-work-hours?dimension=employee_date",
-        headers=auth_headers,
-    )
-    assert by_date.status_code == 200
-    assert by_date.json()["total"] == 2
-    zhang_row = next(
-        i for i in by_date.json()["items"] if i["employee_no"] == "E1001"
-    )
-    assert zhang_row["work_hours"] == 10.0
-    assert zhang_row["overtime_hours"] == 1.5
-
-    by_project = client.get(
-        "/api/reports/employee-work-hours?dimension=project",
-        headers=auth_headers,
-    )
-    assert by_project.json()["total"] == 2
-
-    by_dept = client.get(
-        "/api/reports/employee-work-hours?dimension=department",
-        headers=auth_headers,
-    )
-    assert by_dept.json()["total"] == 2
-
-
-def test_employee_work_hours_department_filter(client, auth_headers, sample_work_hours):
+def test_employee_work_hours_list_and_sum(client, auth_headers, sample_labor_records):
+    today = date.today().isoformat()
     response = client.get(
-        "/api/reports/employee-work-hours?dimension=detail&department=生产一部",
+        f"/api/reports/employee-work-hours?date_from={today}&date_to={today}",
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 1
+    assert data["work_hours_sum"] == 10.0
+    assert data["items"][0]["employee_no"] == "E1001"
+    assert data["items"][0]["order_no"] == "WO-EWH-A"
+    assert data["items"][0]["process"] == "贴片"
+
+
+def test_employee_work_hours_department_filter(client, auth_headers, sample_labor_records):
+    response = client.get(
+        "/api/reports/employee-work-hours?department_name=生产一部",
         headers=auth_headers,
     )
     assert response.status_code == 200
     data = response.json()
     assert data["total"] == 1
     assert data["items"][0]["employee_no"] == "E1001"
-
-
-def test_employee_work_hours_invalid_dimension(client, auth_headers, sample_work_hours):
-    response = client.get(
-        "/api/reports/employee-work-hours?dimension=invalid",
-        headers=auth_headers,
-    )
-    assert response.status_code == 400

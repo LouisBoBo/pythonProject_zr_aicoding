@@ -788,29 +788,24 @@ class Employee(Base):
     salary: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False, default=0)
 
 
-class EmployeeWorkHour(Base):
-    """员工工时填报记录"""
+class WorkOrderLaborRecord(Base):
+    """工单报工明细（员工 × 工单 × 工序工时）"""
 
-    __tablename__ = "employee_work_hours"
+    __tablename__ = "work_order_labor_records"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     employee_no: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
     employee_name: Mapped[str] = mapped_column(String(50), nullable=False)
-    department: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
-    project_name: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
-    task_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    department_name: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     work_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
-    shift_type: Mapped[str | None] = mapped_column(
-        String(10), nullable=True, index=True
-    )  # day=白班 / night=晚班
+    work_order_id: Mapped[int] = mapped_column(ForeignKey("work_orders.id"), nullable=False, index=True)
+    process: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     work_hours: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False, default=0)
-    overtime_hours: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False, default=0)
-    approval_status: Mapped[str] = mapped_column(
-        String(20), nullable=False, default="pending"
-    )  # pending / approved / rejected
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=datetime.utcnow
     )
+
+    work_order: Mapped["WorkOrder"] = relationship()
 
 
 class DashboardTodo(Base):

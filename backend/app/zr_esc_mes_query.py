@@ -7,7 +7,7 @@ from datetime import date, datetime, timedelta
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models import EmployeeWorkHour, ProductionOutputRecord, QualityAnomaly, WorkOrder
+from app.models import ProductionOutputRecord, QualityAnomaly, WorkOrder, WorkOrderLaborRecord
 from app.work_order_utils import calc_wip_quantity, derive_current_process
 
 _BLIND_SPOTS = [
@@ -53,8 +53,8 @@ def query_pcb_production_ops(db: Session, *, days: int = 7) -> dict:
             or 0
         )
         work_hours = float(
-            db.query(func.coalesce(func.sum(EmployeeWorkHour.work_hours), 0))
-            .filter(EmployeeWorkHour.work_date == d)
+            db.query(func.coalesce(func.sum(WorkOrderLaborRecord.work_hours), 0))
+            .filter(WorkOrderLaborRecord.work_date == d)
             .scalar()
             or 0
         )

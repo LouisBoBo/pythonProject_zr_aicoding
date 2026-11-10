@@ -61,13 +61,13 @@
       <div class="table-toolbar">
         <div class="toolbar-left">
           <span class="table-title">日产报表</span>
-          <el-tag size="small" type="info">按日 / 车间 / 产线聚合</el-tag>
+          <el-tag size="small" type="info">按日 / 车间 / 产线聚合（工时列已下线，恒为 0）</el-tag>
         </div>
         <div class="toolbar-right">
           <span class="sum-text">计划合计 {{ planSum }}</span>
           <span class="sum-text">实际合计 {{ actualSum }}</span>
           <span class="sum-text">不良合计 {{ defectSum }}</span>
-          <span class="sum-text">工时合计 {{ formatHours(workHoursSum) }}</span>
+          <span class="sum-text">工时合计 {{ formatHours(workHoursSum) }}（已下线）</span>
           <el-button :icon="Download" @click="handleExport">导出</el-button>
         </div>
       </div>
@@ -91,7 +91,7 @@
         <el-table-column prop="defect_rate" label="不良率" width="100" align="right">
           <template #default="{ row }">{{ formatRate(row.defect_rate) }}</template>
         </el-table-column>
-        <el-table-column prop="work_hours" label="工时" width="90" align="right">
+        <el-table-column prop="work_hours" label="工时（已下线）" width="120" align="right">
           <template #default="{ row }">{{ formatHours(row.work_hours) }}</template>
         </el-table-column>
         <el-table-column prop="production_staff" label="生产人员" min-width="140">

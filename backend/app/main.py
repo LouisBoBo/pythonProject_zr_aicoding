@@ -31,7 +31,6 @@ from app.models import (
     MaterialInbound,
     Message,
     Employee,
-    EmployeeWorkHour,
     QualityAnomaly,
     QualityDefectDetail,
     QualityMetrics,
@@ -52,6 +51,7 @@ from app.routers import (
     equipment,
     equipment_maintenance,
     equipment_repair,
+    employee_work_hours_report,
     inspection,
     inventory_low_stock,
     sales_orders,
@@ -67,6 +67,7 @@ from app.routers import (
     work_order_alerts,
     work_orders,
 )
+from app.work_order_labor_seed import ensure_work_order_labor_records
 from app.routers import employees as employees_router
 from app.routers import material_purchases
 from app.material_purchase import backfill_material_purchase_profiles
@@ -1015,38 +1016,13 @@ def ensure_equipment_runtime_logs_downtime_reason():
         )
 
 
-def ensure_employee_work_hours_shift_type():
-    """为 employee_work_hours 表补齐 shift_type 列，并按报工时间回填班别。"""
+def drop_employee_work_hours_table():
+    """一次性清理已下线的 employee_work_hours 表（模型已移除，create_all 不会重建）。"""
     inspector = inspect(engine)
     if not inspector.has_table("employee_work_hours"):
         return
-    columns = [column["name"] for column in inspector.get_columns("employee_work_hours")]
-    if "shift_type" not in columns:
-        with engine.begin() as conn:
-            conn.execute(
-                text("ALTER TABLE employee_work_hours ADD COLUMN shift_type VARCHAR(10)")
-            )
     with engine.begin() as conn:
-        conn.execute(
-            text(
-                """
-                UPDATE employee_work_hours
-                SET shift_type = 'day'
-                WHERE shift_type IS NULL
-                  AND CAST(strftime('%H', created_at) AS INTEGER) >= 8
-                  AND CAST(strftime('%H', created_at) AS INTEGER) < 20
-                """
-            )
-        )
-        conn.execute(
-            text(
-                """
-                UPDATE employee_work_hours
-                SET shift_type = 'night'
-                WHERE shift_type IS NULL
-                """
-            )
-        )
+        conn.execute(text("DROP TABLE IF EXISTS employee_work_hours"))
 
 
 def seed_employees():
@@ -1159,212 +1135,10 @@ def seed_employees():
         db.close()
 
 
-def seed_employee_work_hours_data():
-    db = SessionLocal()
-    try:
-        if db.query(EmployeeWorkHour).first():
-            return
-
-        today = date.today()
-        samples = [
-            EmployeeWorkHour(
-                employee_no="E1001",
-                employee_name="张三",
-                department="生产一部",
-                project_name="PCB-A 量产项目",
-                task_name="贴片工序",
-                work_date=today - timedelta(days=1),
-                shift_type="day",
-                work_hours=8.0,
-                overtime_hours=1.5,
-                approval_status="approved",
-            ),
-            EmployeeWorkHour(
-                employee_no="E1001",
-                employee_name="张三",
-                department="生产一部",
-                project_name="PCB-A 量产项目",
-                task_name="AOI 复检",
-                work_date=today - timedelta(days=2),
-                shift_type="night",
-                work_hours=7.5,
-                overtime_hours=0.0,
-                approval_status="approved",
-            ),
-            EmployeeWorkHour(
-                employee_no="E1002",
-                employee_name="李四",
-                department="生产一部",
-                project_name="PCB-B 试产项目",
-                task_name="焊接调试",
-                work_date=today - timedelta(days=1),
-                shift_type="night",
-                work_hours=8.0,
-                overtime_hours=2.0,
-                approval_status="pending",
-            ),
-            EmployeeWorkHour(
-                employee_no="E1002",
-                employee_name="李四",
-                department="生产一部",
-                project_name="PCB-B 试产项目",
-                task_name="功能测试",
-                work_date=today - timedelta(days=3),
-                shift_type="day",
-                work_hours=8.0,
-                overtime_hours=0.0,
-                approval_status="approved",
-            ),
-            EmployeeWorkHour(
-                employee_no="E1003",
-                employee_name="王五",
-                department="生产二部",
-                project_name="PCB-A 量产项目",
-                task_name="包装入库",
-                work_date=today - timedelta(days=2),
-                shift_type="day",
-                work_hours=8.0,
-                overtime_hours=0.5,
-                approval_status="approved",
-            ),
-            EmployeeWorkHour(
-                employee_no="E1003",
-                employee_name="王五",
-                department="生产二部",
-                project_name="仓储支援",
-                task_name="物料盘点",
-                work_date=today - timedelta(days=5),
-                shift_type="night",
-                work_hours=6.0,
-                overtime_hours=0.0,
-                approval_status="rejected",
-            ),
-            EmployeeWorkHour(
-                employee_no="E2001",
-                employee_name="赵六",
-                department="研发部",
-                project_name="新工艺验证",
-                task_name="方案评审",
-                work_date=today - timedelta(days=1),
-                shift_type="day",
-                work_hours=7.0,
-                overtime_hours=0.0,
-                approval_status="approved",
-            ),
-            EmployeeWorkHour(
-                employee_no="E2001",
-                employee_name="赵六",
-                department="研发部",
-                project_name="新工艺验证",
-                task_name="实验记录",
-                work_date=today - timedelta(days=4),
-                shift_type="night",
-                work_hours=8.0,
-                overtime_hours=1.0,
-                approval_status="pending",
-            ),
-            EmployeeWorkHour(
-                employee_no="E2002",
-                employee_name="孙七",
-                department="研发部",
-                project_name="MES 二期",
-                task_name="需求分析",
-                work_date=today - timedelta(days=2),
-                shift_type="day",
-                work_hours=8.0,
-                overtime_hours=0.0,
-                approval_status="approved",
-            ),
-            EmployeeWorkHour(
-                employee_no="E3001",
-                employee_name="周八",
-                department="品质部",
-                project_name="PCB-A 量产项目",
-                task_name="来料检验",
-                work_date=today - timedelta(days=1),
-                shift_type="day",
-                work_hours=8.0,
-                overtime_hours=0.0,
-                approval_status="approved",
-            ),
-            EmployeeWorkHour(
-                employee_no="E3001",
-                employee_name="周八",
-                department="品质部",
-                project_name="PCB-B 试产项目",
-                task_name="出货检验",
-                work_date=today - timedelta(days=6),
-                shift_type="night",
-                work_hours=7.5,
-                overtime_hours=0.0,
-                approval_status="approved",
-            ),
-            EmployeeWorkHour(
-                employee_no="E1001",
-                employee_name="张三",
-                department="生产一部",
-                project_name="PCB-C 新品导入",
-                task_name="试产跟进",
-                work_date=today - timedelta(days=10),
-                shift_type="day",
-                work_hours=8.0,
-                overtime_hours=0.0,
-                approval_status="approved",
-            ),
-        ]
-        db.add_all(samples)
-        db.commit()
-    finally:
-        db.close()
-
-
-def ensure_employee_work_hours_recent_backfill():
-    """为近 7 天无记录的日期补齐演示工时（不覆盖已有数据）。"""
-    db = SessionLocal()
-    try:
-        today = date.today()
-        templates = [
-            ("E1001", "张三", "生产一部", "PCB-A 量产项目", "贴片工序", "day", 8.0, 1.0),
-            ("E1002", "李四", "生产一部", "PCB-B 试产项目", "焊接调试", "night", 7.5, 0.5),
-            ("E1003", "王五", "生产二部", "PCB-A 量产项目", "包装入库", "day", 8.0, 0.0),
-            ("E2001", "赵六", "研发部", "MES 二期", "联调支持", "day", 7.0, 0.0),
-            ("E3001", "周八", "品质部", "PCB-B 试产项目", "过程检验", "night", 8.0, 1.5),
-        ]
-        added = []
-        for offset in range(7):
-            work_date = today - timedelta(days=offset)
-            exists = (
-                db.query(EmployeeWorkHour.id)
-                .filter(EmployeeWorkHour.work_date == work_date)
-                .first()
-            )
-            if exists:
-                continue
-            tpl = templates[offset % len(templates)]
-            added.append(
-                EmployeeWorkHour(
-                    employee_no=tpl[0],
-                    employee_name=tpl[1],
-                    department=tpl[2],
-                    project_name=tpl[3],
-                    task_name=tpl[4],
-                    work_date=work_date,
-                    shift_type=tpl[5],
-                    work_hours=tpl[6],
-                    overtime_hours=tpl[7],
-                    approval_status="approved",
-                )
-            )
-        if added:
-            db.add_all(added)
-            db.commit()
-    finally:
-        db.close()
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    drop_employee_work_hours_table()
     ensure_material_purchase_fields()
     ensure_sales_orders_ordered_at()
     ensure_kanban_board_fields()
@@ -1374,7 +1148,6 @@ async def lifespan(app: FastAPI):
     ensure_work_orders_current_process()
     ensure_maintenance_orders_plan_complete_date()
     ensure_equipment_repairs_repair_completed_at()
-    ensure_employee_work_hours_shift_type()
     ensure_equipment_runtime_logs_downtime_reason()
     seed_default_user()
     seed_rbac()
@@ -1385,10 +1158,9 @@ async def lifespan(app: FastAPI):
     seed_quality_data()
     seed_message_data()
     seed_employees()
-    seed_employee_work_hours_data()
-    ensure_employee_work_hours_recent_backfill()
     seed_analytics_data()
     backfill_recent_operational_data()
+    ensure_work_order_labor_records()
     ensure_inventory_stock_backfill()
     ensure_material_inbound_backfill()
     yield
@@ -1459,6 +1231,7 @@ app.include_router(equipment_maintenance.router)
 app.include_router(equipment_repair.router)
 app.include_router(quality.router)
 app.include_router(reports.router)
+app.include_router(employee_work_hours_report.router)
 app.include_router(inventory_low_stock.router)
 app.include_router(warehouse.router)
 app.include_router(material_purchases.router)

@@ -15,7 +15,6 @@ from app.material_purchase import purchase_profile_for
 from app.models import (
     DashboardTodo,
     Device,
-    EmployeeWorkHour,
     Equipment,
     EquipmentAlarm,
     EquipmentMaintenanceOrder,
@@ -1386,11 +1385,6 @@ def _rebase_live_records_to_today(db, today: date, now: datetime) -> None:
     if bal_delta.days:
         for bal in db.query(InventoryBalance).all():
             bal.updated_at = _shift_dt(bal.updated_at, bal_delta) or now
-
-    hour_delta = delta_of(EmployeeWorkHour.work_date)
-    if hour_delta.days:
-        for hour in db.query(EmployeeWorkHour).all():
-            hour.work_date = _shift_date(hour.work_date, hour_delta) or today
 
     for board in db.query(KanbanBoard).all():
         board.updated_at = now
