@@ -34,6 +34,7 @@
 // cch-20261112-report-center-add-downtime-menu
 // cch-20261112-report-center-remove-equipment-downtime-menu
 // cch-20261113-report-center-add-employee-work-hours-menu
+// cch-20261116-170952-report-center-add-downtime-menu
 // cch-20261009-employee-work-hours-remove-employee-no-column
 /**
  * 报表功能注册表（唯一配置入口）。
@@ -78,6 +79,19 @@ export const REPORT_CATALOG = [
     title: '员工工时报表',
     description: '按人按日查看报工工时，支持日期区间、部门与员工筛选及 Excel 导出',
     icon: 'Timer',
+    menu: true,
+    hub: true,
+    enabled: true,
+  },
+  {
+    id: 'equipment-downtime',
+    routePath: 'equipment-downtime',
+    viewFile: 'EquipmentDowntimeReportView.vue',
+    apiFile: 'equipmentDowntime.js',
+    title: '停机报表',
+    description:
+      '按日 / 设备汇总停机次数与时长，支持日期区间、车间、设备与停机原因筛选；含趋势图、设备对比与 Excel 导出',
+    icon: 'Odometer',
     menu: true,
     hub: true,
     enabled: true,
