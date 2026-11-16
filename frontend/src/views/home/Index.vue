@@ -85,7 +85,7 @@
           </div>
           <span class="hourly-date">{{ data.display_date }}</span>
         </div>
-        <div class="hourly-title">各小时产量</div>
+        <div class="hourly-title">各时段产量</div>
         <div class="hourly-chart-wrap">
           <v-chart class="hourly-line-chart" :option="hourlyOutputOption" autoresize />
         </div>
