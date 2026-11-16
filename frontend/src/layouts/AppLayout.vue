@@ -350,6 +350,7 @@ const expandedSubmenus = reactive({
   kanban: true,
   equipment: true,
   warehouse: true,
+  'material-management': true,
   'material-purchase': true,
   'employee-management': true,
   reports: true,
@@ -457,6 +458,7 @@ const menuGroups = computed(() => {
           children: [
             { path: '/kanban/production', title: '生产看板', icon: SetUp },
             { path: '/quality/dashboard', title: '品质看板', icon: DataAnalysis },
+            { path: '/kanban/equipment-oee', title: '设备 OEE', icon: Cpu },
           ],
         },
         {
@@ -468,6 +470,7 @@ const menuGroups = computed(() => {
             { path: '/equipment/inspection', title: '设备点检', icon: List },
             { path: '/equipment/maintenance-plans', title: '保养计划', icon: Calendar },
             { path: '/equipment/maintenance-orders', title: '保养工单', icon: Tools },
+            { path: '/equipment/maintenance', title: '设备保养', icon: Document },
             { path: '/equipment/repairs', title: '维修管理', icon: SetUp },
           ],
         },
@@ -493,10 +496,18 @@ const menuGroups = computed(() => {
           ],
         },
         {
-          path: '/materials',
+          key: 'material-management',
           title: '物料管理',
           icon: Goods,
           permission: 'materials.read',
+          children: [
+            {
+              path: '/materials/list',
+              title: '物料列表',
+              icon: List,
+              permission: 'materials.read',
+            },
+          ],
         },
         {
           key: 'material-purchase',
@@ -522,6 +533,12 @@ const menuGroups = computed(() => {
               path: '/employees',
               title: '员工列表',
               icon: List,
+              permission: 'employees.read',
+            },
+            {
+              path: '/employees/work-hours',
+              title: '员工工时列表',
+              icon: Timer,
               permission: 'employees.read',
             },
           ],
@@ -643,7 +660,7 @@ function goSearchResult(type, item) {
     })
   } else if (type === 'material') {
     router.push({
-      path: '/materials',
+      path: '/materials/list',
       query: { materialCode: item.material_code },
     })
   }
@@ -728,6 +745,9 @@ function isChildActive(path) {
     return false
   }
   if (path === '/equipment/ledger' && route.path.startsWith('/equipment/maintenance-')) {
+    return false
+  }
+  if (path === '/equipment/ledger' && route.path === '/equipment/maintenance') {
     return false
   }
   if (path === '/equipment/ledger' && route.path.startsWith('/equipment/repairs')) {

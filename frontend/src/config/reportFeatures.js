@@ -22,6 +22,18 @@
 // cch-20261027-report-center-remove-equipment-downtime-menu
 // cch-20261027-report-center-add-employee-work-hours-menu
 // cch-20261027-report-center-add-equipment-downtime-menu
+// cch-20261110-report-center-remove-equipment-downtime-menu
+// cch-20261110-report-center-add-equipment-downtime-menu
+// cch-20261111-report-center-add-employee-work-hours-menu
+// cch-20261111-report-center-remove-employee-work-hours-menu
+// cch-20261111-161039-report-center-add-employee-work-hours-menu
+// cch-20261111-report-center-remove-equipment-downtime-menu
+// cch-20261112-report-center-remove-employee-work-hours-menu
+// cch-20261112-report-center-add-employee-work-hours-menu
+// cch-20261112-141510-report-center-remove-employee-work-hours-menu
+// cch-20261112-report-center-add-downtime-menu
+// cch-20261112-report-center-remove-equipment-downtime-menu
+// cch-20261113-report-center-add-employee-work-hours-menu
 // cch-20261009-employee-work-hours-remove-employee-no-column
 /**
  * 报表功能注册表（唯一配置入口）。
@@ -30,7 +42,6 @@
  * - hub: false → 报表中心首页不展示入口
  * - enabled: false → 强制下线（即使文件还在）
  * 路由/菜单仅注册「enabled + 视图文件存在 + api 文件存在（若声明）」的项，缺文件不会拖垮整站。
- * 员工工时报表与设备停机报表均注册 catalog，侧栏/Hub 可见。
  */
 export const REPORT_CATALOG = [
   {
@@ -55,6 +66,18 @@ export const REPORT_CATALOG = [
     description:
       '按日 / 车间 / 产线查看计划产量、订单号、实际产量、达成率、不良与工时、生产人员',
     icon: 'DataAnalysis',
+    menu: true,
+    hub: true,
+    enabled: true,
+  },
+  {
+    id: 'employee-work-hours',
+    routePath: 'employee-work-hours',
+    viewFile: 'EmployeeWorkHoursReportView.vue',
+    apiFile: 'employeeWorkHours.js',
+    title: '员工工时报表',
+    description: '按人按日查看报工工时，支持日期区间、部门与员工筛选及 Excel 导出',
+    icon: 'Timer',
     menu: true,
     hub: true,
     enabled: true,
@@ -106,33 +129,6 @@ export const REPORT_CATALOG = [
     icon: 'Calendar',
     menu: false,
     hub: false,
-    enabled: true,
-  },
-  {
-    id: 'employee-work-hours',
-    routePath: 'employee-work-hours',
-    viewFile: 'EmployeeWorkHoursReportView.vue',
-    apiFile: 'employeeWorkHours.js',
-    title: '员工工时报表',
-    description:
-      '按日期区间、部门、员工查询工时明细；展示工时汇总统计与按员工汇总、明细列表',
-    icon: 'Timer',
-    menu: true,
-    hub: true,
-    enabled: true,
-  },
-  {
-    id: 'equipment-downtime',
-    routePath: 'equipment-downtime',
-    viewFile: 'EquipmentDowntimeReportView.vue',
-    apiFile: 'equipmentDowntime.js',
-    title: '设备停机报表',
-    description:
-      '按运行日志停机时段查询设备编码、车间、起止时间与停机原因，支持筛选与 Excel 导出',
-    icon: 'Timer',
-    menu: true,
-    hub: true,
-    menuGroup: 'equipment',
     enabled: true,
   },
 ]

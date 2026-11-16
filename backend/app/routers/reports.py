@@ -36,10 +36,13 @@ from app.schemas import (
     EmployeeWorkHourFiltersResponse,
     EmployeeWorkHourReportItem,
     EmployeeWorkHourReportListResponse,
+    EquipmentDowntimeDimensionRow,
+    EquipmentDowntimeEquipmentRankItem,
     EquipmentDowntimeFiltersResponse,
     EquipmentDowntimeReportItem,
     EquipmentDowntimeReportListResponse,
     EquipmentDowntimeReportSummary,
+    EquipmentDowntimeTrendPoint,
     EquipmentOeeFilterEquipment,
     EquipmentOeeFiltersResponse,
     EquipmentOeeReportItem,
@@ -589,6 +592,17 @@ WORK_HOUR_APPROVAL_LABELS = {
     "rejected": "已驳回",
 }
 
+WORK_HOUR_SHIFT_LABELS = {
+    "day": "白班",
+    "night": "晚班",
+}
+
+
+def _work_hour_shift_label(shift_type: str | None) -> str:
+    if not shift_type:
+        return "—"
+    return WORK_HOUR_SHIFT_LABELS.get(shift_type, shift_type)
+
 
 def _work_hour_approval_label(status: str | None) -> str:
     if not status:
@@ -597,7 +611,7 @@ def _work_hour_approval_label(status: str | None) -> str:
 
 
 def _normalize_work_hour_dimension(dimension: str | None) -> str:
-    dim = (dimension or "detail").strip()
+    dim = (dimension or "employee_date").strip()
     if dim not in WORK_HOUR_DIMENSIONS:
         raise HTTPException(
             status_code=400,
@@ -643,6 +657,35 @@ def _work_hour_totals(query) -> tuple[float, float, int, int]:
     )
 
 
+def _enrich_work_hour_item(item: EmployeeWorkHourReportItem) -> EmployeeWorkHourReportItem:
+    wh = float(item.work_hours or 0)
+    ot = float(item.overtime_hours or 0)
+    wo = item.record_count if item.record_count is not None else 1
+    return item.model_copy(
+        update={
+            "work_order_count": int(wo),
+            "total_work_hours": round(wh + ot, 2),
+        }
+    )
+
+
+def _sort_work_hour_items(
+    items: list[EmployeeWorkHourReportItem],
+    *,
+    sort_by: str,
+    sort_order: str,
+) -> list[EmployeeWorkHourReportItem]:
+    reverse = sort_order != "asc"
+    if sort_by == "employee_name":
+        items.sort(key=lambda i: (i.employee_name or "", i.work_date or date.min), reverse=reverse)
+    else:
+        items.sort(
+            key=lambda i: (i.work_date or date.min, i.employee_no or ""),
+            reverse=reverse,
+        )
+    return items
+
+
 def _build_work_hour_report_items(
     query,
     dimension: str,
@@ -653,7 +696,7 @@ def _build_work_hour_report_items(
             EmployeeWorkHour.employee_no,
             EmployeeWorkHour.id.desc(),
         ).all()
-        return [
+        items = [
             EmployeeWorkHourReportItem(
                 employee_name=row.employee_name,
                 employee_no=row.employee_no,
@@ -661,12 +704,16 @@ def _build_work_hour_report_items(
                 project_name=row.project_name,
                 task_name=row.task_name,
                 work_date=row.work_date,
+                shift_type=row.shift_type,
+                shift_type_label=_work_hour_shift_label(row.shift_type),
                 work_hours=round(float(row.work_hours or 0), 2),
                 overtime_hours=round(float(row.overtime_hours or 0), 2),
                 approval_status=_work_hour_approval_label(row.approval_status),
+                record_count=1,
             )
             for row in rows
         ]
+        return [_enrich_work_hour_item(i) for i in items]
 
     if dimension == "employee":
         rows = (
@@ -686,7 +733,7 @@ def _build_work_hour_report_items(
             .order_by(EmployeeWorkHour.employee_no)
             .all()
         )
-        return [
+        items = [
             EmployeeWorkHourReportItem(
                 employee_name=row.employee_name,
                 employee_no=row.employee_no,
@@ -698,6 +745,7 @@ def _build_work_hour_report_items(
             )
             for row in rows
         ]
+        return [_enrich_work_hour_item(i) for i in items]
 
     if dimension == "employee_date":
         rows = (
@@ -706,6 +754,7 @@ def _build_work_hour_report_items(
                 EmployeeWorkHour.employee_name,
                 EmployeeWorkHour.department,
                 EmployeeWorkHour.work_date,
+                EmployeeWorkHour.shift_type,
                 func.sum(EmployeeWorkHour.work_hours).label("work_hours"),
                 func.sum(EmployeeWorkHour.overtime_hours).label("overtime_hours"),
                 func.count(EmployeeWorkHour.id).label("record_count"),
@@ -715,16 +764,19 @@ def _build_work_hour_report_items(
                 EmployeeWorkHour.employee_name,
                 EmployeeWorkHour.department,
                 EmployeeWorkHour.work_date,
+                EmployeeWorkHour.shift_type,
             )
             .order_by(EmployeeWorkHour.work_date.desc(), EmployeeWorkHour.employee_no)
             .all()
         )
-        return [
+        items = [
             EmployeeWorkHourReportItem(
                 employee_name=row.employee_name,
                 employee_no=row.employee_no,
                 department=row.department,
                 work_date=row.work_date,
+                shift_type=row.shift_type,
+                shift_type_label=_work_hour_shift_label(row.shift_type),
                 work_hours=round(float(row.work_hours or 0), 2),
                 overtime_hours=round(float(row.overtime_hours or 0), 2),
                 approval_status="汇总",
@@ -732,6 +784,7 @@ def _build_work_hour_report_items(
             )
             for row in rows
         ]
+        return [_enrich_work_hour_item(i) for i in items]
 
     if dimension == "employee_month":
         month_expr = func.strftime("%Y-%m", EmployeeWorkHour.work_date)
@@ -754,7 +807,7 @@ def _build_work_hour_report_items(
             .order_by(month_expr.desc(), EmployeeWorkHour.employee_no)
             .all()
         )
-        return [
+        items = [
             EmployeeWorkHourReportItem(
                 employee_name=row.employee_name,
                 employee_no=row.employee_no,
@@ -767,6 +820,7 @@ def _build_work_hour_report_items(
             )
             for row in rows
         ]
+        return [_enrich_work_hour_item(i) for i in items]
 
     if dimension == "project":
         rows = (
@@ -780,7 +834,7 @@ def _build_work_hour_report_items(
             .order_by(EmployeeWorkHour.project_name)
             .all()
         )
-        return [
+        items = [
             EmployeeWorkHourReportItem(
                 employee_name="—",
                 employee_no="—",
@@ -793,6 +847,7 @@ def _build_work_hour_report_items(
             )
             for row in rows
         ]
+        return [_enrich_work_hour_item(i) for i in items]
 
     if dimension == "department":
         rows = (
@@ -806,7 +861,7 @@ def _build_work_hour_report_items(
             .order_by(EmployeeWorkHour.department)
             .all()
         )
-        return [
+        items = [
             EmployeeWorkHourReportItem(
                 employee_name="—",
                 employee_no="—",
@@ -818,6 +873,7 @@ def _build_work_hour_report_items(
             )
             for row in rows
         ]
+        return [_enrich_work_hour_item(i) for i in items]
 
     raise HTTPException(status_code=400, detail="不支持的统计维度")
 
@@ -876,10 +932,9 @@ def list_employee_work_hour_filters(
     response_model=EmployeeWorkHourReportListResponse,
     summary="员工工时报表",
     description=(
-        "按日期区间、部门、员工查询 employee_work_hours 明细或汇总。"
+        "按日期区间、部门、员工查询 employee_work_hours，默认按员工×日期日汇总。"
         "统计维度：detail（明细）、employee（按员工汇总）、employee_date（按员工+日期）、"
         "employee_month（按员工+月份）、project（按项目）、department（按部门）。"
-        "响应含工时/加班合计、涉及员工数及按员工汇总列表（最多 50 条）。"
     ),
 )
 def list_employee_work_hours_report(
@@ -889,11 +944,15 @@ def list_employee_work_hours_report(
     date_to: date | None = Query(None, description="报工日期止（含）"),
     department: str | None = Query(None, description="部门"),
     employee_no: str | None = Query(None, description="员工工号"),
-    dimension: str = Query("detail", description="统计维度"),
+    dimension: str = Query("employee_date", description="统计维度"),
+    sort_by: str = Query("work_date", description="排序字段：work_date / employee_name"),
+    sort_order: str = Query("desc", description="排序方向：asc / desc"),
     _current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     dim = _normalize_work_hour_dimension(dimension)
+    sort_field = "employee_name" if sort_by == "employee_name" else "work_date"
+    sort_dir = "asc" if sort_order == "asc" else "desc"
     base_query = _apply_work_hour_filters(
         db,
         date_from=date_from,
@@ -905,6 +964,9 @@ def list_employee_work_hours_report(
         base_query
     )
     all_items = _build_work_hour_report_items(base_query, dim)
+    all_items = _sort_work_hour_items(
+        all_items, sort_by=sort_field, sort_order=sort_dir
+    )
     total = len(all_items)
     start = (page - 1) * page_size
     page_items = all_items[start : start + page_size]
@@ -918,9 +980,78 @@ def list_employee_work_hours_report(
         dimension=dim,
         work_hours_sum=work_hours_sum,
         overtime_hours_sum=overtime_hours_sum,
+        total_work_hours_sum=round(work_hours_sum + overtime_hours_sum, 2),
         employee_count=employee_count,
         record_count=record_count,
         summary_by_employee=summary_by_employee,
+    )
+
+
+@router.get(
+    "/employee-work-hours/export",
+    summary="导出员工工时报表 Excel",
+    description="按当前筛选条件导出员工×日期汇总 Excel。",
+)
+def export_employee_work_hours_report(
+    date_from: date | None = Query(None, description="报工日期起（含）"),
+    date_to: date | None = Query(None, description="报工日期止（含）"),
+    department: str | None = Query(None, description="部门"),
+    employee_no: str | None = Query(None, description="员工工号"),
+    sort_by: str = Query("work_date", description="排序字段"),
+    sort_order: str = Query("desc", description="排序方向"),
+    _current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    sort_field = "employee_name" if sort_by == "employee_name" else "work_date"
+    sort_dir = "asc" if sort_order == "asc" else "desc"
+    base_query = _apply_work_hour_filters(
+        db,
+        date_from=date_from,
+        date_to=date_to,
+        department=department,
+        employee_no=employee_no,
+    )
+    rows = _sort_work_hour_items(
+        _build_work_hour_report_items(base_query, "employee_date"),
+        sort_by=sort_field,
+        sort_order=sort_dir,
+    )
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "员工工时报表"
+    ws.append(
+        [
+            "员工",
+            "工号",
+            "部门",
+            "班别",
+            "日期",
+            "工单数",
+            "报工工时(h)",
+            "合计工时(h)",
+        ]
+    )
+    for item in rows:
+        ws.append(
+            [
+                item.employee_name,
+                item.employee_no,
+                item.department,
+                item.shift_type_label or _work_hour_shift_label(item.shift_type),
+                item.work_date.isoformat() if item.work_date else "",
+                item.work_order_count or 0,
+                item.work_hours,
+                item.total_work_hours,
+            ]
+        )
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    filename = f"employee_work_hours_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
@@ -2035,10 +2166,107 @@ def _query_equipment_downtime_logs(
 
 
 def _summarize_downtime_items(items: list[EquipmentDowntimeReportItem]) -> EquipmentDowntimeReportSummary:
+    event_count = len(items)
+    total_hours = round(sum(item.duration_hours for item in items), 2)
+    equipment_ids = {item.equipment_id for item in items}
+    avg_hours = round(total_hours / event_count, 2) if event_count else 0.0
     return EquipmentDowntimeReportSummary(
-        event_count=len(items),
-        total_duration_hours=round(sum(item.duration_hours for item in items), 2),
+        event_count=event_count,
+        total_duration_hours=total_hours,
+        avg_duration_hours=avg_hours,
+        equipment_count=len(equipment_ids),
     )
+
+
+def _aggregate_downtime_by_equipment(
+    items: list[EquipmentDowntimeReportItem],
+) -> list[EquipmentDowntimeEquipmentRankItem]:
+    buckets: dict[int, dict] = {}
+    for item in items:
+        bucket = buckets.setdefault(
+            item.equipment_id,
+            {
+                "equipment_id": item.equipment_id,
+                "equipment_code": item.equipment_code,
+                "equipment_name": item.equipment_name,
+                "workshop": item.workshop,
+                "event_count": 0,
+                "duration_hours": 0.0,
+            },
+        )
+        bucket["event_count"] += 1
+        bucket["duration_hours"] += item.duration_hours
+    rows = [
+        EquipmentDowntimeEquipmentRankItem(
+            equipment_id=data["equipment_id"],
+            equipment_code=data["equipment_code"],
+            equipment_name=data["equipment_name"],
+            workshop=data["workshop"],
+            event_count=data["event_count"],
+            duration_hours=round(data["duration_hours"], 2),
+        )
+        for data in buckets.values()
+    ]
+    rows.sort(key=lambda row: (-row.duration_hours, -row.event_count, row.equipment_code))
+    return rows
+
+
+def _build_downtime_trend(
+    items: list[EquipmentDowntimeReportItem],
+    date_from: date,
+    date_to: date,
+) -> list[EquipmentDowntimeTrendPoint]:
+    by_date: dict[date, dict[str, float | int]] = defaultdict(
+        lambda: {"event_count": 0, "duration_hours": 0.0}
+    )
+    for item in items:
+        day = item.start_at.date() if isinstance(item.start_at, datetime) else item.start_at
+        by_date[day]["event_count"] += 1
+        by_date[day]["duration_hours"] += item.duration_hours
+    points: list[EquipmentDowntimeTrendPoint] = []
+    current = date_from
+    while current <= date_to:
+        stats = by_date.get(current, {"event_count": 0, "duration_hours": 0.0})
+        points.append(
+            EquipmentDowntimeTrendPoint(
+                period_date=current,
+                event_count=int(stats["event_count"]),
+                duration_hours=round(float(stats["duration_hours"]), 2),
+            )
+        )
+        current += timedelta(days=1)
+    return points
+
+
+def _build_downtime_dimension_rows(
+    items: list[EquipmentDowntimeReportItem],
+    key_fn,
+) -> list[EquipmentDowntimeDimensionRow]:
+    buckets: dict[str, dict[str, float | int]] = defaultdict(
+        lambda: {"event_count": 0, "duration_hours": 0.0}
+    )
+    for item in items:
+        label = key_fn(item) or "未分类"
+        buckets[label]["event_count"] += 1
+        buckets[label]["duration_hours"] += item.duration_hours
+    rows = [
+        EquipmentDowntimeDimensionRow(
+            label=label,
+            event_count=int(stats["event_count"]),
+            duration_hours=round(float(stats["duration_hours"]), 2),
+        )
+        for label, stats in buckets.items()
+    ]
+    rows.sort(key=lambda row: (-row.duration_hours, -row.event_count, row.label))
+    return rows
+
+
+def _top_equipment_by_downtime(
+    equipment_rows: list[EquipmentDowntimeEquipmentRankItem],
+    *,
+    limit: int = 10,
+) -> list[EquipmentDowntimeEquipmentRankItem]:
+    return equipment_rows[:limit]
 
 
 @router.get(
@@ -2082,8 +2310,8 @@ def list_equipment_downtime_filters(
     response_model=EquipmentDowntimeReportListResponse,
     summary="设备停机报表",
     description=(
-        "按 equipment_runtime_logs 中 status=停机 的时段返回停机明细；"
-        "支持日期区间、车间、设备、停机原因筛选与分页；默认近 7 日。"
+        "按 equipment_runtime_logs 中 status=停机 汇总每台设备的停机次数与时长；"
+        "附带按日趋势、停机原因/车间分布与 Top 设备；支持筛选与分页；默认近 7 日。"
     ),
 )
 def list_equipment_downtime_report(
@@ -2098,7 +2326,7 @@ def list_equipment_downtime_report(
     db: Session = Depends(get_db),
 ):
     date_from, date_to = _normalize_equipment_oee_date_range(date_from, date_to)
-    all_items = _query_equipment_downtime_logs(
+    log_items = _query_equipment_downtime_logs(
         db,
         date_from=date_from,
         date_to=date_to,
@@ -2106,23 +2334,32 @@ def list_equipment_downtime_report(
         equipment_id=equipment_id,
         downtime_reason=downtime_reason,
     )
-    summary = _summarize_downtime_items(all_items)
-    total = len(all_items)
+    summary = _summarize_downtime_items(log_items)
+    equipment_rows = _aggregate_downtime_by_equipment(log_items)
+    total = len(equipment_rows)
     start = (page - 1) * page_size
-    items = all_items[start : start + page_size]
+    page_items = equipment_rows[start : start + page_size]
     return EquipmentDowntimeReportListResponse(
-        items=items,
+        items=page_items,
         total=total,
         page=page,
         page_size=page_size,
         summary=summary,
+        trend=_build_downtime_trend(log_items, date_from, date_to),
+        by_reason=_build_downtime_dimension_rows(
+            log_items, lambda item: item.downtime_reason or "其他"
+        ),
+        by_workshop=_build_downtime_dimension_rows(
+            log_items, lambda item: item.workshop or "未分类"
+        ),
+        top_equipment=_top_equipment_by_downtime(equipment_rows),
     )
 
 
 @router.get(
     "/equipment-downtime/export",
     summary="导出设备停机报表 Excel",
-    description="按当前筛选条件导出停机明细 Excel 文件。",
+    description="按当前筛选条件导出按设备汇总的停机报表 Excel 文件。",
 )
 def export_equipment_downtime_report(
     date_from: date | None = Query(None, description="停机开始日期起（含）"),
@@ -2134,7 +2371,7 @@ def export_equipment_downtime_report(
     db: Session = Depends(get_db),
 ):
     date_from, date_to = _normalize_equipment_oee_date_range(date_from, date_to)
-    rows = _query_equipment_downtime_logs(
+    log_items = _query_equipment_downtime_logs(
         db,
         date_from=date_from,
         date_to=date_to,
@@ -2142,34 +2379,33 @@ def export_equipment_downtime_report(
         equipment_id=equipment_id,
         downtime_reason=downtime_reason,
     )
-    summary = _summarize_downtime_items(rows)
+    summary = _summarize_downtime_items(log_items)
+    equipment_rows = _aggregate_downtime_by_equipment(log_items)
 
     wb = Workbook()
     ws = wb.active
-    ws.title = "设备停机报表"
+    ws.title = "按设备汇总"
     ws.append(["停机次数", summary.event_count])
     ws.append(["停机时长合计(h)", summary.total_duration_hours])
+    ws.append(["涉及设备台数", summary.equipment_count])
+    ws.append(["单次平均停机(h)", summary.avg_duration_hours])
     ws.append([])
     headers = [
         "设备编码",
         "设备名称",
         "车间",
-        "停机开始",
-        "停机结束",
-        "时长(h)",
-        "停机原因",
+        "停机次数",
+        "停机时长合计(h)",
     ]
     ws.append(headers)
-    for row in rows:
+    for row in equipment_rows:
         ws.append(
             [
                 row.equipment_code,
                 row.equipment_name,
                 row.workshop or "",
-                row.start_at.strftime("%Y-%m-%d %H:%M:%S"),
-                row.end_at.strftime("%Y-%m-%d %H:%M:%S") if row.end_at else "",
+                row.event_count,
                 row.duration_hours,
-                row.downtime_reason or "",
             ]
         )
 

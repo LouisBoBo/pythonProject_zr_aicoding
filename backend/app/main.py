@@ -51,6 +51,7 @@ from app.routers import (
     devices,
     equipment,
     equipment_maintenance,
+    equipment_maintenance_records,
     equipment_repair,
     inspection,
     inventory_low_stock,
@@ -59,6 +60,7 @@ from app.routers import (
     kanban_boards,
     kanban_general,
     kanban_production,
+    kanban_equipment_oee,
     messages,
     production,
     quality,
@@ -67,8 +69,10 @@ from app.routers import (
     work_order_alerts,
     work_orders,
 )
+from app.routers import employee_work_hours as employee_work_hours_router
 from app.routers import employees as employees_router
 from app.routers import material_purchases
+from app.routers import materials as materials_router
 from app.material_purchase import backfill_material_purchase_profiles
 from app.seed_analytics import backfill_recent_operational_data, seed_analytics_data
 from app.permissions import seed_rbac
@@ -1449,6 +1453,7 @@ app.include_router(work_order_alerts.router)
 app.include_router(work_orders.router)
 app.include_router(kanban_boards.router)
 app.include_router(kanban_production.router)
+app.include_router(kanban_equipment_oee.router)
 app.include_router(kanban_general.router)
 app.include_router(production.router)
 app.include_router(device_dashboard.router)
@@ -1456,13 +1461,16 @@ app.include_router(devices.router)
 app.include_router(inspection.router)
 app.include_router(equipment.router)
 app.include_router(equipment_maintenance.router)
+app.include_router(equipment_maintenance_records.router)
 app.include_router(equipment_repair.router)
 app.include_router(quality.router)
 app.include_router(reports.router)
 app.include_router(inventory_low_stock.router)
 app.include_router(warehouse.router)
 app.include_router(material_purchases.router)
+app.include_router(materials_router.router)
 app.include_router(employees_router.router)
+app.include_router(employee_work_hours_router.router)
 app.include_router(sales_orders.router)
 app.include_router(messages.router)
 app.include_router(cursor_coding.router)

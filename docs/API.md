@@ -45,6 +45,7 @@ curl -X POST http://127.0.0.1:8009/api/auth/login \
 | 生产总览 | `GET` | `/api/production/overview` | 生产概览（经典版） |
 | 生产总览 | `GET` | `/api/production/overview-v2` | 生产概览（联动版） |
 | 生产看板 | `GET` | `/api/kanban/production` | 生产看板数据 |
+| 设备 OEE 看板 | `GET` | `/api/kanban/equipment-oee` | 设备 OEE 看板 KPI 与排行 |
 | 综合看板 | `GET` | `/api/kanban/general` | 综合看板数据 |
 | 看板配置 | `GET` | `/api/kanban-boards` | 查询看板配置列表 |
 | 看板配置 | `POST` | `/api/kanban-boards` | 新建看板配置 |
