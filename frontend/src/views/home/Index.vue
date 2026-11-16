@@ -126,7 +126,7 @@
       <div class="dash-card card-split card-orange">
         <div class="split-top">
           <div class="card-header">
-            <span class="card-title light">各时段产量</span>
+            <span class="card-title light">时段产量</span>
             <span class="card-date light">{{ data.display_date }}</span>
           </div>
           <div class="split-chart-area">
