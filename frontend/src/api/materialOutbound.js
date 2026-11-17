@@ -41,3 +41,9 @@ export function createMaterialOutbound(payload) {
     body: JSON.stringify(payload),
   })
 }
+
+export function deleteMaterialOutbound(outboundId) {
+  return authFetch(`/api/work-orders/material-outbound/${outboundId}`, {
+    method: 'DELETE',
+  })
+}

@@ -87,11 +87,16 @@
         <el-table-column label="备注" min-width="120" show-overflow-tooltip>
           <template #default="{ row }">{{ row.remark || '—' }}</template>
         </el-table-column>
-        <el-table-column label="状态" width="90" align="center" fixed="right">
+        <el-table-column label="状态" width="90" align="center">
           <template #default="{ row }">
             <span class="status-tag" :class="'st-' + row.status">
               {{ statusLabel(row.status) }}
             </span>
+          </template>
+        </el-table-column>
+        <el-table-column v-if="canWrite" label="操作" width="80" align="center" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="danger" size="small" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -247,9 +252,10 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   createMaterialOutbound,
+  deleteMaterialOutbound,
   fetchMaterialOutboundList,
   fetchMaterialOutboundStockBalance,
 } from '../../api/materialOutbound'
@@ -430,6 +436,27 @@ function handleReset() {
   filters.dateRange = null
   page.value = 1
   loadList()
+}
+
+async function handleDelete(row) {
+  const revertHint =
+    row.status === 'completed' ? '已出库单据删除后将回滚对应库存扣减。' : ''
+  try {
+    await ElMessageBox.confirm(
+      `确定删除出库单「${row.outbound_no}」？${revertHint}`,
+      '删除确认',
+      {
+        type: 'warning',
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+      },
+    )
+    await deleteMaterialOutbound(row.id)
+    ElMessage.success('已删除')
+    loadList()
+  } catch (err) {
+    if (err !== 'cancel') ElMessage.error(err.message || '删除失败')
+  }
 }
 
 function openCreate() {

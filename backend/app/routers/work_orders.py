@@ -117,6 +117,7 @@ def _apply_outbound_to_inventory(
         hour=14, minute=0, second=0
     )
     remaining = outbound.quantity
+    location_deductions: list[tuple[int, int]] = []
 
     if outbound.location_id:
         bal = (
@@ -161,6 +162,8 @@ def _apply_outbound_to_inventory(
             bal.quantity -= deduct
             bal.updated_at = when
             remaining -= deduct
+            if deduct > 0:
+                location_deductions.append((loc_id, deduct))
 
         if remaining > 0:
             available = _query_available_quantity(
@@ -174,17 +177,32 @@ def _apply_outbound_to_inventory(
                 detail=f"库存不足：当前可用 {available} {outbound.unit}，出库 {outbound.quantity} {outbound.unit}",
             )
 
-    db.add(
-        InventoryTransaction(
-            material_id=outbound.material_id,
-            location_id=outbound.location_id,
-            txn_type="out",
-            quantity=outbound.quantity,
-            txn_at=when,
-            ref_no=outbound.outbound_no,
-            remark=f"生产领料出库 {outbound.material_name}",
+    remark = f"生产领料出库 {outbound.material_name}"
+    if outbound.location_id:
+        db.add(
+            InventoryTransaction(
+                material_id=outbound.material_id,
+                location_id=outbound.location_id,
+                txn_type="out",
+                quantity=outbound.quantity,
+                txn_at=when,
+                ref_no=outbound.outbound_no,
+                remark=remark,
+            )
         )
-    )
+    else:
+        for loc_id, qty in location_deductions:
+            db.add(
+                InventoryTransaction(
+                    material_id=outbound.material_id,
+                    location_id=loc_id,
+                    txn_type="out",
+                    quantity=qty,
+                    txn_at=when,
+                    ref_no=outbound.outbound_no,
+                    remark=remark,
+                )
+            )
 
     stock = (
         db.query(InventoryStock)
@@ -197,6 +215,77 @@ def _apply_outbound_to_inventory(
     if stock:
         stock.quantity = max(0, stock.quantity - outbound.quantity)
         stock.updated_at = when
+
+
+def _revert_outbound_from_inventory(
+    db: Session,
+    outbound: MaterialOutbound,
+    *,
+    txn_at: datetime | None = None,
+) -> None:
+    """删除已出库单据时回滚库存扣减。"""
+    when = txn_at or datetime.utcnow()
+
+    def _restore_location_balance(location_id: int, quantity: int) -> None:
+        bal = (
+            db.query(InventoryBalance)
+            .filter(
+                InventoryBalance.material_id == outbound.material_id,
+                InventoryBalance.location_id == location_id,
+            )
+            .first()
+        )
+        if bal:
+            bal.quantity += quantity
+            bal.updated_at = when
+        else:
+            db.add(
+                InventoryBalance(
+                    material_id=outbound.material_id,
+                    location_id=location_id,
+                    quantity=quantity,
+                    updated_at=when,
+                )
+            )
+
+    outbound_txns = (
+        db.query(InventoryTransaction)
+        .filter(
+            InventoryTransaction.ref_no == outbound.outbound_no,
+            InventoryTransaction.txn_type == "out",
+        )
+        .all()
+    )
+
+    if outbound.location_id:
+        _restore_location_balance(outbound.location_id, outbound.quantity)
+    else:
+        per_location_txns = [t for t in outbound_txns if t.location_id is not None]
+        if not per_location_txns:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "无法按库位明细回滚出库：缺少分库位扣减流水，"
+                    "请指定库位后人工处理或联系管理员"
+                ),
+            )
+        for txn in per_location_txns:
+            _restore_location_balance(txn.location_id, txn.quantity)
+
+    stock = (
+        db.query(InventoryStock)
+        .filter(
+            InventoryStock.material_id == outbound.material_id,
+            InventoryStock.warehouse_id == outbound.warehouse_id,
+        )
+        .first()
+    )
+    if stock:
+        stock.quantity += outbound.quantity
+        stock.updated_at = when
+
+    for txn in outbound_txns:
+        db.delete(txn)
 
 
 VALID_STATUS_TRANSITIONS: dict[str, set[str]] = {
@@ -451,6 +540,51 @@ def create_material_outbound(
         raise HTTPException(status_code=409, detail="出库单号冲突，请重试") from None
 
     return MaterialOutboundResponse.model_validate(outbound)
+
+
+@router.delete("/material-outbound/{outbound_id}", status_code=204, summary="删除生产领料出库")
+def delete_material_outbound(
+    outbound_id: int,
+    current_user: User = Depends(require_permissions(INVENTORY_WRITE)),
+    db: Session = Depends(get_db),
+):
+    outbound = (
+        db.query(MaterialOutbound)
+        .filter(
+            MaterialOutbound.id == outbound_id,
+            MaterialOutbound.outbound_type == OUTBOUND_TYPE_PRODUCTION_PICK,
+        )
+        .first()
+    )
+    if not outbound:
+        raise HTTPException(status_code=404, detail="出库单不存在")
+
+    outbound_no = outbound.outbound_no
+    was_completed = outbound.status == "completed"
+    try:
+        if was_completed:
+            _revert_outbound_from_inventory(db, outbound)
+        record_audit(
+            db,
+            username=current_user.username,
+            action="delete",
+            resource="material_outbound",
+            resource_id=outbound_no,
+            detail={
+                "material_code": outbound.material_code,
+                "quantity": outbound.quantity,
+                "status": outbound.status,
+                "inventory_reverted": was_completed,
+            },
+        )
+        db.delete(outbound)
+        db.commit()
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="删除出库单失败") from None
 
 
 @router.get("/{work_order_id}", response_model=WorkOrderResponse)
