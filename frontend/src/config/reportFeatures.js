@@ -49,6 +49,7 @@
 // cch-20261106-report-center-add-downtime-report-menu-route-page-api-full-implement
 // cch-20261106-report-center-remove-downtime-report-menu-route-page-only
 // cch-20261106-report-center-enable-downtime-report-menu-hub-route
+// cch-20261117-report-center-add-downtime-report-menu-route-page-api-full
 // cch-20261106-report-center-remove-downtime-report-menu-route-page-api-backend-full
 // cch-20261106-report-center-add-employee-work-hours-mvp-menu
 // cch-20261106-report-center-remove-employee-work-hours-menu-route-page-api-full-chain
@@ -83,6 +84,20 @@ export const REPORT_CATALOG = [
     description:
       '按工单报工明细查看员工、部门、日期、工单号、工序与工时，支持筛选与分页',
     icon: 'User',
+    menu: true,
+    hub: true,
+    enabled: true,
+  },
+  {
+    id: 'equipment-downtime',
+    routePath: 'equipment-downtime',
+    viewFile: 'EquipmentDowntimeReportView.vue',
+    apiFile: 'equipmentDowntime.js',
+    title: '停机报表',
+    menuTitle: '停机报表',
+    description:
+      '按设备停机时段查看设备、产线、停机时长与停机原因，支持日期、产线/设备筛选与分页',
+    icon: 'Timer',
     menu: true,
     hub: true,
     enabled: true,

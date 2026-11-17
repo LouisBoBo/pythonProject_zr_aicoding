@@ -53,6 +53,7 @@ from app.routers import (
     equipment_maintenance_records,
     equipment_repair,
     employee_work_hours_report,
+    equipment_downtime_report,
     inspection,
     inventory_low_stock,
     sales_orders,
@@ -997,6 +998,48 @@ def seed_message_data():
         db.close()
 
 
+def ensure_equipment_downtime_sample_logs():
+    """停机报表演示：若无 status=停机 的运行日志则写入少量样例（复用已有 equipment_runtime_logs 表）。"""
+    from app.models import Equipment, EquipmentRuntimeLog
+
+    inspector = inspect(engine)
+    if not inspector.has_table("equipment_runtime_logs"):
+        return
+    db = SessionLocal()
+    try:
+        existing = (
+            db.query(EquipmentRuntimeLog)
+            .filter(EquipmentRuntimeLog.status == "停机")
+            .count()
+        )
+        if existing >= 3:
+            return
+        equipment_rows = db.query(Equipment).order_by(Equipment.id).limit(6).all()
+        if not equipment_rows:
+            return
+        reasons = ["换料", "故障", "待料", "保养", "其他"]
+        now = datetime.utcnow()
+        added = 0
+        for idx, eq in enumerate(equipment_rows):
+            start_at = now - timedelta(days=idx + 1, hours=3)
+            end_at = now - timedelta(days=idx + 1, hours=1)
+            db.add(
+                EquipmentRuntimeLog(
+                    equipment_id=eq.id,
+                    start_at=start_at,
+                    end_at=end_at,
+                    status="停机",
+                    runtime_hours=2.0,
+                    downtime_reason=reasons[idx % len(reasons)],
+                )
+            )
+            added += 1
+        if added:
+            db.commit()
+    finally:
+        db.close()
+
+
 def ensure_equipment_runtime_logs_downtime_reason():
     """为 equipment_runtime_logs 补齐 downtime_reason 列，停机记录空值回填为「其他」。"""
     inspector = inspect(engine)
@@ -1153,6 +1196,7 @@ async def lifespan(app: FastAPI):
     ensure_maintenance_orders_plan_complete_date()
     ensure_equipment_repairs_repair_completed_at()
     ensure_equipment_runtime_logs_downtime_reason()
+    ensure_equipment_downtime_sample_logs()
     seed_default_user()
     seed_rbac()
     seed_inspection_data()
@@ -1238,6 +1282,7 @@ app.include_router(equipment_repair.router)
 app.include_router(quality.router)
 app.include_router(reports.router)
 app.include_router(employee_work_hours_report.router)
+app.include_router(equipment_downtime_report.router)
 app.include_router(inventory_low_stock.router)
 app.include_router(warehouse.router)
 app.include_router(material_purchases.router)

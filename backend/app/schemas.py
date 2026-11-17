@@ -844,6 +844,60 @@ class EquipmentMaintenancePlanListResponse(BaseModel):
     page_size: int
 
 
+class EquipmentMaintenanceRecordCreate(BaseModel):
+    equipment_id: int
+    maintenance_type: str = Field(default="routine", max_length=20)
+    planned_date: date
+    actual_date: date | None = None
+    next_maintenance_date: date | None = None
+    maintainer: str = Field(min_length=1, max_length=50)
+    responsible_person: str | None = Field(default=None, max_length=50)
+    maintenance_content: str = Field(min_length=1)
+    maintenance_result: str = Field(default="pending", max_length=20)
+    remark: str | None = Field(default=None, max_length=500)
+
+
+class EquipmentMaintenanceRecordUpdate(BaseModel):
+    equipment_id: int | None = None
+    maintenance_type: str | None = Field(default=None, max_length=20)
+    planned_date: date | None = None
+    actual_date: date | None = None
+    next_maintenance_date: date | None = None
+    maintainer: str | None = Field(default=None, min_length=1, max_length=50)
+    responsible_person: str | None = Field(default=None, max_length=50)
+    maintenance_content: str | None = None
+    maintenance_result: str | None = Field(default=None, max_length=20)
+    remark: str | None = Field(default=None, max_length=500)
+
+
+class EquipmentMaintenanceRecordResponse(BaseModel):
+    id: int
+    record_no: str
+    equipment_id: int
+    equipment_code: str | None = None
+    equipment_name: str | None = None
+    maintenance_type: str
+    planned_date: date
+    actual_date: date | None
+    next_maintenance_date: date | None
+    maintainer: str
+    responsible_person: str | None
+    maintenance_content: str
+    maintenance_result: str
+    remark: str | None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class EquipmentMaintenanceRecordListResponse(BaseModel):
+    items: list[EquipmentMaintenanceRecordResponse]
+    total: int
+    page: int
+    page_size: int
+
+
 class EquipmentMaintenanceOrderCreate(BaseModel):
     plan_id: int | None = None
     equipment_id: int

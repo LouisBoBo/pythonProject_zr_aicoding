@@ -1,4 +1,4 @@
-"""员工工时列表（明细填报记录）。"""
+"""员工工时列表（工单报工明细）。"""
 
 from __future__ import annotations
 
@@ -6,19 +6,13 @@ from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.auth import get_current_user
 from app.database import get_db
-from app.models import EmployeeWorkHour, User
+from app.models import User, WorkOrderLaborRecord
 
 router = APIRouter(prefix="/api/employee-work-hours", tags=["员工工时"])
-
-APPROVAL_LABELS = {
-    "pending": "待审批",
-    "approved": "已通过",
-    "rejected": "已驳回",
-}
 
 
 class EmployeeWorkHourListItem(BaseModel):
@@ -45,25 +39,20 @@ class EmployeeWorkHourListResponse(BaseModel):
     page_size: int
 
 
-def _approval_label(status: str | None) -> str:
-    if not status:
-        return "—"
-    return APPROVAL_LABELS.get(status, status)
-
-
-def _to_item(row: EmployeeWorkHour) -> EmployeeWorkHourListItem:
+def _to_item(row: WorkOrderLaborRecord) -> EmployeeWorkHourListItem:
+    order_no = row.work_order.order_no if row.work_order else "—"
     return EmployeeWorkHourListItem(
         id=row.id,
         employee_no=row.employee_no,
         employee_name=row.employee_name,
-        department=row.department,
-        project_name=row.project_name,
-        task_name=row.task_name,
+        department=row.department_name,
+        project_name=order_no,
+        task_name=row.process or "—",
         work_date=row.work_date,
-        shift_type=row.shift_type,
+        shift_type=None,
         work_hours=round(float(row.work_hours or 0), 2),
-        overtime_hours=round(float(row.overtime_hours or 0), 2),
-        approval_status=_approval_label(row.approval_status),
+        overtime_hours=0.0,
+        approval_status="已通过",
         created_at=row.created_at,
     )
 
@@ -72,7 +61,7 @@ def _to_item(row: EmployeeWorkHour) -> EmployeeWorkHourListItem:
     "",
     response_model=EmployeeWorkHourListResponse,
     summary="员工工时列表",
-    description="分页查询员工工时填报明细；员工工时列表页数据来自本接口。",
+    description="分页查询工单报工工时明细；员工工时列表页数据来自本接口。",
 )
 def list_employee_work_hours(
     page: int = Query(1, ge=1, description="页码，从 1 开始"),
@@ -83,33 +72,34 @@ def list_employee_work_hours(
     date_from: date | None = Query(None, description="报工日期起（含）"),
     date_to: date | None = Query(None, description="报工日期止（含）"),
     approval_status: str | None = Query(
-        None, description="审批状态：pending / approved / rejected"
+        None, description="审批状态：pending / approved / rejected（工单报工无审批流，仅兼容入参）"
     ),
     _current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    query = db.query(EmployeeWorkHour)
+    del approval_status  # 工单报工明细无审批状态筛选
+    query = db.query(WorkOrderLaborRecord).options(joinedload(WorkOrderLaborRecord.work_order))
     if employee_no:
-        query = query.filter(EmployeeWorkHour.employee_no.ilike(f"%{employee_no.strip()}%"))
+        query = query.filter(WorkOrderLaborRecord.employee_no.ilike(f"%{employee_no.strip()}%"))
     if employee_name:
         query = query.filter(
-            EmployeeWorkHour.employee_name.ilike(f"%{employee_name.strip()}%")
+            WorkOrderLaborRecord.employee_name.ilike(f"%{employee_name.strip()}%")
         )
     if department:
-        query = query.filter(EmployeeWorkHour.department.ilike(f"%{department.strip()}%"))
+        query = query.filter(
+            WorkOrderLaborRecord.department_name.ilike(f"%{department.strip()}%")
+        )
     if date_from:
-        query = query.filter(EmployeeWorkHour.work_date >= date_from)
+        query = query.filter(WorkOrderLaborRecord.work_date >= date_from)
     if date_to:
-        query = query.filter(EmployeeWorkHour.work_date <= date_to)
-    if approval_status:
-        query = query.filter(EmployeeWorkHour.approval_status == approval_status.strip())
+        query = query.filter(WorkOrderLaborRecord.work_date <= date_to)
 
     total = query.count()
     rows = (
         query.order_by(
-            EmployeeWorkHour.work_date.desc(),
-            EmployeeWorkHour.employee_no.asc(),
-            EmployeeWorkHour.id.desc(),
+            WorkOrderLaborRecord.work_date.desc(),
+            WorkOrderLaborRecord.employee_no.asc(),
+            WorkOrderLaborRecord.id.desc(),
         )
         .offset((page - 1) * page_size)
         .limit(page_size)
