@@ -56,6 +56,7 @@
 // cch-20261109-report-center-add-employee-work-hours-menu-route-page-api-full
 // cch-20261117-report-center-remove-employee-work-hours-menu-route-page-api-full
 // cch-20261117-employee-work-hours-remove-menu-route-page-api-backend
+// cch-20261117-report-center-remove-downtime-report-menu-route-page
 /**
  * 报表功能注册表（唯一配置入口）。
  * 开发流水线偏好见 mesDevPipelinePreferences.js；侧栏「报表中心」菜单由此表驱动。
@@ -73,20 +74,6 @@ export const REPORT_CATALOG = [
     title: '在制品报表',
     description: '按工单查看工序与在制数量（wip 口径）',
     icon: 'Document',
-    menu: true,
-    hub: true,
-    enabled: true,
-  },
-  {
-    id: 'equipment-downtime',
-    routePath: 'equipment-downtime',
-    viewFile: 'EquipmentDowntimeReportView.vue',
-    apiFile: 'equipmentDowntime.js',
-    title: '停机报表',
-    menuTitle: '停机报表',
-    description:
-      '按设备停机时段查看设备、产线、停机时长与停机原因，支持日期、产线/设备筛选与分页',
-    icon: 'Timer',
     menu: true,
     hub: true,
     enabled: true,
