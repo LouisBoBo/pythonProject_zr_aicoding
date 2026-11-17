@@ -1,39 +1,269 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { getToken } from '../api/auth'
+import AppLayout from '../layouts/AppLayout.vue'
 import LoginView from '../views/LoginView.vue'
-import HomeView from '../views/HomeView.vue'
-import PlaceholderView from '../views/PlaceholderView.vue'
-
+import HomeIndex from '../views/home/Index.vue'
+import FavoritesIndex from '../views/favorites/Index.vue'
+import WorkbenchIndex from '../views/workbench/Index.vue'
+import QualityIndex from '../views/quality/Index.vue'
+import QualityDashboardView from '../views/quality/DashboardView.vue'
+import QualityManagementIndex from '../views/quality-management/Index.vue'
+import QualityAnomaliesView from '../views/quality-management/AnomaliesView.vue'
+import ProductionIndex from '../views/production/Index.vue'
+import InspectionRecordsView from '../views/production/InspectionRecordsView.vue'
+import InspectionTasksView from '../views/production/InspectionTasksView.vue'
+import MaterialOutboundView from '../views/warehouse/MaterialOutboundView.vue'
+import EquipmentInspection from '../views/equipment/InspectionView.vue'
+import EquipmentLedgerView from '../views/equipment/EquipmentLedgerView.vue'
+import EquipmentDetailView from '../views/equipment/EquipmentDetailView.vue'
+import MaintenancePlansView from '../views/equipment/MaintenancePlansView.vue'
+import MaintenanceOrdersView from '../views/equipment/MaintenanceOrdersView.vue'
+import MaintenanceRecordsView from '../views/equipment/MaintenanceRecordsView.vue'
+import RepairManagement from '../views/equipment/RepairManagement.vue'
+import RepairDetail from '../views/equipment/RepairDetail.vue'
+import MaterialInventoryView from '../views/warehouse/MaterialInventoryView.vue'
+import InventoryLowStockAlertView from '../views/InventoryLowStockAlertView.vue'
+import MaterialInboundListView from '../views/warehouse/MaterialInboundListView.vue'
+import ReportsIndex from '../views/reports/Index.vue'
+import { buildReportRoutes } from './reportRoutes.js'
+import SettingsIndex from '../views/settings/Index.vue'
+import AuditLogsView from '../views/settings/AuditLogsView.vue'
+import MessagesIndex from '../views/messages/Index.vue'
+import HelpIndex from '../views/help/Index.vue'
+import WorkOrdersView from '../views/WorkOrdersView.vue'
+import OverdueAlertsView from '../views/work-orders/OverdueAlertsView.vue'
+import ProcessViewerView from '../views/cursor-coding/ProcessViewerView.vue'
+import WorkBuddyView from '../views/ai-assistant/WorkBuddyView.vue'
+import KanbanBoardsView from '../views/KanbanBoardsView.vue'
+import ProductionKanbanView from '../views/kanban/ProductionKanbanView.vue'
+import EquipmentOeeKanbanView from '../views/kanban/EquipmentOeeKanbanView.vue'
+import WarehouseDashboard from '../views/board/WarehouseDashboard.vue'
+import MaterialListView from '../views/materials/MaterialListView.vue'
+import MaterialPurchaseListView from '../views/materials/PurchaseListView.vue'
+import EmployeeManagementView from '../views/employees/Index.vue'
+import SalesOrdersView from '../views/sales/OrdersView.vue'
 const authRequired = { requiresAuth: true }
 
-const moduleRoutes = [
-  { path: '/work-orders/:id?', name: 'work-orders', meta: { title: '工单管理', ...authRequired } },
-  { path: '/production-plan/:id?', name: 'production-plan', meta: { title: '生产计划', ...authRequired } },
-  { path: '/quality/:id?', name: 'quality', meta: { title: '品质管理', ...authRequired } },
-  { path: '/warehouse/:id?', name: 'warehouse', meta: { title: '仓储管理', ...authRequired } },
-  { path: '/equipment/:id?', name: 'equipment', meta: { title: '设备管理', ...authRequired } },
-  { path: '/reports', name: 'reports', meta: { title: '报表中心', ...authRequired } },
+const kanbanRoutes = [
+  { path: 'production', title: '生产看板', category: 'production' },
+  { path: 'quality', title: '品质看板', category: 'quality' },
+  { path: 'equipment-oee', title: '设备 OEE', category: 'equipment' },
 ]
 
 const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/', redirect: '/home' },
     { path: '/login', name: 'login', component: LoginView },
     {
-      path: '/home',
-      name: 'home',
-      component: HomeView,
-      meta: { requiresAuth: true },
+      path: '/',
+      component: AppLayout,
+      meta: authRequired,
+      children: [
+        { path: '', redirect: '/home' },
+        { path: 'home', name: 'home', component: HomeIndex, meta: { title: '首页', ...authRequired } },
+        { path: 'favorites', name: 'favorites', component: FavoritesIndex, meta: { title: '收藏夹', ...authRequired } },
+        { path: 'workbench', name: 'workbench', component: WorkbenchIndex, meta: { title: '工作台', ...authRequired } },
+        { path: 'quality', name: 'quality', component: QualityIndex, meta: { title: '品质分析', ...authRequired } },
+        { path: 'quality/dashboard', name: 'quality-dashboard', component: QualityDashboardView, meta: { title: '品质看板', ...authRequired } },
+        { path: 'quality/:id', name: 'quality-detail', component: QualityIndex, meta: { title: '品质分析', ...authRequired } },
+        {
+          path: 'quality-management',
+          name: 'quality-management',
+          component: QualityManagementIndex,
+          meta: { title: '品质管理', ...authRequired },
+        },
+        {
+          path: 'quality-management/anomalies',
+          name: 'quality-anomalies',
+          component: QualityAnomaliesView,
+          meta: { title: '品质异常', ...authRequired },
+        },
+        {
+          path: 'quality-management/inspection-records',
+          name: 'quality-inspection-records',
+          component: InspectionRecordsView,
+          meta: { title: '检验记录', ...authRequired },
+        },
+        {
+          path: 'quality-management/inspection-tasks',
+          name: 'quality-inspection-tasks',
+          component: InspectionTasksView,
+          meta: { title: '检验任务', ...authRequired },
+        },
+        { path: 'production', name: 'production', component: ProductionIndex, meta: { title: '生产概览', ...authRequired } },
+        { path: 'production-plan/:id?', name: 'production-plan', component: ProductionIndex, meta: { title: '生产概览', ...authRequired } },
+        { path: 'equipment', redirect: '/equipment/ledger' },
+        {
+          path: 'equipment/ledger',
+          name: 'equipment-ledger',
+          component: EquipmentLedgerView,
+          meta: { title: '设备台账', ...authRequired },
+        },
+        {
+          path: 'equipment/ledger/:id',
+          name: 'equipment-ledger-detail',
+          component: EquipmentDetailView,
+          meta: { title: '设备详情', ...authRequired },
+        },
+        { path: 'equipment/inspection', name: 'equipment-inspection', component: EquipmentInspection, meta: { title: '设备点检', ...authRequired } },
+        {
+          path: 'equipment/maintenance-plans',
+          name: 'equipment-maintenance-plans',
+          component: MaintenancePlansView,
+          meta: { title: '保养计划', ...authRequired },
+        },
+        {
+          path: 'equipment/maintenance-orders',
+          name: 'equipment-maintenance-orders',
+          component: MaintenanceOrdersView,
+          meta: { title: '保养工单', ...authRequired },
+        },
+        {
+          path: 'equipment/maintenance',
+          name: 'equipment-maintenance-records',
+          component: MaintenanceRecordsView,
+          meta: { title: '设备保养', ...authRequired },
+        },
+        {
+          path: 'equipment/repairs',
+          name: 'equipment-repairs',
+          component: RepairManagement,
+          meta: { title: '维修管理', ...authRequired },
+        },
+        {
+          path: 'equipment/repairs/:id',
+          name: 'equipment-repair-detail',
+          component: RepairDetail,
+          meta: { title: '维修详情', ...authRequired },
+        },
+        { path: 'inspection/dashboard', redirect: { path: '/equipment/inspection', query: { tab: 'dashboard' } } },
+        { path: 'inspection/records', redirect: (to) => ({ path: '/equipment/inspection', query: { tab: 'records', ...to.query } }) },
+        { path: 'inspection/execute', redirect: { path: '/equipment/inspection', query: { tab: 'execute' } } },
+        { path: 'inspection/plans', redirect: { path: '/equipment/inspection', query: { tab: 'plans' } } },
+        { path: 'inspection', redirect: { path: '/equipment/inspection', query: { tab: 'dashboard' } } },
+        { path: 'warehouse', redirect: '/warehouse/inventory' },
+        {
+          path: 'warehouse/inventory',
+          name: 'warehouse-inventory',
+          component: MaterialInventoryView,
+          meta: { title: '物料库存', ...authRequired },
+        },
+        {
+          path: 'warehouse/inbound',
+          name: 'warehouse-inbound',
+          component: MaterialInboundListView,
+          meta: { title: '物料入库', ...authRequired },
+        },
+        {
+          path: 'warehouse/outbound',
+          name: 'warehouse-material-outbound',
+          component: MaterialOutboundView,
+          meta: { title: '物料出库', ...authRequired },
+        },
+        {
+          path: 'warehouse/low-stock',
+          name: 'warehouse-low-stock',
+          component: InventoryLowStockAlertView,
+          meta: { title: '低库存预警', ...authRequired },
+        },
+        { path: 'warehouse/:id', redirect: '/warehouse/inventory' },
+        { path: 'materials', redirect: '/materials/list' },
+        {
+          path: 'materials/list',
+          name: 'materials-list',
+          component: MaterialListView,
+          meta: { title: '物料列表', ...authRequired },
+        },
+        {
+          path: 'material-purchases',
+          name: 'material-purchases',
+          component: MaterialPurchaseListView,
+          meta: { title: '物料采购列表', ...authRequired },
+        },
+        {
+          path: 'employees',
+          name: 'employees',
+          component: EmployeeManagementView,
+          meta: { title: '员工列表', ...authRequired },
+        },
+        {
+          path: 'reports',
+          name: 'reports',
+          component: ReportsIndex,
+          meta: { title: '报表中心', ...authRequired },
+        },
+        ...buildReportRoutes(authRequired),
+        { path: 'reports/:pathMatch(.*)*', redirect: { name: 'reports' } },
+        { path: 'settings', name: 'settings', component: SettingsIndex, meta: { title: '系统设置', ...authRequired } },
+        {
+          path: 'settings/audit-logs',
+          name: 'settings-audit-logs',
+          component: AuditLogsView,
+          meta: { title: '操作审计', ...authRequired },
+        },
+        { path: 'messages', name: 'messages', component: MessagesIndex, meta: { title: '消息中心', ...authRequired } },
+        { path: 'messages/:tab', redirect: '/messages' },
+        { path: 'help', name: 'help', component: HelpIndex, meta: { title: '帮助文档', ...authRequired } },
+        {
+          path: 'cursor-coding',
+          name: 'cursor-coding',
+          component: ProcessViewerView,
+          meta: { title: 'Cursor 写码过程', ...authRequired },
+        },
+        {
+          path: 'ai-assistant',
+          name: 'ai-assistant',
+          component: WorkBuddyView,
+          meta: { title: 'AI工作助手', ...authRequired },
+        },
+        {
+          path: 'work-orders/new',
+          redirect: { path: '/work-orders', query: { create: '1' } },
+        },
+        {
+          path: 'work-orders/overdue',
+          name: 'work-orders-overdue',
+          component: OverdueAlertsView,
+          meta: { title: '工单逾期预警', ...authRequired },
+        },
+        {
+          path: 'work-orders/:id?',
+          name: 'work-orders',
+          component: WorkOrdersView,
+          meta: { title: '生产工单', ...authRequired },
+        },
+        {
+          path: 'sales/orders',
+          name: 'sales-orders',
+          component: SalesOrdersView,
+          meta: { title: '销售订单', ...authRequired },
+        },
+        {
+          path: 'kanban-boards/new',
+          redirect: { path: '/kanban/production', query: { create: '1' } },
+        },
+        {
+          path: 'kanban-boards/:id?',
+          redirect: '/kanban/production',
+        },
+        ...kanbanRoutes.map(({ path, title, category }) => ({
+          path: `kanban/${path}`,
+          name: `kanban-${path}`,
+          component:
+            path === 'production' ? ProductionKanbanView
+            : path === 'quality' ? QualityDashboardView
+            : path === 'equipment-oee' ? EquipmentOeeKanbanView
+            : path === 'warehouse' ? WarehouseDashboard
+            : KanbanBoardsView,
+          meta: { title, category, ...authRequired },
+        })),
+        {
+          path: 'kanban',
+          redirect: '/kanban/production',
+        },
+        { path: 'dashboard', redirect: '/home' },
+      ],
     },
-    {
-      path: '/dashboard',
-      redirect: '/home',
-    },
-    ...moduleRoutes.map((route) => ({
-      ...route,
-      component: PlaceholderView,
-    })),
   ],
 })
 
@@ -48,3 +278,4 @@ router.beforeEach((to) => {
 })
 
 export default router
+

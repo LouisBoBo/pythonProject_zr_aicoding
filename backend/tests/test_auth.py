@@ -66,7 +66,41 @@ def test_health(client):
 def test_login_success(client, test_user):
     response = client.post(
         "/api/auth/login",
-        json={"username": "testuser", "password": "password123"},
+        json={
+            "username": "testuser",
+            "password": "password123",
+            "enterprise_code": "江西中软",
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "access_token" in data
+    assert data["token_type"] == "bearer"
+
+
+def test_login_success_with_test_enterprise(client, test_user):
+    response = client.post(
+        "/api/auth/login",
+        json={
+            "username": "testuser",
+            "password": "password123",
+            "enterprise_code": "测试企业",
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "access_token" in data
+    assert data["token_type"] == "bearer"
+
+
+def test_login_success_with_full_enterprise_name(client, test_user):
+    response = client.post(
+        "/api/auth/login",
+        json={
+            "username": "testuser",
+            "password": "password123",
+            "enterprise_code": "江西中软电子有限公司",
+        },
     )
     assert response.status_code == 200
     data = response.json()
@@ -77,24 +111,76 @@ def test_login_success(client, test_user):
 def test_login_wrong_password(client, test_user):
     response = client.post(
         "/api/auth/login",
-        json={"username": "testuser", "password": "wrong"},
+        json={
+            "username": "testuser",
+            "password": "wrong",
+            "enterprise_code": "前海中软",
+        },
     )
     assert response.status_code == 401
-    assert response.json()["detail"] == "Incorrect username or password"
+    assert response.json()["detail"] == "账号或密码错误"
 
 
 def test_login_unknown_user(client):
     response = client.post(
         "/api/auth/login",
-        json={"username": "nobody", "password": "password123"},
+        json={
+            "username": "nobody",
+            "password": "password123",
+            "enterprise_code": "江西中软",
+        },
     )
     assert response.status_code == 401
+
+
+def test_login_missing_enterprise_code(client, test_user):
+    """WorkBuddy MES 等客户端常仅传 username/password。"""
+    response = client.post(
+        "/api/auth/login",
+        json={"username": "testuser", "password": "password123"},
+    )
+    assert response.status_code == 200
+    assert response.json().get("access_token")
+
+
+def test_login_empty_username_uses_mes_default(client, db_session, test_user):
+    db_session.add(
+        User(
+            username="admin",
+            hashed_password=hash_password("admin123"),
+            role="admin",
+        )
+    )
+    db_session.commit()
+
+    response = client.post(
+        "/api/auth/login",
+        json={"username": "", "password": "admin123"},
+    )
+    assert response.status_code == 200
+    assert response.json().get("access_token")
+
+
+def test_login_invalid_enterprise_code(client, test_user):
+    response = client.post(
+        "/api/auth/login",
+        json={
+            "username": "testuser",
+            "password": "password123",
+            "enterprise_code": "无效企业",
+        },
+    )
+    assert response.status_code == 422
 
 
 def test_me_with_valid_token(client, test_user):
     login_response = client.post(
         "/api/auth/login",
-        json={"username": "testuser", "password": "password123"},
+        json={
+            "username": "testuser",
+            "password": "password123",
+            "enterprise_code": "前海中软",
+        },
     )
     token = login_response.json()["access_token"]
     response = client.get(

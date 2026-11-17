@@ -1,7 +1,14 @@
+# MES 联调测试运行产物
+backend/_mes_test_done.json
+
 # Python
 __pycache__/
 *.py[cod]
 *.db
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+.pytest_cache/
 .env
 .venv/
 venv/
@@ -13,3 +20,8 @@ dist/
 # IDE
 .idea/
 .vscode/
+.dev-logs/
+frontend/.vite/
+
+# WorkBuddy 本机部署覆盖（私钥路径等，勿提交）
+.workbuddy/deploy.local.yaml

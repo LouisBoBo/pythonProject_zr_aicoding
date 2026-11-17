@@ -1,0 +1,38 @@
+[Unit]
+Description=ZR model gateway (OpenAI-compatible proxy for the desktop client)
+After=network-online.target
+Wants=network-online.target
+# MES 只用于登录校验；它没起来时网关仍可启动，登录会返回 502 login_unavailable
+After=zr-aicoding-api.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+Environment=TZ=Asia/Shanghai
+Environment=PYTHONUNBUFFERED=1
+Environment=ZR_GATEWAY_HOST=127.0.0.1
+Environment=ZR_GATEWAY_PORT=8787
+Environment=ZR_GATEWAY_DB=/var/lib/zr-gateway/gateway.sqlite3
+Environment=ZR_GATEWAY_UPSTREAM_KEY_FILE=/etc/zr-gateway/upstream.key
+Environment=ZR_GATEWAY_MES_BASE_URL=http://127.0.0.1:8009
+# 多供应商目录表：启用后按目录表里的 provider 转发；也可以写在 gateway.env 里
+# Environment=ZR_GATEWAY_CATALOG=/etc/zr-gateway/catalog.json
+# 如需覆盖：在 /etc/zr-gateway/gateway.env 里写 KEY=VALUE，一行一个
+EnvironmentFile=-/etc/zr-gateway/gateway.env
+WorkingDirectory=/www/wwwroot/DSH-MOM/gateway
+ExecStartPre=/bin/mkdir -p /var/lib/zr-gateway
+ExecStartPre=/bin/chmod 700 /var/lib/zr-gateway
+# 优先使用网关自己的 venv；没有则退回 MES 的 venv，再退回系统 python3
+ExecStart=/bin/bash -lc 'PY=""; \
+  if [ -x /www/wwwroot/DSH-MOM/gateway/.venv/bin/python ]; then PY=/www/wwwroot/DSH-MOM/gateway/.venv/bin/python; \
+  elif [ -x /www/wwwroot/zr-aicoding/backend/.venv/bin/python ]; then PY=/www/wwwroot/zr-aicoding/backend/.venv/bin/python; \
+  else PY=$(command -v python3); fi; \
+  cd /www/wwwroot/DSH-MOM/gateway && exec "$PY" -m zr_gateway'
+Restart=always
+RestartSec=3
+# 只给网关自身设限，不影响 MES
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target

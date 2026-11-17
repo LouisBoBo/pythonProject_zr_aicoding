@@ -1,0 +1,1567 @@
+from collections import defaultdict
+from datetime import date, datetime, timedelta
+from io import BytesIO
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
+from sqlalchemy import func, or_
+from sqlalchemy.orm import Session, joinedload
+
+from app.auth import get_current_user
+from app.database import get_db
+from app.models import (
+    Device,
+    Equipment,
+    EquipmentMaintenanceOrder,
+    EquipmentOeeSnapshot,
+    EquipmentOutputRecord,
+    EquipmentRepair,
+    EquipmentRuntimeLog,
+    InspectionRecord,
+    InspectionRecordItem,
+    LineCapacitySnapshot,
+    ProductionLine,
+    ProductionOutputRecord,
+    ProductionPlan,
+    User,
+    WorkOrder,
+)
+from app.schemas import (
+    DailyOutputLinesResponse,
+    DailyOutputReportItem,
+    EquipmentOeeFilterEquipment,
+    EquipmentOeeFiltersResponse,
+    EquipmentOeeReportItem,
+    EquipmentOeeReportListResponse,
+    EquipmentOeeSummary,
+    EquipmentOeeTrendPoint,
+    EquipmentInspectionFilterDevice,
+    EquipmentInspectionFiltersResponse,
+    EquipmentInspectionReportItem,
+    EquipmentInspectionReportListResponse,
+    EquipmentMaintenanceReportItem,
+    EquipmentMaintenanceReportListResponse,
+    EquipmentMaintenanceReportSummary,
+    EquipmentRepairDetail,
+    EquipmentRepairListItem,
+    EquipmentRepairListResponse,
+    EquipmentRepairPartResponse,
+    WipReportItem,
+    WipReportListResponse,
+    WipReportProcessesResponse,
+)
+from app.work_order_utils import (
+    STANDARD_PROCESSES,
+    WIP_EXCLUDED_STATUSES,
+    calc_wip_quantity,
+    derive_current_process,
+)
+from app.zr_esc_mes_query import query_pcb_production_ops
+
+router = APIRouter(prefix="/api/reports", tags=["报表中心"])
+
+WIP_METRIC = "wip"
+
+
+class DailyOutputReportItemOut(DailyOutputReportItem):
+    """日产报表响应行（扩展车间、设备、工时、生产人员）。"""
+
+    workshop: str | None = Field(default=None, description="车间")
+    device: str | None = Field(default=None, description="设备")
+    order_no: str | None = Field(default=None, description="订单号")
+    work_hours: float = Field(default=0, description="工时（小时）")
+    production_staff: str | None = Field(default=None, description="生产人员（逗号分隔）")
+
+
+class DailyOutputReportListResponseOut(BaseModel):
+    items: list[DailyOutputReportItemOut]
+    total: int
+    page: int
+    page_size: int
+    plan_qty_sum: int = Field(description="当前筛选条件下计划产量合计")
+    actual_qty_sum: int = Field(description="当前筛选条件下实际产量合计")
+    defect_qty_sum: int = Field(description="当前筛选条件下不良数量合计")
+    work_hours_sum: float = Field(default=0, description="当前筛选条件下工时合计")
+
+
+class DailyOutputFiltersResponse(BaseModel):
+    lines: list[str] = Field(description="可选产线名称列表")
+    workshops: list[str] = Field(description="可选车间名称列表")
+
+
+def _to_wip_item(wo: WorkOrder) -> WipReportItem:
+    process = wo.current_process or derive_current_process(
+        wo.status, wo.plan_quantity, wo.actual_quantity
+    )
+    return WipReportItem(
+        id=wo.id,
+        order_no=wo.order_no,
+        product_name=wo.product_name,
+        current_process=process,
+        wip_quantity=calc_wip_quantity(wo.plan_quantity, wo.actual_quantity),
+        status=wo.status,
+        start_date=wo.start_date,
+        end_date=wo.end_date,
+        plan_quantity=wo.plan_quantity,
+        actual_quantity=wo.actual_quantity,
+    )
+
+
+@router.get(
+    "/wip",
+    response_model=WipReportListResponse,
+    summary="在制品报表",
+    description=(
+        "按工单列出在制品数据（wip 口径：未完工且非取消的工单）。"
+        "在制数量 = 计划数量 - 实际数量；工序取自 work_orders.current_process，"
+        "为空时按完成进度推导（待开工为贴片）。支持按状态、工序、计划日期范围筛选。"
+    ),
+)
+def list_wip_report(
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(10, ge=1, le=100, description="每页条数"),
+    status: str | None = Query(None, description="工单状态筛选"),
+    process: str | None = Query(None, description="工序筛选"),
+    start_date: date | None = Query(None, description="计划开始日期（起）"),
+    end_date: date | None = Query(None, description="计划结束日期（止）"),
+    _current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    query = db.query(WorkOrder).filter(~WorkOrder.status.in_(WIP_EXCLUDED_STATUSES))
+
+    if status:
+        query = query.filter(WorkOrder.status == status)
+    if process:
+        query = query.filter(WorkOrder.current_process == process)
+    if start_date:
+        query = query.filter(WorkOrder.start_date >= start_date)
+    if end_date:
+        query = query.filter(WorkOrder.end_date <= end_date)
+
+    query = query.order_by(WorkOrder.start_date.desc(), WorkOrder.id.desc())
+    total = query.count()
+    rows = query.offset((page - 1) * page_size).limit(page_size).all()
+
+    return WipReportListResponse(
+        items=[_to_wip_item(wo) for wo in rows],
+        total=total,
+        page=page,
+        page_size=page_size,
+        metric=WIP_METRIC,
+    )
+
+
+@router.get(
+    "/wip/processes",
+    response_model=WipReportProcessesResponse,
+    summary="在制品报表工序选项",
+    description="返回标准工序列表，供报表筛选下拉使用。",
+)
+def list_wip_processes(
+    _current_user: User = Depends(get_current_user),
+):
+    return WipReportProcessesResponse(processes=list(STANDARD_PROCESSES))
+
+
+def _as_date(value) -> date:
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value
+    if isinstance(value, datetime):
+        return value.date()
+    return date.fromisoformat(str(value)[:10])
+
+
+def _resolve_daily_output_line_ids(
+    db: Session,
+    *,
+    production_line: str | None,
+    workshop: str | None,
+) -> list[int] | None:
+    """按产线/车间解析产线 ID；无匹配时返回空列表，未指定筛选时返回 None。"""
+    if not production_line and not workshop:
+        return None
+    query = db.query(ProductionLine)
+    if production_line:
+        query = query.filter(ProductionLine.name == production_line)
+    if workshop:
+        query = query.filter(ProductionLine.workshop == workshop)
+    line_ids = [ln.id for ln in query.all()]
+    return line_ids
+
+
+def _build_daily_output_line_device_map(
+    db: Session,
+    line_rows: list[ProductionLine],
+) -> dict[int, str | None]:
+    """按产线解析关联设备名称（名称/位置匹配；否则 LineCapacitySnapshot；无明确关联则留空）。"""
+    if not line_rows:
+        return {}
+
+    equipment_list = db.query(Equipment).order_by(Equipment.id).all()
+
+    device_map: dict[int, str | None] = {}
+    for line in line_rows:
+        name_matched = [
+            eq
+            for eq in equipment_list
+            if line.name in (eq.location or "") or line.name in (eq.name or "")
+        ]
+        if name_matched:
+            device_map[line.id] = "、".join(
+                sorted({eq.name for eq in name_matched if eq.name})
+            )
+            continue
+
+        snap = (
+            db.query(LineCapacitySnapshot)
+            .filter(LineCapacitySnapshot.production_line_id == line.id)
+            .order_by(LineCapacitySnapshot.snapshot_at.desc())
+            .first()
+        )
+        if snap and snap.station_name:
+            label = snap.station_name.replace("-主工位", "").strip()
+            device_map[line.id] = label or None
+        else:
+            # 无名称/位置匹配且无快照时留空，禁止按同车间设备序号轮询猜测
+            device_map[line.id] = None
+
+    return device_map
+
+
+def _build_daily_output_order_no_map(
+    db: Session,
+    *,
+    day_start: datetime,
+    day_end: datetime,
+    line_ids: list[int] | None,
+) -> dict[tuple[date, int], str]:
+    """按生产日期 + 产线汇总产量记录关联的工单订单号（多条以顿号拼接）。"""
+    query = (
+        db.query(
+            func.date(ProductionOutputRecord.record_at).label("report_date"),
+            ProductionOutputRecord.production_line_id,
+            WorkOrder.order_no,
+        )
+        .join(WorkOrder, ProductionOutputRecord.work_order_id == WorkOrder.id)
+        .filter(
+            ProductionOutputRecord.record_at >= day_start,
+            ProductionOutputRecord.record_at < day_end,
+            ProductionOutputRecord.work_order_id.isnot(None),
+            ProductionOutputRecord.production_line_id.isnot(None),
+        )
+    )
+    if line_ids is not None:
+        query = query.filter(ProductionOutputRecord.production_line_id.in_(line_ids))
+
+    order_map: dict[tuple[date, int], set[str]] = defaultdict(set)
+    for row in query.distinct().all():
+        report_date = _as_date(row.report_date)
+        if row.order_no:
+            order_map[(report_date, row.production_line_id)].add(row.order_no)
+
+    return {
+        key: "、".join(sorted(numbers)) for key, numbers in order_map.items() if numbers
+    }
+
+
+def _build_daily_output_rows(
+    db: Session,
+    *,
+    date_from: date,
+    date_to: date,
+    production_line: str | None,
+    workshop: str | None,
+) -> list[DailyOutputReportItemOut]:
+    """按日 / 车间 / 产线聚合产量事实与计划，并关联设备（工时与生产人员已下线，恒为 0 / 空）。"""
+    line_ids = _resolve_daily_output_line_ids(
+        db, production_line=production_line, workshop=workshop
+    )
+    if line_ids is not None and not line_ids:
+        return []
+
+    day_start = datetime.combine(date_from, datetime.min.time())
+    day_end = datetime.combine(date_to + timedelta(days=1), datetime.min.time())
+
+    out_q = (
+        db.query(
+            func.date(ProductionOutputRecord.record_at).label("report_date"),
+            ProductionOutputRecord.production_line_id,
+            func.coalesce(func.sum(ProductionOutputRecord.actual_qty), 0).label("actual_qty"),
+            func.coalesce(func.sum(ProductionOutputRecord.defect_qty), 0).label("defect_qty"),
+            func.coalesce(func.sum(ProductionOutputRecord.area_output), 0).label("area_output"),
+        )
+        .filter(
+            ProductionOutputRecord.record_at >= day_start,
+            ProductionOutputRecord.record_at < day_end,
+            ProductionOutputRecord.production_line_id.isnot(None),
+        )
+        .group_by(
+            func.date(ProductionOutputRecord.record_at),
+            ProductionOutputRecord.production_line_id,
+        )
+    )
+    if line_ids is not None:
+        out_q = out_q.filter(ProductionOutputRecord.production_line_id.in_(line_ids))
+
+    output_rows = out_q.all()
+
+    plan_q = (
+        db.query(
+            ProductionPlan.plan_date,
+            ProductionPlan.production_line_id,
+            func.coalesce(func.sum(ProductionPlan.plan_qty), 0).label("plan_qty"),
+        )
+        .filter(
+            ProductionPlan.plan_date >= date_from,
+            ProductionPlan.plan_date <= date_to,
+            ProductionPlan.production_line_id.isnot(None),
+        )
+        .group_by(
+            ProductionPlan.plan_date,
+            ProductionPlan.production_line_id,
+        )
+    )
+    if line_ids is not None:
+        plan_q = plan_q.filter(ProductionPlan.production_line_id.in_(line_ids))
+
+    plan_map: dict[tuple, int] = {}
+    for row in plan_q.all():
+        if row.production_line_id is None:
+            continue
+        plan_map[(_as_date(row.plan_date), row.production_line_id)] = int(row.plan_qty or 0)
+
+    line_rows = db.query(ProductionLine).all()
+    if line_ids is not None:
+        line_rows = [ln for ln in line_rows if ln.id in line_ids]
+    line_map = {ln.id: ln.name for ln in line_rows}
+    workshop_map = {ln.id: ln.workshop for ln in line_rows}
+    device_map = _build_daily_output_line_device_map(db, line_rows)
+    order_no_map = _build_daily_output_order_no_map(
+        db, day_start=day_start, day_end=day_end, line_ids=line_ids
+    )
+
+    keys: set[tuple] = set()
+    out_map: dict[tuple, tuple[int, int, float]] = {}
+    for row in output_rows:
+        if row.production_line_id is None:
+            continue
+        report_date = _as_date(row.report_date)
+        key = (report_date, row.production_line_id)
+        keys.add(key)
+        out_map[key] = (int(row.actual_qty or 0), int(row.defect_qty or 0), float(row.area_output or 0))
+
+    for key in plan_map:
+        if key[1] is None:
+            continue
+        keys.add(key)
+
+    items: list[DailyOutputReportItemOut] = []
+    for report_date, line_id in sorted(
+        keys, key=lambda k: (k[0], line_map.get(k[1], "") if k[1] is not None else ""), reverse=True
+    ):
+        if line_id is None:
+            continue
+        actual_qty, defect_qty, area_output = out_map.get((report_date, line_id), (0, 0, 0.0))
+        plan_qty = plan_map.get((report_date, line_id), 0)
+        line_workshop = workshop_map.get(line_id)
+        work_hours = 0.0
+        production_staff = None
+        achievement = round(actual_qty / plan_qty * 100, 2) if plan_qty else 0.0
+        defect_rate = (
+            round(defect_qty / (actual_qty + defect_qty) * 100, 2)
+            if (actual_qty + defect_qty) > 0
+            else 0.0
+        )
+        items.append(
+            DailyOutputReportItemOut(
+                report_date=report_date,
+                production_line=line_map.get(line_id) or "—",
+                product_code=None,
+                product_name=None,
+                plan_qty=plan_qty,
+                actual_qty=actual_qty,
+                defect_qty=defect_qty,
+                area_output=round(area_output, 2),
+                achievement_rate=achievement,
+                defect_rate=defect_rate,
+                workshop=line_workshop,
+                device=device_map.get(line_id),
+                order_no=order_no_map.get((report_date, line_id)),
+                work_hours=work_hours,
+                production_staff=production_staff,
+            )
+        )
+    return items
+
+
+@router.get(
+    "/daily-output",
+    response_model=DailyOutputReportListResponseOut,
+    summary="日产报表",
+    description=(
+        "按生产日期、车间、产线聚合日产量："
+        "实际/不良来自 production_output_records，计划来自 production_plans，"
+        "设备来自 equipment / line_capacity_snapshots；"
+        "工时与生产人员已下线，列恒为 0 / 空。"
+        "默认查询近 7 日（含今天）；支持单日/区间、车间、产线筛选与分页。"
+        "报表中心「日产报表」页数据来自本接口。"
+    ),
+)
+def list_daily_output_report(
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(10, ge=1, le=100, description="每页条数"),
+    date_from: date | None = Query(None, description="生产日期起（含）"),
+    date_to: date | None = Query(None, description="生产日期止（含）"),
+    production_line: str | None = Query(None, description="产线名称（精确匹配）"),
+    workshop: str | None = Query(None, description="车间名称（精确匹配）"),
+    _current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    today = date.today()
+    if date_to is None:
+        date_to = today
+    if date_from is None:
+        date_from = date_to - timedelta(days=6)
+    if date_from > date_to:
+        date_from, date_to = date_to, date_from
+
+    all_items = _build_daily_output_rows(
+        db,
+        date_from=date_from,
+        date_to=date_to,
+        production_line=production_line,
+        workshop=workshop,
+    )
+    total = len(all_items)
+    plan_sum = sum(i.plan_qty for i in all_items)
+    actual_sum = sum(i.actual_qty for i in all_items)
+    defect_sum = sum(i.defect_qty for i in all_items)
+    work_hours_sum = round(sum(i.work_hours for i in all_items), 2)
+    start = (page - 1) * page_size
+    page_items = all_items[start : start + page_size]
+
+    return DailyOutputReportListResponseOut(
+        items=page_items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        plan_qty_sum=plan_sum,
+        actual_qty_sum=actual_sum,
+        defect_qty_sum=defect_sum,
+        work_hours_sum=work_hours_sum,
+    )
+
+
+@router.get(
+    "/daily-output/filters",
+    response_model=DailyOutputFiltersResponse,
+    summary="日产报表筛选选项",
+    description="返回产线、车间名称列表，供日产报表筛选下拉使用。",
+)
+def list_daily_output_filters(
+    _current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    lines = [
+        name
+        for (name,) in db.query(ProductionLine.name).order_by(ProductionLine.id).all()
+    ]
+    workshops = sorted(
+        {
+            ws
+            for (ws,) in db.query(ProductionLine.workshop)
+            .filter(ProductionLine.workshop.isnot(None), ProductionLine.workshop != "")
+            .distinct()
+            .all()
+            if ws
+        }
+    )
+    return DailyOutputFiltersResponse(lines=lines, workshops=workshops)
+
+
+@router.get(
+    "/daily-output/lines",
+    response_model=DailyOutputLinesResponse,
+    summary="日产报表产线选项",
+    description="返回产线名称列表，供日产报表筛选下拉使用（兼容旧客户端）。",
+)
+def list_daily_output_lines(
+    _current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    lines = [
+        name
+        for (name,) in db.query(ProductionLine.name).order_by(ProductionLine.id).all()
+    ]
+    return DailyOutputLinesResponse(lines=lines)
+
+
+REPAIR_STATUS_LABELS = {
+    "pending": "待处理",
+    "in_progress": "处理中",
+    "completed": "已完成",
+    "closed": "已关闭",
+}
+
+REPAIR_URGENCY_LABELS = {
+    "low": "低",
+    "normal": "普通",
+    "high": "高",
+    "urgent": "紧急",
+}
+
+
+def _repair_status_label(status: str | None) -> str:
+    if not status:
+        return "—"
+    return REPAIR_STATUS_LABELS.get(status, status)
+
+
+def _repair_urgency_label(urgency: str | None) -> str:
+    if not urgency:
+        return "—"
+    return REPAIR_URGENCY_LABELS.get(urgency, urgency)
+
+
+def _repair_duration_minutes(repair: EquipmentRepair) -> float | None:
+    start = repair.start_time or repair.created_at
+    if not start:
+        return None
+    end = repair.repair_completed_at
+    if not end:
+        if repair.status in ("in_progress", "pending") and repair.start_time:
+            end = datetime.utcnow()
+        else:
+            return None
+    minutes = (end - start).total_seconds() / 60
+    if minutes < 0:
+        return None
+    return round(minutes, 1)
+
+
+def _format_repair_duration(minutes: float | None) -> str:
+    if minutes is None:
+        return "—"
+    total = int(round(minutes))
+    if total < 60:
+        return f"{total}分钟"
+    hours, mins = divmod(total, 60)
+    if mins == 0:
+        return f"{hours}小时"
+    return f"{hours}小时{mins}分钟"
+
+
+def _repair_to_list_item(repair: EquipmentRepair) -> EquipmentRepairListItem:
+    equipment = repair.equipment
+    return EquipmentRepairListItem(
+        id=repair.id,
+        repair_no=repair.repair_no,
+        equipment_id=repair.equipment_id,
+        equipment_code=equipment.equipment_code if equipment else None,
+        equipment_name=equipment.name if equipment else None,
+        fault_category=repair.fault_category,
+        fault_description=repair.fault_description,
+        urgency=repair.urgency,
+        status=repair.status,
+        reporter=repair.reporter,
+        repair_person=repair.repair_person,
+        fault_time=repair.created_at,
+        repair_duration_minutes=_repair_duration_minutes(repair),
+        repair_completed_at=repair.repair_completed_at,
+        created_at=repair.created_at,
+    )
+
+
+def _repair_to_detail(repair: EquipmentRepair) -> EquipmentRepairDetail:
+    equipment = repair.equipment
+    parts = [
+        EquipmentRepairPartResponse(
+            id=p.id,
+            repair_id=p.repair_id,
+            part_name=p.part_name,
+            part_spec=p.part_spec,
+            quantity=p.quantity,
+            unit=p.unit,
+            unit_price=float(p.unit_price or 0),
+        )
+        for p in (repair.parts or [])
+    ]
+    return EquipmentRepairDetail(
+        id=repair.id,
+        repair_no=repair.repair_no,
+        equipment_id=repair.equipment_id,
+        equipment_code=equipment.equipment_code if equipment else None,
+        equipment_name=equipment.name if equipment else None,
+        fault_category=repair.fault_category,
+        fault_description=repair.fault_description,
+        urgency=repair.urgency,
+        status=repair.status,
+        reporter=repair.reporter,
+        repair_person=repair.repair_person,
+        start_time=repair.start_time,
+        repair_completed_at=repair.repair_completed_at,
+        repair_description=repair.repair_description,
+        images=repair.images,
+        parts=parts,
+        created_at=repair.created_at,
+        updated_at=repair.updated_at,
+    )
+
+
+def _apply_equipment_repair_report_filters(
+    query,
+    *,
+    keyword: str | None,
+    status: str | None,
+    date_from: date | None,
+    date_to: date | None,
+    equipment_code: str | None,
+    fault_category: str | None,
+):
+    needs_equipment_join = bool(keyword or equipment_code)
+    if needs_equipment_join:
+        query = query.join(Equipment)
+    if keyword:
+        pattern = f"%{keyword}%"
+        query = query.filter(
+            (EquipmentRepair.repair_no.ilike(pattern))
+            | (Equipment.name.ilike(pattern))
+            | (Equipment.equipment_code.ilike(pattern))
+            | (EquipmentRepair.fault_description.ilike(pattern))
+        )
+    if equipment_code:
+        query = query.filter(Equipment.equipment_code == equipment_code)
+    if status:
+        query = query.filter(EquipmentRepair.status == status)
+    if fault_category:
+        query = query.filter(EquipmentRepair.fault_category == fault_category)
+    if date_from:
+        day_start = datetime.combine(date_from, datetime.min.time())
+        query = query.filter(EquipmentRepair.created_at >= day_start)
+    if date_to:
+        day_end = datetime.combine(date_to + timedelta(days=1), datetime.min.time())
+        query = query.filter(EquipmentRepair.created_at < day_end)
+    return query
+
+
+def _parts_cost_total(repair: EquipmentRepair) -> float:
+    return round(
+        sum(float(p.unit_price or 0) * int(p.quantity or 0) for p in (repair.parts or [])),
+        2,
+    )
+
+
+@router.get(
+    "/equipment-repairs",
+    response_model=EquipmentRepairListResponse,
+    summary="设备维修报表",
+    description=(
+        "报表中心设备维修列表：分页查询维修工单，"
+        "支持关键字、状态、报修日期范围、设备编号、故障分类筛选。"
+    ),
+)
+def list_equipment_repair_report(
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(10, ge=1, le=100, description="每页条数"),
+    keyword: str | None = Query(None, description="工单号/设备/故障描述关键字"),
+    status: str | None = Query(None, description="工单状态"),
+    date_from: date | None = Query(None, description="报修日期起（含）"),
+    date_to: date | None = Query(None, description="报修日期止（含）"),
+    equipment_code: str | None = Query(None, description="设备编号（精确匹配）"),
+    fault_category: str | None = Query(None, description="故障分类"),
+    _current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    query = db.query(EquipmentRepair)
+    query = _apply_equipment_repair_report_filters(
+        query,
+        keyword=keyword,
+        status=status,
+        date_from=date_from,
+        date_to=date_to,
+        equipment_code=equipment_code,
+        fault_category=fault_category,
+    )
+    query = query.order_by(EquipmentRepair.created_at.desc(), EquipmentRepair.id.desc())
+    total = query.count()
+    rows = query.offset((page - 1) * page_size).limit(page_size).all()
+    return EquipmentRepairListResponse(
+        items=[_repair_to_list_item(r) for r in rows],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@router.get(
+    "/equipment-repairs/export",
+    summary="导出设备维修报表 Excel",
+    description="按当前筛选条件导出设备维修工单 Excel 文件。",
+)
+def export_equipment_repair_report(
+    keyword: str | None = Query(None, description="工单号/设备/故障描述关键字"),
+    status: str | None = Query(None, description="工单状态"),
+    date_from: date | None = Query(None, description="报修日期起（含）"),
+    date_to: date | None = Query(None, description="报修日期止（含）"),
+    equipment_code: str | None = Query(None, description="设备编号（精确匹配）"),
+    fault_category: str | None = Query(None, description="故障分类"),
+    _current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    query = db.query(EquipmentRepair)
+    query = _apply_equipment_repair_report_filters(
+        query,
+        keyword=keyword,
+        status=status,
+        date_from=date_from,
+        date_to=date_to,
+        equipment_code=equipment_code,
+        fault_category=fault_category,
+    )
+    rows = query.order_by(EquipmentRepair.created_at.desc(), EquipmentRepair.id.desc()).all()
+
+    from openpyxl import Workbook  # 延迟导入，避免启动时 openpyxl 读盘卡住
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "设备维修报表"
+    headers = [
+        "工单号",
+        "设备编号",
+        "设备名称",
+        "故障时间",
+        "故障现象",
+        "维修人",
+        "耗时",
+        "状态",
+        "故障分类",
+        "报修人",
+        "完成时间",
+    ]
+    ws.append(headers)
+    for repair in rows:
+        equipment = repair.equipment
+        ws.append(
+            [
+                repair.repair_no,
+                equipment.equipment_code if equipment else "",
+                equipment.name if equipment else "",
+                repair.created_at.strftime("%Y-%m-%d %H:%M:%S") if repair.created_at else "",
+                repair.fault_description,
+                repair.repair_person or "",
+                _format_repair_duration(_repair_duration_minutes(repair)),
+                _repair_status_label(repair.status),
+                repair.fault_category,
+                repair.reporter,
+                repair.repair_completed_at.strftime("%Y-%m-%d %H:%M:%S")
+                if repair.repair_completed_at
+                else "",
+            ]
+        )
+
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    filename = f"equipment_repair_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get(
+    "/equipment-repairs/{repair_id}",
+    response_model=EquipmentRepairDetail,
+    summary="设备维修报表详情",
+    description="按 ID 返回维修工单详情（含配件明细），供报表中心详情查看。",
+)
+def get_equipment_repair_report_detail(
+    repair_id: int,
+    _current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    repair = (
+        db.query(EquipmentRepair)
+        .filter(EquipmentRepair.id == repair_id)
+        .first()
+    )
+    if not repair:
+        raise HTTPException(status_code=404, detail="维修工单不存在")
+    return _repair_to_detail(repair)
+
+
+def _normalize_equipment_oee_date_range(
+    date_from: date | None, date_to: date | None
+) -> tuple[date, date]:
+    today = date.today()
+    if date_to is None:
+        date_to = today
+    if date_from is None:
+        date_from = date_to - timedelta(days=6)
+    if date_from > date_to:
+        date_from, date_to = date_to, date_from
+    return date_from, date_to
+
+
+def _empty_equipment_oee_summary() -> EquipmentOeeSummary:
+    return EquipmentOeeSummary(
+        oee=0,
+        availability=0,
+        performance=0,
+        quality=0,
+        utilization_rate=0,
+        startup_rate=0,
+        downtime_hours=0,
+    )
+
+
+def _filter_equipment_for_oee_report(
+    db: Session,
+    workshop: str | None,
+    equipment_type: str | None,
+    equipment_id: int | None,
+) -> list[Equipment]:
+    query = db.query(Equipment)
+    if workshop:
+        query = query.filter(Equipment.department == workshop)
+    if equipment_type:
+        query = query.filter(Equipment.spec_model == equipment_type)
+    if equipment_id:
+        query = query.filter(Equipment.id == equipment_id)
+    return query.order_by(Equipment.equipment_code).all()
+
+
+def _build_equipment_oee_report_items(
+    db: Session,
+    date_from: date,
+    date_to: date,
+    workshop: str | None,
+    equipment_type: str | None,
+    equipment_id: int | None,
+) -> list[EquipmentOeeReportItem]:
+    equipment_list = _filter_equipment_for_oee_report(
+        db, workshop=workshop, equipment_type=equipment_type, equipment_id=equipment_id
+    )
+    if not equipment_list:
+        return []
+
+    equipment_by_id = {eq.id: eq for eq in equipment_list}
+    equipment_ids = list(equipment_by_id.keys())
+
+    oee_rows = (
+        db.query(EquipmentOeeSnapshot)
+        .filter(
+            EquipmentOeeSnapshot.equipment_id.in_(equipment_ids),
+            EquipmentOeeSnapshot.period_type == "day",
+            EquipmentOeeSnapshot.period_start >= date_from,
+            EquipmentOeeSnapshot.period_start <= date_to,
+        )
+        .all()
+    )
+    oee_map: dict[tuple[int, date], EquipmentOeeSnapshot] = {
+        (row.equipment_id, row.period_start): row for row in oee_rows
+    }
+
+    runtime_rows = (
+        db.query(EquipmentRuntimeLog)
+        .filter(
+            EquipmentRuntimeLog.equipment_id.in_(equipment_ids),
+            func.date(EquipmentRuntimeLog.start_at) >= date_from,
+            func.date(EquipmentRuntimeLog.start_at) <= date_to,
+        )
+        .all()
+    )
+    runtime_stats: dict[tuple[int, date], dict[str, float]] = defaultdict(
+        lambda: {"running": 0.0, "stop": 0.0, "total": 0.0}
+    )
+    for row in runtime_rows:
+        day = row.start_at.date()
+        key = (row.equipment_id, day)
+        hours = float(row.runtime_hours or 0)
+        runtime_stats[key]["total"] += hours
+        if row.status == "运行":
+            runtime_stats[key]["running"] += hours
+        elif row.status == "停机":
+            runtime_stats[key]["stop"] += hours
+
+    output_rows = (
+        db.query(EquipmentOutputRecord)
+        .filter(
+            EquipmentOutputRecord.equipment_id.in_(equipment_ids),
+            EquipmentOutputRecord.record_date >= date_from,
+            EquipmentOutputRecord.record_date <= date_to,
+        )
+        .all()
+    )
+    output_map: dict[tuple[int, date], int] = {
+        (row.equipment_id, row.record_date): int(row.output_qty or 0) for row in output_rows
+    }
+
+    items: list[EquipmentOeeReportItem] = []
+    current = date_from
+    while current <= date_to:
+        for eq_id, eq in equipment_by_id.items():
+            snap = oee_map.get((eq_id, current))
+            runtime = runtime_stats.get((eq_id, current), {"running": 0.0, "stop": 0.0, "total": 0.0})
+            total_hours = runtime["total"]
+            running_hours = runtime["running"]
+            stop_hours = runtime["stop"]
+            utilization_rate = round(running_hours / total_hours * 100, 2) if total_hours else 0.0
+            startup_rate = 100.0 if running_hours > 0 else 0.0
+
+            if snap:
+                availability = float(snap.availability)
+                performance = float(snap.performance)
+                quality = float(snap.quality)
+                oee = float(snap.oee)
+            else:
+                availability = performance = quality = oee = 0.0
+
+            has_data = bool(snap) or total_hours > 0 or (eq_id, current) in output_map
+            if not has_data:
+                continue
+
+            items.append(
+                EquipmentOeeReportItem(
+                    equipment_code=eq.equipment_code,
+                    equipment_name=eq.name,
+                    workshop=eq.department,
+                    equipment_type=eq.spec_model,
+                    period_date=current,
+                    oee=oee,
+                    availability=availability,
+                    performance=performance,
+                    quality=quality,
+                    utilization_rate=utilization_rate,
+                    startup_rate=startup_rate,
+                    downtime_hours=round(stop_hours, 2),
+                    output_qty=output_map.get((eq_id, current)),
+                )
+            )
+        current += timedelta(days=1)
+
+    items.sort(key=lambda item: (item.period_date, item.equipment_code), reverse=True)
+    return items
+
+
+def _average_metric(values: list[float]) -> float:
+    if not values:
+        return 0.0
+    return round(sum(values) / len(values), 2)
+
+
+def _build_equipment_oee_summary(items: list[EquipmentOeeReportItem]) -> EquipmentOeeSummary:
+    if not items:
+        return _empty_equipment_oee_summary()
+    return EquipmentOeeSummary(
+        oee=_average_metric([item.oee for item in items]),
+        availability=_average_metric([item.availability for item in items]),
+        performance=_average_metric([item.performance for item in items]),
+        quality=_average_metric([item.quality for item in items]),
+        utilization_rate=_average_metric([item.utilization_rate for item in items]),
+        startup_rate=_average_metric([item.startup_rate for item in items]),
+        downtime_hours=round(sum(item.downtime_hours for item in items), 2),
+    )
+
+
+def _build_equipment_oee_trend(items: list[EquipmentOeeReportItem]) -> list[EquipmentOeeTrendPoint]:
+    grouped: dict[date, list[EquipmentOeeReportItem]] = defaultdict(list)
+    for item in items:
+        grouped[item.period_date].append(item)
+
+    trend: list[EquipmentOeeTrendPoint] = []
+    for period_date in sorted(grouped.keys()):
+        rows = grouped[period_date]
+        trend.append(
+            EquipmentOeeTrendPoint(
+                period_date=period_date,
+                oee=_average_metric([row.oee for row in rows]),
+                availability=_average_metric([row.availability for row in rows]),
+                performance=_average_metric([row.performance for row in rows]),
+                quality=_average_metric([row.quality for row in rows]),
+                utilization_rate=_average_metric([row.utilization_rate for row in rows]),
+                startup_rate=_average_metric([row.startup_rate for row in rows]),
+                downtime_hours=round(sum(row.downtime_hours for row in rows), 2),
+            )
+        )
+    return trend
+
+
+@router.get(
+    "/equipment-oee/filters",
+    response_model=EquipmentOeeFiltersResponse,
+    summary="设备 OEE 报表筛选选项",
+    description="返回车间、设备类型、设备下拉选项。",
+)
+def list_equipment_oee_filters(
+    _current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    workshops = [
+        name
+        for (name,) in db.query(Equipment.department)
+        .filter(Equipment.department.isnot(None), Equipment.department != "")
+        .distinct()
+        .order_by(Equipment.department)
+        .all()
+    ]
+    equipment_types = [
+        name
+        for (name,) in db.query(Equipment.spec_model)
+        .filter(Equipment.spec_model.isnot(None), Equipment.spec_model != "")
+        .distinct()
+        .order_by(Equipment.spec_model)
+        .all()
+    ]
+    equipment_rows = db.query(Equipment).order_by(Equipment.equipment_code).all()
+    equipment = [
+        EquipmentOeeFilterEquipment(
+            id=eq.id,
+            equipment_code=eq.equipment_code,
+            name=eq.name,
+            workshop=eq.department,
+            equipment_type=eq.spec_model,
+        )
+        for eq in equipment_rows
+    ]
+    return EquipmentOeeFiltersResponse(
+        workshops=workshops,
+        equipment_types=equipment_types,
+        equipment=equipment,
+    )
+
+
+@router.get(
+    "/equipment-oee",
+    response_model=EquipmentOeeReportListResponse,
+    summary="设备 OEE 报表",
+    description=(
+        "按时间范围、车间、设备类型/单台设备查询 OEE 与稼动指标，"
+        "返回汇总指标、趋势序列与明细分页。"
+    ),
+)
+def list_equipment_oee_report(
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(10, ge=1, le=100, description="每页条数"),
+    date_from: date | None = Query(None, description="日期起（含）"),
+    date_to: date | None = Query(None, description="日期止（含）"),
+    workshop: str | None = Query(None, description="车间筛选"),
+    equipment_type: str | None = Query(None, description="设备类型（型号）筛选"),
+    equipment_id: int | None = Query(None, description="单台设备 ID"),
+    _current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    date_from, date_to = _normalize_equipment_oee_date_range(date_from, date_to)
+    all_items = _build_equipment_oee_report_items(
+        db,
+        date_from=date_from,
+        date_to=date_to,
+        workshop=workshop,
+        equipment_type=equipment_type,
+        equipment_id=equipment_id,
+    )
+    total = len(all_items)
+    summary = _build_equipment_oee_summary(all_items)
+    trend = _build_equipment_oee_trend(all_items)
+    start = (page - 1) * page_size
+    page_items = all_items[start : start + page_size]
+    return EquipmentOeeReportListResponse(
+        items=page_items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        summary=summary,
+        trend=trend,
+    )
+
+
+@router.get(
+    "/equipment-oee/export",
+    summary="导出设备 OEE 报表 Excel",
+    description="按当前筛选条件导出设备 OEE 明细 Excel 文件。",
+)
+def export_equipment_oee_report(
+    date_from: date | None = Query(None, description="日期起（含）"),
+    date_to: date | None = Query(None, description="日期止（含）"),
+    workshop: str | None = Query(None, description="车间筛选"),
+    equipment_type: str | None = Query(None, description="设备类型（型号）筛选"),
+    equipment_id: int | None = Query(None, description="单台设备 ID"),
+    _current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    date_from, date_to = _normalize_equipment_oee_date_range(date_from, date_to)
+    rows = _build_equipment_oee_report_items(
+        db,
+        date_from=date_from,
+        date_to=date_to,
+        workshop=workshop,
+        equipment_type=equipment_type,
+        equipment_id=equipment_id,
+    )
+
+    from openpyxl import Workbook  # 延迟导入，避免启动时 openpyxl 读盘卡住
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "设备OEE报表"
+    headers = [
+        "设备编号",
+        "设备名称",
+        "车间",
+        "设备型号",
+        "日期",
+        "OEE(%)",
+        "时间稼动率(%)",
+        "性能稼动率(%)",
+        "良率(%)",
+        "稼动率(%)",
+        "开机率(%)",
+        "停机时长(h)",
+        "产量",
+    ]
+    ws.append(headers)
+    for item in rows:
+        ws.append(
+            [
+                item.equipment_code,
+                item.equipment_name,
+                item.workshop or "",
+                item.equipment_type or "",
+                item.period_date.isoformat(),
+                item.oee,
+                item.availability,
+                item.performance,
+                item.quality,
+                item.utilization_rate,
+                item.startup_rate,
+                item.downtime_hours,
+                item.output_qty if item.output_qty is not None else "",
+            ]
+        )
+
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    filename = f"equipment_oee_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+def _inspection_item_to_report_row(
+    item: InspectionRecordItem,
+    record: InspectionRecord,
+    device: Device,
+) -> EquipmentInspectionReportItem:
+    return EquipmentInspectionReportItem(
+        id=item.id,
+        record_id=record.id,
+        device_id=device.id,
+        device_code=device.code,
+        device_name=device.name,
+        workshop=device.location,
+        item_name=item.item_name,
+        standard_value=item.standard_value,
+        actual_value=item.actual_value,
+        result=item.result,
+        inspector=record.inspector,
+        inspect_date=record.inspect_date,
+        record_status=record.status,
+        item_remark=item.remark,
+    )
+
+
+def _apply_equipment_inspection_report_filters(
+    query,
+    *,
+    date_from: date | None,
+    date_to: date | None,
+    device_id: int | None,
+    workshop: str | None,
+    status: str | None,
+):
+    if date_from:
+        query = query.filter(InspectionRecord.inspect_date >= date_from)
+    if date_to:
+        query = query.filter(InspectionRecord.inspect_date <= date_to)
+    if device_id:
+        query = query.filter(InspectionRecord.device_id == device_id)
+    if workshop:
+        query = query.filter(Device.location == workshop)
+    if status:
+        query = query.filter(InspectionRecord.status == status)
+    return query
+
+
+@router.get(
+    "/equipment-inspection/filters",
+    response_model=EquipmentInspectionFiltersResponse,
+    summary="设备点检报表筛选选项",
+    description="返回车间（设备位置）与点检设备下拉选项。",
+)
+def list_equipment_inspection_filters(
+    _current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    workshops = [
+        loc
+        for (loc,) in db.query(Device.location)
+        .filter(Device.location.isnot(None), Device.location != "")
+        .distinct()
+        .order_by(Device.location)
+        .all()
+    ]
+    device_rows = (
+        db.query(Device.id, Device.code, Device.name, Device.location)
+        .order_by(Device.code)
+        .all()
+    )
+    devices = [
+        EquipmentInspectionFilterDevice(
+            id=row_id,
+            code=code,
+            name=name,
+            workshop=location,
+        )
+        for row_id, code, name, location in device_rows
+    ]
+    return EquipmentInspectionFiltersResponse(workshops=workshops, devices=devices)
+
+
+@router.get(
+    "/equipment-inspection",
+    response_model=EquipmentInspectionReportListResponse,
+    summary="设备点检报表",
+    description=(
+        "点检明细报表：按点检项展开，支持日期区间、设备、车间（设备位置）、"
+        "点检状态筛选与分页。"
+    ),
+)
+def list_equipment_inspection_report(
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(10, ge=1, le=100, description="每页条数"),
+    date_from: date | None = Query(None, description="点检日期起（含）"),
+    date_to: date | None = Query(None, description="点检日期止（含）"),
+    device_id: int | None = Query(None, description="点检设备 ID"),
+    workshop: str | None = Query(None, description="车间（设备位置）"),
+    status: str | None = Query(None, description="点检记录状态"),
+    _current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    query = (
+        db.query(InspectionRecordItem, InspectionRecord, Device)
+        .join(InspectionRecord, InspectionRecordItem.record_id == InspectionRecord.id)
+        .join(Device, InspectionRecord.device_id == Device.id)
+    )
+    query = _apply_equipment_inspection_report_filters(
+        query,
+        date_from=date_from,
+        date_to=date_to,
+        device_id=device_id,
+        workshop=workshop,
+        status=status,
+    )
+    query = query.order_by(
+        InspectionRecord.inspect_date.desc(),
+        InspectionRecord.id.desc(),
+        InspectionRecordItem.id.asc(),
+    )
+    total = query.count()
+    rows = query.offset((page - 1) * page_size).limit(page_size).all()
+    items = [
+        _inspection_item_to_report_row(item, record, device)
+        for item, record, device in rows
+    ]
+    return EquipmentInspectionReportListResponse(
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
+
+
+def _maintenance_order_status_label(status: str) -> str:
+    labels = {
+        "pending": "待保养",
+        "in_progress": "保养中",
+        "completed": "已完成",
+        "closed": "已关闭",
+    }
+    return labels.get(status, status)
+
+
+def _apply_equipment_maintenance_report_filters(
+    query,
+    *,
+    keyword: str | None,
+    status: str | None,
+    date_from: date | None,
+    date_to: date | None,
+    equipment_code: str | None,
+):
+    needs_equipment_join = bool(keyword or equipment_code)
+    if needs_equipment_join:
+        query = query.join(Equipment)
+    if keyword:
+        pattern = f"%{keyword}%"
+        query = query.filter(
+            (EquipmentMaintenanceOrder.order_no.ilike(pattern))
+            | (Equipment.name.ilike(pattern))
+            | (Equipment.equipment_code.ilike(pattern))
+            | (EquipmentMaintenanceOrder.assignee.ilike(pattern))
+            | (EquipmentMaintenanceOrder.executor.ilike(pattern))
+        )
+    if status:
+        query = query.filter(EquipmentMaintenanceOrder.status == status)
+    if equipment_code:
+        query = query.filter(Equipment.equipment_code == equipment_code)
+    if date_from:
+        day_start = datetime.combine(date_from, datetime.min.time())
+        query = query.filter(EquipmentMaintenanceOrder.planned_start_at >= day_start)
+    if date_to:
+        day_end = datetime.combine(date_to + timedelta(days=1), datetime.min.time())
+        query = query.filter(EquipmentMaintenanceOrder.planned_start_at < day_end)
+    return query
+
+
+def _calc_maintenance_report_summary(
+    orders: list[EquipmentMaintenanceOrder],
+) -> EquipmentMaintenanceReportSummary:
+    due_total = len(orders)
+    completed = sum(1 for order in orders if order.status == "completed")
+    not_done = sum(1 for order in orders if order.status in ("pending", "in_progress"))
+    completion_rate = round(completed / due_total * 100, 1) if due_total else 0.0
+    return EquipmentMaintenanceReportSummary(
+        due_total=due_total,
+        completed=completed,
+        not_done=not_done,
+        completion_rate=completion_rate,
+    )
+
+
+def _flatten_maintenance_orders_for_report(
+    orders: list[EquipmentMaintenanceOrder],
+) -> list[EquipmentMaintenanceReportItem]:
+    rows: list[EquipmentMaintenanceReportItem] = []
+    row_id = 1
+    sorted_orders = sorted(
+        orders,
+        key=lambda order: (order.planned_start_at, order.id),
+        reverse=True,
+    )
+    for order in sorted_orders:
+        equipment = order.equipment
+        plan = order.plan
+        maintainer = order.executor or order.assignee
+        maintenance_time = (
+            order.actual_end_at or order.actual_start_at or order.planned_start_at
+        )
+        results = order.results or []
+        if results:
+            for item in results:
+                if isinstance(item, dict):
+                    item_name = item.get("item_name")
+                    item_result = item.get("result")
+                else:
+                    item_name = getattr(item, "item_name", None)
+                    item_result = getattr(item, "result", None)
+                rows.append(
+                    EquipmentMaintenanceReportItem(
+                        id=row_id,
+                        order_id=order.id,
+                        order_no=order.order_no,
+                        equipment_code=equipment.equipment_code if equipment else None,
+                        equipment_name=equipment.name if equipment else None,
+                        plan_name=plan.name if plan else None,
+                        maintainer=maintainer,
+                        maintenance_time=maintenance_time,
+                        item_name=item_name,
+                        item_result=item_result,
+                        order_status=order.status,
+                    )
+                )
+                row_id += 1
+        else:
+            rows.append(
+                EquipmentMaintenanceReportItem(
+                    id=row_id,
+                    order_id=order.id,
+                    order_no=order.order_no,
+                    equipment_code=equipment.equipment_code if equipment else None,
+                    equipment_name=equipment.name if equipment else None,
+                    plan_name=plan.name if plan else None,
+                    maintainer=maintainer,
+                    maintenance_time=maintenance_time,
+                    item_name=None,
+                    item_result=None,
+                    order_status=order.status,
+                )
+            )
+            row_id += 1
+    return rows
+
+
+def _query_equipment_maintenance_report_orders(
+    db: Session,
+    *,
+    keyword: str | None,
+    status: str | None,
+    date_from: date | None,
+    date_to: date | None,
+    equipment_code: str | None,
+) -> list[EquipmentMaintenanceOrder]:
+    query = db.query(EquipmentMaintenanceOrder).options(
+        joinedload(EquipmentMaintenanceOrder.equipment),
+        joinedload(EquipmentMaintenanceOrder.plan),
+    )
+    query = _apply_equipment_maintenance_report_filters(
+        query,
+        keyword=keyword,
+        status=status,
+        date_from=date_from,
+        date_to=date_to,
+        equipment_code=equipment_code,
+    )
+    return query.order_by(
+        EquipmentMaintenanceOrder.planned_start_at.desc(),
+        EquipmentMaintenanceOrder.id.desc(),
+    ).all()
+
+
+@router.get(
+    "/equipment-maintenance",
+    response_model=EquipmentMaintenanceReportListResponse,
+    summary="设备保养报表",
+    description=(
+        "保养计划执行情况（应保养/已保养/未保养/完成率）与保养记录明细；"
+        "支持关键字、状态、计划日期范围、设备编号筛选与分页。"
+    ),
+)
+def list_equipment_maintenance_report(
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(10, ge=1, le=100, description="每页条数"),
+    keyword: str | None = Query(None, description="工单号/设备/保养人关键字"),
+    status: str | None = Query(None, description="工单状态"),
+    date_from: date | None = Query(None, description="计划保养日期起（含）"),
+    date_to: date | None = Query(None, description="计划保养日期止（含）"),
+    equipment_code: str | None = Query(None, description="设备编号（精确匹配）"),
+    _current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    orders = _query_equipment_maintenance_report_orders(
+        db,
+        keyword=keyword,
+        status=status,
+        date_from=date_from,
+        date_to=date_to,
+        equipment_code=equipment_code,
+    )
+    summary = _calc_maintenance_report_summary(orders)
+    all_rows = _flatten_maintenance_orders_for_report(orders)
+    total = len(all_rows)
+    start = (page - 1) * page_size
+    items = all_rows[start : start + page_size]
+    return EquipmentMaintenanceReportListResponse(
+        summary=summary,
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@router.get(
+    "/equipment-maintenance/export",
+    summary="导出设备保养报表 Excel",
+    description="按当前筛选条件导出计划执行情况与保养记录明细 Excel 文件。",
+)
+def export_equipment_maintenance_report(
+    keyword: str | None = Query(None, description="工单号/设备/保养人关键字"),
+    status: str | None = Query(None, description="工单状态"),
+    date_from: date | None = Query(None, description="计划保养日期起（含）"),
+    date_to: date | None = Query(None, description="计划保养日期止（含）"),
+    equipment_code: str | None = Query(None, description="设备编号（精确匹配）"),
+    _current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    orders = _query_equipment_maintenance_report_orders(
+        db,
+        keyword=keyword,
+        status=status,
+        date_from=date_from,
+        date_to=date_to,
+        equipment_code=equipment_code,
+    )
+    summary = _calc_maintenance_report_summary(orders)
+    rows = _flatten_maintenance_orders_for_report(orders)
+
+    from openpyxl import Workbook  # 延迟导入，避免启动时 openpyxl 读盘卡住
+
+    wb = Workbook()
+    summary_ws = wb.active
+    summary_ws.title = "计划执行情况"
+    summary_ws.append(["指标", "数值"])
+    summary_ws.append(["应保养", summary.due_total])
+    summary_ws.append(["已保养", summary.completed])
+    summary_ws.append(["未保养", summary.not_done])
+    summary_ws.append(["完成率(%)", summary.completion_rate])
+
+    detail_ws = wb.create_sheet("保养记录明细")
+    detail_headers = [
+        "工单号",
+        "设备编号",
+        "设备名称",
+        "保养计划",
+        "保养人",
+        "保养时间",
+        "保养项目",
+        "结果",
+        "工单状态",
+    ]
+    detail_ws.append(detail_headers)
+    for row in rows:
+        detail_ws.append(
+            [
+                row.order_no,
+                row.equipment_code or "",
+                row.equipment_name or "",
+                row.plan_name or "",
+                row.maintainer or "",
+                row.maintenance_time.strftime("%Y-%m-%d %H:%M:%S")
+                if row.maintenance_time
+                else "",
+                row.item_name or "",
+                row.item_result or "",
+                _maintenance_order_status_label(row.order_status),
+            ]
+        )
+
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    filename = f"equipment_maintenance_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get(
+    "/pcb-production-ops",
+    summary="PCB 生产运营分析",
+    description=(
+        "MES 状态、近 7 日产出/工单趋势（按实际返回日期对齐时间窗）、"
+        "在制 10 单与异常三单核查；作废口径列为盲区，仅展示实际量（工时数据已下线）。"
+    ),
+)
+def get_pcb_production_ops_report(
+    days: int = Query(7, ge=1, le=31, description="趋势天数（默认近 7 日）"),
+    _current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return query_pcb_production_ops(db, days=days)

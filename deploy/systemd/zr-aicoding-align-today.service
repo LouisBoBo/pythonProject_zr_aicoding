@@ -1,0 +1,27 @@
+[Unit]
+Description=Align today ERP/MES business data for zr-aicoding
+After=network.target
+# 若 API 由同机 systemd 管理，对齐可在其之后执行（不强制依赖）
+Wants=zr-aicoding-api.service
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+Environment=TZ=Asia/Shanghai
+Environment=PYTHONUNBUFFERED=1
+WorkingDirectory=/www/wwwroot/zr-aicoding/backend
+# 优先使用项目 venv；若无 venv 可改为 /usr/bin/python3
+ExecStart=/bin/bash -lc 'PY=""; \
+  if [ -x /www/wwwroot/zr-aicoding/backend/.venv/bin/python ]; then PY=/www/wwwroot/zr-aicoding/backend/.venv/bin/python; \
+  elif [ -x /www/wwwroot/zr-aicoding/backend/venv/bin/python ]; then PY=/www/wwwroot/zr-aicoding/backend/venv/bin/python; \
+  else PY=$(command -v python3); fi; \
+  cd /www/wwwroot/zr-aicoding/backend && exec "$PY" scripts/align_today_business_data.py --days 1 --restart --restart-service zr-aicoding-api'
+Nice=10
+
+# 对齐失败不要拖垮其它服务
+SuccessExitStatus=0
+TimeoutStartSec=600
+
+[Install]
+WantedBy=multi-user.target

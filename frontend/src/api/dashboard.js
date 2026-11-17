@@ -1,22 +1,23 @@
-import { clearToken, getToken } from './auth'
+import { authFetch } from './http.js'
 
 export async function fetchDashboard() {
-  const token = getToken()
-  if (!token) {
-    throw new Error('未登录')
-  }
+  return authFetch('/api/dashboard', {}, '获取仪表盘数据失败')
+}
 
-  const response = await fetch('/api/dashboard', {
-    headers: { Authorization: `Bearer ${token}` },
-  })
+/** 工作台：四张汇总卡 + 待办 */
+export async function fetchWorkbench({ todoType } = {}) {
+  const params = new URLSearchParams()
+  if (todoType) params.set('todo_type', todoType)
+  const q = params.toString()
+  const url = q ? `/api/dashboard/workbench?${q}` : '/api/dashboard/workbench'
+  return authFetch(url, {}, '获取工作台数据失败')
+}
 
-  if (!response.ok) {
-    if (response.status === 401 || response.status === 403) {
-      clearToken()
-    }
-    const error = await response.json().catch(() => ({}))
-    throw new Error(error.detail || '获取仪表盘数据失败')
-  }
-
-  return response.json()
+/** 完成待办 */
+export async function completeWorkbenchTodo(todoId) {
+  return authFetch(
+    `/api/dashboard/todos/${todoId}/complete`,
+    { method: 'PATCH' },
+    '完成待办失败',
+  )
 }
