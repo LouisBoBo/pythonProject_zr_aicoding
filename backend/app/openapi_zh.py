@@ -464,17 +464,6 @@ API_ZH: dict[tuple[str, str], dict[str, str]] = {
             "默认近 7 日；支持日期范围、产线筛选与分页。报表中心「日产报表」页使用本接口。"
         ),
     },
-    ("GET", "/api/reports/employee-work-hours"): {
-        "summary": "员工工时报表",
-        "description": (
-            "按员工与报工日期汇总 work_order_labor_records 工时。"
-            "支持日期范围、部门、工号/姓名关键字筛选与分页。"
-        ),
-    },
-    ("GET", "/api/reports/employee-work-hours/filters"): {
-        "summary": "员工工时报表筛选选项",
-        "description": "返回报工明细中的部门列表，供筛选下拉使用。",
-    },
     ("GET", "/api/reports/daily-output/lines"): {
         "summary": "日产报表产线选项",
         "description": "返回产线名称列表，供日产报表筛选下拉使用。",

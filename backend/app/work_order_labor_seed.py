@@ -1,4 +1,4 @@
-"""工单报工明细种子：员工工时报表改为依赖 work_order_labor_records。"""
+"""工单报工明细（work_order_labor_records）种子数据。"""
 
 from __future__ import annotations
 

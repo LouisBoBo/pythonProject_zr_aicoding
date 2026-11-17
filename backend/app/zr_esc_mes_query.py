@@ -130,7 +130,7 @@ def query_pcb_production_ops(db: Session, *, days: int = 7) -> dict:
             "mes_status": "normal",
             "message": "使用本库工单/产出/工时/品质异常聚合",
         },
-        "data_source": "employee_work_hours + production_output_records + work_orders",
+        "data_source": "work_order_labor_records + production_output_records + work_orders",
         "time_window": {
             "requested_from": requested_from.isoformat(),
             "requested_to": requested_to.isoformat(),
