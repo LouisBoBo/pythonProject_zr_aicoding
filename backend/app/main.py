@@ -52,7 +52,6 @@ from app.routers import (
     equipment_maintenance,
     equipment_maintenance_records,
     equipment_repair,
-    equipment_downtime_report,
     inspection,
     inventory_low_stock,
     sales_orders,
@@ -1279,7 +1278,6 @@ app.include_router(equipment_maintenance_records.router)
 app.include_router(equipment_repair.router)
 app.include_router(quality.router)
 app.include_router(reports.router)
-app.include_router(equipment_downtime_report.router)
 app.include_router(inventory_low_stock.router)
 app.include_router(warehouse.router)
 app.include_router(material_purchases.router)
