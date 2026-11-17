@@ -135,6 +135,13 @@ API_ZH: dict[tuple[str, str], dict[str, str]] = {
             "达成率及流程卡明细。"
         ),
     },
+    ("GET", "/api/kanban/equipment-oee"): {
+        "summary": "设备 OEE 看板",
+        "description": (
+            "按今日/本周/本月聚合全厂时间稼动率、性能稼动率、良品率、OEE，"
+            "并返回各设备 OEE 排行及图表序列；数据来自 equipment_oee_snapshots 等事实表。"
+        ),
+    },
     # ----- 综合看板 -----
     ("GET", "/api/kanban/general"): {
         "summary": "综合看板数据",
@@ -546,6 +553,10 @@ API_ZH: dict[tuple[str, str], dict[str, str]] = {
     ("GET", "/api/employees"): {
         "summary": "员工列表",
         "description": "分页查询员工的部门、个人资料与月工资；员工列表页数据来自本接口。",
+    },
+    ("GET", "/api/employee-work-hours"): {
+        "summary": "员工工时列表",
+        "description": "分页查询员工工时填报明细；员工工时列表页数据来自本接口。",
     },
 }
 

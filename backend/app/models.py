@@ -218,6 +218,9 @@ class Equipment(Base):
     maintenance_orders: Mapped[list["EquipmentMaintenanceOrder"]] = relationship(
         back_populates="equipment"
     )
+    maintenance_records: Mapped[list["EquipmentMaintenanceRecord"]] = relationship(
+        back_populates="equipment"
+    )
     repairs: Mapped[list["EquipmentRepair"]] = relationship(
         back_populates="equipment"
     )
@@ -286,6 +289,33 @@ class EquipmentMaintenanceOrder(Base):
 
     plan: Mapped["EquipmentMaintenancePlan | None"] = relationship(back_populates="orders")
     equipment: Mapped["Equipment"] = relationship(back_populates="maintenance_orders")
+
+
+class EquipmentMaintenanceRecord(Base):
+    """设备保养记录（台账式登记，区别于计划/工单流）"""
+
+    __tablename__ = "equipment_maintenance_records"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    record_no: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
+    equipment_id: Mapped[int] = mapped_column(ForeignKey("equipment.id"), nullable=False)
+    maintenance_type: Mapped[str] = mapped_column(String(20), nullable=False, default="routine")
+    planned_date: Mapped[date] = mapped_column(Date, nullable=False)
+    actual_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    next_maintenance_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    maintainer: Mapped[str] = mapped_column(String(50), nullable=False)
+    responsible_person: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    maintenance_content: Mapped[str] = mapped_column(Text, nullable=False)
+    maintenance_result: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    remark: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    equipment: Mapped["Equipment"] = relationship(back_populates="maintenance_records")
 
 
 class EquipmentRepair(Base):

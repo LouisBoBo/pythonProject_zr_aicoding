@@ -18,6 +18,7 @@ import EquipmentLedgerView from '../views/equipment/EquipmentLedgerView.vue'
 import EquipmentDetailView from '../views/equipment/EquipmentDetailView.vue'
 import MaintenancePlansView from '../views/equipment/MaintenancePlansView.vue'
 import MaintenanceOrdersView from '../views/equipment/MaintenanceOrdersView.vue'
+import MaintenanceRecordsView from '../views/equipment/MaintenanceRecordsView.vue'
 import RepairManagement from '../views/equipment/RepairManagement.vue'
 import RepairDetail from '../views/equipment/RepairDetail.vue'
 import MaterialInventoryView from '../views/warehouse/MaterialInventoryView.vue'
@@ -35,16 +36,19 @@ import ProcessViewerView from '../views/cursor-coding/ProcessViewerView.vue'
 import WorkBuddyView from '../views/ai-assistant/WorkBuddyView.vue'
 import KanbanBoardsView from '../views/KanbanBoardsView.vue'
 import ProductionKanbanView from '../views/kanban/ProductionKanbanView.vue'
+import EquipmentOeeKanbanView from '../views/kanban/EquipmentOeeKanbanView.vue'
 import WarehouseDashboard from '../views/board/WarehouseDashboard.vue'
-import MaterialManagementView from '../views/materials/Index.vue'
+import MaterialListView from '../views/materials/MaterialListView.vue'
 import MaterialPurchaseListView from '../views/materials/PurchaseListView.vue'
 import EmployeeManagementView from '../views/employees/Index.vue'
+import EmployeeWorkHoursListView from '../views/employees/WorkHoursListView.vue'
 import SalesOrdersView from '../views/sales/OrdersView.vue'
 const authRequired = { requiresAuth: true }
 
 const kanbanRoutes = [
   { path: 'production', title: '生产看板', category: 'production' },
   { path: 'quality', title: '品质看板', category: 'quality' },
+  { path: 'equipment-oee', title: '设备 OEE', category: 'equipment' },
 ]
 
 const router = createRouter({
@@ -116,6 +120,12 @@ const router = createRouter({
           meta: { title: '保养工单', ...authRequired },
         },
         {
+          path: 'equipment/maintenance',
+          name: 'equipment-maintenance-records',
+          component: MaintenanceRecordsView,
+          meta: { title: '设备保养', ...authRequired },
+        },
+        {
           path: 'equipment/repairs',
           name: 'equipment-repairs',
           component: RepairManagement,
@@ -158,17 +168,24 @@ const router = createRouter({
           meta: { title: '低库存预警', ...authRequired },
         },
         { path: 'warehouse/:id', redirect: '/warehouse/inventory' },
+        { path: 'materials', redirect: '/materials/list' },
         {
-          path: 'materials',
-          name: 'materials',
-          component: MaterialManagementView,
-          meta: { title: '物料管理', ...authRequired },
+          path: 'materials/list',
+          name: 'materials-list',
+          component: MaterialListView,
+          meta: { title: '物料列表', ...authRequired },
         },
         {
           path: 'material-purchases',
           name: 'material-purchases',
           component: MaterialPurchaseListView,
           meta: { title: '物料采购列表', ...authRequired },
+        },
+        {
+          path: 'employees/work-hours',
+          name: 'employees-work-hours',
+          component: EmployeeWorkHoursListView,
+          meta: { title: '员工工时列表', ...authRequired },
         },
         {
           path: 'employees',
@@ -242,6 +259,7 @@ const router = createRouter({
           component:
             path === 'production' ? ProductionKanbanView
             : path === 'quality' ? QualityDashboardView
+            : path === 'equipment-oee' ? EquipmentOeeKanbanView
             : path === 'warehouse' ? WarehouseDashboard
             : KanbanBoardsView,
           meta: { title, category, ...authRequired },
@@ -267,3 +285,4 @@ router.beforeEach((to) => {
 })
 
 export default router
+

@@ -12,7 +12,7 @@
       <!-- 月产量 -->
       <div class="dash-card card-white">
         <div class="card-header">
-          <span class="card-title">月产量</span>
+          <span class="card-title">月产量（B验）</span>
         </div>
         <div class="card-body gauge-body">
           <div class="gauge-main-value">{{ formatNumber(data.monthly_output) }}</div>
@@ -77,7 +77,7 @@
     </div>
 
     <div class="dashboard-bottom">
-      <!-- 小时产量 · 绿底大卡 -->
+      <!-- 各时段产量 · 绿底大卡 -->
       <div class="dash-card card-hourly">
         <div class="hourly-header">
           <div class="hourly-icon-wrap">
@@ -85,7 +85,7 @@
           </div>
           <span class="hourly-date">{{ data.display_date }}</span>
         </div>
-        <div class="hourly-title">小时产量</div>
+        <div class="hourly-title">各小时产量</div>
         <div class="hourly-chart-wrap">
           <v-chart class="hourly-line-chart" :option="hourlyOutputOption" autoresize />
         </div>
