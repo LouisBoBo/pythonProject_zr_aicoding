@@ -41,7 +41,6 @@ import WarehouseDashboard from '../views/board/WarehouseDashboard.vue'
 import MaterialListView from '../views/materials/MaterialListView.vue'
 import MaterialPurchaseListView from '../views/materials/PurchaseListView.vue'
 import EmployeeManagementView from '../views/employees/Index.vue'
-import EmployeeWorkHoursListView from '../views/employees/WorkHoursListView.vue'
 import SalesOrdersView from '../views/sales/OrdersView.vue'
 const authRequired = { requiresAuth: true }
 
@@ -180,12 +179,6 @@ const router = createRouter({
           name: 'material-purchases',
           component: MaterialPurchaseListView,
           meta: { title: '物料采购列表', ...authRequired },
-        },
-        {
-          path: 'employees/work-hours',
-          name: 'employees-work-hours',
-          component: EmployeeWorkHoursListView,
-          meta: { title: '员工工时列表', ...authRequired },
         },
         {
           path: 'employees',

@@ -31,8 +31,6 @@ def _log(msg: str) -> None:
 def align_today(*, days: int) -> None:
     from app.database import Base, engine
     from app.main import (
-        ensure_employee_work_hours_recent_backfill,
-        ensure_employee_work_hours_shift_type,
         ensure_equipment_repairs_repair_completed_at,
         ensure_equipment_runtime_logs_downtime_reason,
         ensure_inventory_stock_backfill,
@@ -63,14 +61,10 @@ def align_today(*, days: int) -> None:
     ensure_work_orders_current_process()
     ensure_maintenance_orders_plan_complete_date()
     ensure_equipment_repairs_repair_completed_at()
-    ensure_employee_work_hours_shift_type()
     ensure_equipment_runtime_logs_downtime_reason()
 
     _log("seed_analytics_data（已有则跳过）…")
     seed_analytics_data()
-
-    _log("ensure_employee_work_hours_recent_backfill…")
-    ensure_employee_work_hours_recent_backfill()
 
     _log(f"backfill_recent_operational_data(days={days})…")
     backfill_recent_operational_data(days=days)

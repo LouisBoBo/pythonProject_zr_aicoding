@@ -554,10 +554,6 @@ API_ZH: dict[tuple[str, str], dict[str, str]] = {
         "summary": "员工列表",
         "description": "分页查询员工的部门、个人资料与月工资；员工列表页数据来自本接口。",
     },
-    ("GET", "/api/employee-work-hours"): {
-        "summary": "员工工时列表",
-        "description": "分页查询员工工时填报明细；员工工时列表页数据来自本接口。",
-    },
 }
 
 # 路由模块 tags 中文映射（用于把代码里的英文 tag 替换进 OpenAPI）

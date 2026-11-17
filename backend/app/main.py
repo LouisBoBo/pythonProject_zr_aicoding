@@ -52,7 +52,6 @@ from app.routers import (
     equipment_maintenance,
     equipment_maintenance_records,
     equipment_repair,
-    employee_work_hours_report,
     equipment_downtime_report,
     inspection,
     inventory_low_stock,
@@ -71,7 +70,6 @@ from app.routers import (
     work_orders,
 )
 from app.work_order_labor_seed import ensure_work_order_labor_records
-from app.routers import employee_work_hours as employee_work_hours_router
 from app.routers import employees as employees_router
 from app.routers import material_purchases
 from app.routers import materials as materials_router
@@ -1281,14 +1279,12 @@ app.include_router(equipment_maintenance_records.router)
 app.include_router(equipment_repair.router)
 app.include_router(quality.router)
 app.include_router(reports.router)
-app.include_router(employee_work_hours_report.router)
 app.include_router(equipment_downtime_report.router)
 app.include_router(inventory_low_stock.router)
 app.include_router(warehouse.router)
 app.include_router(material_purchases.router)
 app.include_router(materials_router.router)
 app.include_router(employees_router.router)
-app.include_router(employee_work_hours_router.router)
 app.include_router(sales_orders.router)
 app.include_router(messages.router)
 app.include_router(cursor_coding.router)

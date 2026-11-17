@@ -54,6 +54,8 @@
 // cch-20261106-report-center-add-employee-work-hours-mvp-menu
 // cch-20261106-report-center-remove-employee-work-hours-menu-route-page-api-full-chain
 // cch-20261109-report-center-add-employee-work-hours-menu-route-page-api-full
+// cch-20261117-report-center-remove-employee-work-hours-menu-route-page-api-full
+// cch-20261117-employee-work-hours-remove-menu-route-page-api-backend
 /**
  * 报表功能注册表（唯一配置入口）。
  * 开发流水线偏好见 mesDevPipelinePreferences.js；侧栏「报表中心」菜单由此表驱动。
@@ -71,19 +73,6 @@ export const REPORT_CATALOG = [
     title: '在制品报表',
     description: '按工单查看工序与在制数量（wip 口径）',
     icon: 'Document',
-    menu: true,
-    hub: true,
-    enabled: true,
-  },
-  {
-    id: 'employee-work-hours',
-    routePath: 'employee-work-hours',
-    viewFile: 'EmployeeWorkHoursReportView.vue',
-    apiFile: 'employeeWorkHours.js',
-    title: '员工工时报表',
-    description:
-      '按工单报工明细查看员工、部门、日期、工单号、工序与工时，支持筛选与分页',
-    icon: 'User',
     menu: true,
     hub: true,
     enabled: true,

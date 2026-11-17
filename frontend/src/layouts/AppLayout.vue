@@ -535,12 +535,6 @@ const menuGroups = computed(() => {
               icon: List,
               permission: 'employees.read',
             },
-            {
-              path: '/employees/work-hours',
-              title: '员工工时列表',
-              icon: Timer,
-              permission: 'employees.read',
-            },
           ],
         },
       ],
