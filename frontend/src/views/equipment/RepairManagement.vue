@@ -48,6 +48,35 @@
       <el-button type="primary" :icon="Plus" @click="openCreateDrawer">新增维修工单</el-button>
     </div>
 
+  <div class="pcb-fault-strip" v-if="pcbFaultPresets.length">
+    <span class="pcb-fault-strip__label">PCB 产线故障（16 条）</span>
+    <el-scrollbar class="pcb-fault-scroll" always>
+      <div class="pcb-fault-chips">
+        <button
+          v-for="(item, idx) in pcbFaultPresets"
+          :key="item.noSuffix + '-' + idx"
+          type="button"
+          class="pcb-fault-chip"
+          :class="{ active: filters.keyword === item.faultDescription }"
+          :title="pcbRepairOrderNo(item.noSuffix)"
+          @click="filterByPcbFault(item.faultDescription)"
+        >
+          {{ item.faultDescription }}
+        </button>
+      </div>
+    </el-scrollbar>
+    <el-button
+      v-if="filters.keyword"
+      link
+      type="primary"
+      size="small"
+      class="pcb-fault-clear"
+      @click="handleReset"
+    >
+      清除筛选
+    </el-button>
+  </div>
+
     <!-- 表格 -->
     <div class="table-wrap">
       <el-table
@@ -60,6 +89,15 @@
         <el-table-column prop="repair_no" label="工单号" min-width="150" fixed="left">
           <template #default="{ row }">
             <span class="repair-no">{{ row.repair_no }}</span>
+            <el-tag
+              v-if="isPcbDemoRepairNo(row.repair_no)"
+              size="small"
+              type="warning"
+              effect="plain"
+              class="pcb-demo-tag"
+            >
+              PCB
+            </el-tag>
           </template>
         </el-table-column>
         <el-table-column label="设备名称" min-width="160">
@@ -88,8 +126,18 @@
         <el-table-column label="维修完成时间" width="160">
           <template #default="{ row }">{{ formatDateTime(row.repair_completed_at, true) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="120" fixed="right">
+        <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
+            <el-button
+              link
+              type="warning"
+              size="small"
+              :loading="diagnoseLoadingId === row.id"
+              :disabled="diagnoseLoadingId != null && diagnoseLoadingId !== row.id"
+              @click.stop="handleAiDiagnose(row)"
+            >
+              AI诊断
+            </el-button>
             <el-button link type="primary" size="small" @click.stop="openEditDrawer(row)">编辑</el-button>
             <el-button
               v-if="row.status === 'pending'"
@@ -109,8 +157,9 @@
           v-model:current-page="page"
           v-model:page-size="pageSize"
           :total="total"
-          :page-sizes="[10, 20]"
-          layout="total, prev, pager, next"
+          :page-sizes="repairListPageSizeOptions"
+          :default-page-size="repairListDefaultPageSize"
+          layout="total, sizes, prev, pager, next"
           background
           @change="loadList"
         />
@@ -234,6 +283,22 @@
         </el-button>
       </template>
     </el-drawer>
+
+    <!-- AI 诊断结果 -->
+    <el-dialog
+      v-model="diagnoseDialogVisible"
+      title="AI 诊断结果"
+      width="640px"
+      destroy-on-close
+      class="ai-diagnose-dialog"
+      @closed="diagnoseHtml = ''"
+    >
+      <div v-if="diagnoseHtml" class="ai-diagnose-md" v-html="diagnoseHtml" />
+      <el-empty v-else description="暂无诊断内容" />
+      <template #footer>
+        <el-button type="primary" @click="diagnoseDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -248,17 +313,37 @@ import {
   createRepair,
   updateRepair,
   deleteRepair,
+  REPAIR_LIST_DEFAULT_PAGE_SIZE,
+  REPAIR_LIST_MAX_PAGE_SIZE,
 } from '../../api/equipmentRepair'
+import { requestAiDiagnose } from '../../api/equipmentAiDiagnose'
 import { fetchEquipmentList } from '../../api/equipment'
+import { usePermissions } from '../../composables/usePermissions'
+import { renderMarkdownLite } from '../../utils/markdownLite'
+import {
+  PCB_EQUIPMENT_REPAIR_ORDERS,
+  isPcbDemoRepairNo,
+  pcbRepairOrderNo,
+} from '../../config/equipmentRepairPcbOrders.js'
 
 const router = useRouter()
+const { user } = usePermissions()
+const pcbFaultPresets = PCB_EQUIPMENT_REPAIR_ORDERS
+
+// --- AI 诊断 ---
+const diagnoseLoadingId = ref(null)
+const diagnoseDialogVisible = ref(false)
+const diagnoseHtml = ref('')
 
 // --- 列表 ---
 const loading = ref(false)
 const items = ref([])
 const total = ref(0)
+const repairListDefaultPageSize = REPAIR_LIST_DEFAULT_PAGE_SIZE
+const repairListPageSizeOptions = [10, 20, 50, REPAIR_LIST_MAX_PAGE_SIZE]
+
 const page = ref(1)
-const pageSize = ref(10)
+const pageSize = ref(repairListDefaultPageSize)
 const statusFilter = ref('')
 
 const filters = reactive({ keyword: '', status: '' })
@@ -341,9 +426,16 @@ async function loadStatusCounts() {
   } catch { /* ignore */ }
 }
 
+function clampRepairListPageSize(size) {
+  const n = Number(size)
+  if (!Number.isFinite(n)) return repairListDefaultPageSize
+  return Math.min(REPAIR_LIST_MAX_PAGE_SIZE, Math.max(1, Math.trunc(n)))
+}
+
 async function loadList() {
   loading.value = true
   try {
+    pageSize.value = clampRepairListPageSize(pageSize.value)
     const res = await fetchRepairs({
       page: page.value,
       pageSize: pageSize.value,
@@ -362,7 +454,7 @@ async function loadList() {
 
 async function loadEquipmentList() {
   try {
-    const res = await fetchEquipmentList({ page: 1, pageSize: 200 })
+    const res = await fetchEquipmentList({ page: 1, pageSize: REPAIR_LIST_MAX_PAGE_SIZE })
     equipmentList.value = res.items
   } catch { /* ignore */ }
 }
@@ -382,6 +474,13 @@ function handleReset() {
 function filterByStatus(key) {
   statusFilter.value = key
   filters.status = key
+  handleSearch()
+}
+
+function filterByPcbFault(faultDescription) {
+  filters.keyword = faultDescription
+  filters.status = ''
+  statusFilter.value = ''
   handleSearch()
 }
 
@@ -499,6 +598,47 @@ async function handleDelete(row) {
   }
 }
 
+// --- AI 诊断 ---
+async function handleAiDiagnose(row) {
+  const equipmentCode = row?.equipment_code
+  const faultDesc = row?.fault_description
+  if (!equipmentCode || !faultDesc) {
+    ElMessage.warning('当前行缺少设备编号或故障描述，无法诊断')
+    return
+  }
+  if (diagnoseLoadingId.value != null) return
+
+  diagnoseLoadingId.value = row.id
+  const loadingMsg = ElMessage({
+    message: 'AI 诊断中，请稍候…',
+    duration: 0,
+    type: 'info',
+  })
+
+  try {
+    const res = await requestAiDiagnose({
+      repairId: row.id,
+      equipmentCode,
+      equipmentName: row.equipment_name || undefined,
+      faultDesc,
+      user: user.value?.username || undefined,
+    })
+
+    if (res?.code === 0 && res?.data?.diagnosis) {
+      diagnoseHtml.value = renderMarkdownLite(res.data.diagnosis)
+      diagnoseDialogVisible.value = true
+    } else {
+      ElMessage.error(res?.message || '诊断服务暂不可用')
+    }
+  } catch (err) {
+    console.error('AI诊断失败', err)
+    ElMessage.error('诊断服务暂不可用')
+  } finally {
+    loadingMsg.close()
+    diagnoseLoadingId.value = null
+  }
+}
+
 onMounted(loadList)
 </script>
 
@@ -607,6 +747,66 @@ onMounted(loadList)
   flex: 1;
 }
 
+.pcb-fault-strip {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  background: #fff;
+  border: 1px solid #d8dde3;
+  border-radius: 4px;
+}
+
+.pcb-fault-strip__label {
+  flex-shrink: 0;
+  padding-top: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #606266;
+}
+
+.pcb-fault-scroll {
+  flex: 1;
+  min-width: 0;
+}
+
+.pcb-fault-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-bottom: 2px;
+}
+
+.pcb-fault-chip {
+  border: 1px solid #dcdfe6;
+  background: #f5f7fa;
+  color: #606266;
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 4px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.pcb-fault-chip:hover,
+.pcb-fault-chip.active {
+  border-color: #e6a23c;
+  background: #fdf6ec;
+  color: #b45309;
+}
+
+.pcb-fault-clear {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.pcb-demo-tag {
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
 /* 表格 */
 .table-wrap {
   background: #fff;
@@ -689,5 +889,68 @@ onMounted(loadList)
   font-size: 12px;
   color: #909399;
   margin: 4px 0 0;
+}
+
+.ai-diagnose-md {
+  max-height: 60vh;
+  overflow: auto;
+  font-size: 14px;
+  line-height: 1.65;
+  color: #1f2937;
+  word-break: break-word;
+}
+
+.ai-diagnose-md :deep(p) {
+  margin: 0 0 10px;
+}
+
+.ai-diagnose-md :deep(ul),
+.ai-diagnose-md :deep(ol) {
+  margin: 0 0 12px 1.2em;
+  padding: 0;
+}
+
+.ai-diagnose-md :deep(li) {
+  margin: 4px 0;
+}
+
+.ai-diagnose-md :deep(h3),
+.ai-diagnose-md :deep(h4),
+.ai-diagnose-md :deep(h5) {
+  margin: 12px 0 8px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.ai-diagnose-md :deep(strong) {
+  font-weight: 600;
+  color: #111827;
+}
+
+.ai-diagnose-md :deep(code) {
+  background: #f3f4f6;
+  padding: 1px 4px;
+  border-radius: 4px;
+  font-size: 0.92em;
+}
+
+.ai-diagnose-md :deep(table.md-table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 14px;
+  font-size: 13px;
+}
+
+.ai-diagnose-md :deep(table.md-table th),
+.ai-diagnose-md :deep(table.md-table td) {
+  border: 1px solid #e5e7eb;
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.ai-diagnose-md :deep(table.md-table th) {
+  background: #f9fafb;
+  font-weight: 600;
 }
 </style>

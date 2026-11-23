@@ -45,3 +45,13 @@ export async function closeQualityAnomaly(anomalyId, { handler, resolutionNote }
 export async function fetchTopDefects(limit = 10) {
   return authFetch(`/api/quality/top-defects?limit=${limit}`)
 }
+
+/** IPQC 四维分析（工序合格率 / 日趋势 / 客户 Top / 审核时效） */
+export async function fetchIpqcAnalytics({ dateFrom, dateTo, customerTop = 10 } = {}) {
+  const params = new URLSearchParams()
+  if (dateFrom) params.set('date_from', dateFrom)
+  if (dateTo) params.set('date_to', dateTo)
+  if (customerTop) params.set('customer_top', String(customerTop))
+  const q = params.toString()
+  return authFetch(`/api/quality/ipqc-analytics${q ? `?${q}` : ''}`)
+}

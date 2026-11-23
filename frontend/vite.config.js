@@ -28,6 +28,14 @@ export default defineConfig({
           })
         },
       },
+      // AI 诊断中转服务（与 MES 主后端分离，默认本机 8000）
+      '/ai-api': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/ai-api/, ''),
+        timeout: 90000,
+        proxyTimeout: 90000,
+      },
     },
   },
 })

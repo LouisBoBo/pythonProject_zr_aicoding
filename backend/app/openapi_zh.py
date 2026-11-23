@@ -25,6 +25,7 @@ OPENAPI_TAGS: list[dict] = [
     {"name": "设备维修", "description": "维修工单与配件明细"},
     {"name": "设备看板", "description": "设备运行状态、OEE、利用率、告警与产量"},
     {"name": "品质管理", "description": "品质 KPI、趋势、不良分布与异常"},
+    {"name": "IPQC", "description": "IPQC 模板、测试项目、录入、详情与记录修改（挂接品质检验记录）"},
     {"name": "报表中心", "description": "MES 报表查询与导出"},
     {"name": "仓储看板", "description": "库存 KPI、出入库趋势、库位与物料明细"},
     {"name": "低库存预警", "description": "现存量低于安全库存的物料预警列表"},
@@ -370,6 +371,24 @@ API_ZH: dict[tuple[str, str], dict[str, str]] = {
         "description": "返回各设备今日与本周产量（`equipment_output_records`），按今日产量排序。",
     },
     # ----- 品质 -----
+    ("POST", "/api/quality/inspection-records/import"): {
+        "summary": "导入 IPQC 检验记录",
+        "description": (
+            "上传外部 IPQC 主表 Excel，写入品质管理-检验记录（过程检验）。"
+            "按 CID 幂等跳过已导入行；删除态跳过；待审核写入检验任务。"
+        ),
+    },
+    ("GET", "/api/quality/ipqc-analytics"): {
+        "summary": "IPQC 四维分析",
+        "description": (
+            "基于已导入 IPQC 检验记录返回工序合格率、日不合格率趋势、"
+            "客户不合格 TopN、待审积压与审核时效；品质分析-IPQC检验分析页数据来源。"
+        ),
+    },
+    ("GET", "/api/quality/inspection-records"): {
+        "summary": "检验记录列表",
+        "description": "分页查询已完成的品质检验记录；品质管理-检验记录页数据来源。",
+    },
     ("GET", "/api/quality/kpi"): {
         "summary": "品质 KPI",
         "description": "从品质日汇总表计算良率、不良率、报废率等核心指标。",
@@ -572,6 +591,7 @@ TAG_ZH_MAP: dict[str, str] = {
     "设备维修": "设备维修",
     "device-dashboard": "设备看板",
     "quality": "品质管理",
+    "IPQC": "IPQC",
     "reports": "报表中心",
     "warehouse": "仓储管理",
     "messages": "消息中心",
