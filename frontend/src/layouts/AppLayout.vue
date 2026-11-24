@@ -285,6 +285,7 @@ import {
   Star,
   Monitor,
   DataAnalysis,
+  TrendCharts,
   SetUp,
   Cpu,
   Box,
@@ -430,6 +431,8 @@ const menuGroups = computed(() => {
           icon: DataAnalysis,
           children: [
             { path: '/quality/ipqc-analysis', title: 'IPQC检验分析', icon: DataAnalysis },
+            { path: '/quality/copq', title: '客诉 / COPQ 金额', icon: DataAnalysis },
+            { path: '/quality/spc', title: 'SPC控制图', icon: TrendCharts },
           ],
         },
         {
@@ -581,6 +584,8 @@ const topTabs = [
   { label: '收藏夹', path: '/favorites' },
   { label: '工作台', path: '/workbench' },
   { label: 'IPQC检验分析', path: '/quality/ipqc-analysis' },
+  { label: '客诉 / COPQ 金额', path: '/quality/copq' },
+  { label: 'SPC控制图', path: '/quality/spc' },
 ]
 
 const activeTab = computed(() => {

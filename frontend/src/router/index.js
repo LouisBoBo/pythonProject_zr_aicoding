@@ -8,6 +8,8 @@ import WorkbenchIndex from '../views/workbench/Index.vue'
 import QualityIndex from '../views/quality/Index.vue'
 import QualityDashboardView from '../views/quality/DashboardView.vue'
 import IpqcAnalysisView from '../views/quality/IpqcAnalysisView.vue'
+import CopqAnalysisView from '../views/quality/CopqAnalysisView.vue'
+import SpcControlView from '../views/quality/SpcControlView.vue'
 import QualityManagementIndex from '../views/quality-management/Index.vue'
 import QualityAnomaliesView from '../views/quality-management/AnomaliesView.vue'
 import IpqcTemplatesView from '../views/quality-management/ipqc/TemplatesView.vue'
@@ -78,6 +80,18 @@ const router = createRouter({
           name: 'quality-ipqc-analysis',
           component: IpqcAnalysisView,
           meta: { title: 'IPQC检验分析', ...authRequired },
+        },
+        {
+          path: 'quality/copq',
+          name: 'quality-copq',
+          component: CopqAnalysisView,
+          meta: { title: '客诉 / COPQ 金额', ...authRequired },
+        },
+        {
+          path: 'quality/spc',
+          name: 'quality-spc',
+          component: SpcControlView,
+          meta: { title: 'SPC控制图', ...authRequired },
         },
         { path: 'quality/dashboard', name: 'quality-dashboard', component: QualityDashboardView, meta: { title: '品质看板', ...authRequired } },
         { path: 'quality/:id', name: 'quality-detail', component: QualityIndex, meta: { title: '品质分析', ...authRequired } },

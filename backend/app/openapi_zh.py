@@ -26,6 +26,8 @@ OPENAPI_TAGS: list[dict] = [
     {"name": "设备看板", "description": "设备运行状态、OEE、利用率、告警与产量"},
     {"name": "品质管理", "description": "品质 KPI、趋势、不良分布与异常"},
     {"name": "IPQC", "description": "IPQC 模板、测试项目、录入、详情与记录修改（挂接品质检验记录）"},
+    {"name": "客诉与COPQ", "description": "ERP 客户主数据、客诉台账与 COPQ 金额汇总"},
+    {"name": "SPC控制图", "description": "SPC 控制图列表、详情与控制限/过程能力计算"},
     {"name": "报表中心", "description": "MES 报表查询与导出"},
     {"name": "仓储看板", "description": "库存 KPI、出入库趋势、库位与物料明细"},
     {"name": "低库存预警", "description": "现存量低于安全库存的物料预警列表"},
@@ -412,6 +414,42 @@ API_ZH: dict[tuple[str, str], dict[str, str]] = {
     ("GET", "/api/quality/top-defects"): {
         "summary": "Top 不良项",
         "description": "返回数量最高的不良类型排行。",
+    },
+    ("GET", "/api/quality/customers"): {
+        "summary": "客户主数据列表",
+        "description": "查询 ERP 客户编码/名称等字段，供客诉录入与 COPQ 分析使用。",
+    },
+    ("GET", "/api/quality/complaints"): {
+        "summary": "客诉台账列表",
+        "description": "分页查询客诉记录，含单位成本与 COPQ 金额；客诉/COPQ 分析页明细来源。",
+    },
+    ("POST", "/api/quality/complaints"): {
+        "summary": "新建客诉记录",
+        "description": "录入客诉并按客户主数据补齐名称；COPQ=数量×单位成本（服务端计算）；需 quality.write。",
+    },
+    ("GET", "/api/quality/copq-summary"): {
+        "summary": "COPQ 金额汇总",
+        "description": "按期间汇总 COPQ 总金额、按客户/成本类别分布与按日趋势。",
+    },
+    ("GET", "/api/quality/spc/filters"): {
+        "summary": "SPC 筛选项",
+        "description": "返回工序、质量特性与图类型下拉。",
+    },
+    ("GET", "/api/quality/spc/charts"): {
+        "summary": "SPC 控制图列表",
+        "description": "查询控制图配置及最近一次 UCL/CL/LCL、Cp/Cpk 与状态。",
+    },
+    ("GET", "/api/quality/spc/charts/{chart_id}"): {
+        "summary": "SPC 控制图详情",
+        "description": "返回数据点与控制限（只读，不落库）。",
+    },
+    ("POST", "/api/quality/spc/charts/{chart_id}/recompute"): {
+        "summary": "重新计算 SPC 控制限",
+        "description": "基于测量点重算并持久化；需 quality.write 权限。",
+    },
+    ("POST", "/api/quality/spc/compute"): {
+        "summary": "临时计算 SPC 控制限",
+        "description": "对测量序列即时计算 I-MR 或 X̄-R 控制限与 Cp/Cpk，不落库（最多 5000 点）。",
     },
     # ----- 仓储 -----
     ("GET", "/api/warehouse/dashboard"): {

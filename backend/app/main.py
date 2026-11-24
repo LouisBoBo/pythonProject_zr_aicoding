@@ -64,7 +64,10 @@ from app.routers import (
     production,
     quality,
     ipqc,
+    copq,
+    spc,
     reports,
+    equipment_downtime_report,
     warehouse,
     work_order_alerts,
     work_orders,
@@ -77,6 +80,10 @@ from app.routers import materials as materials_router
 from app.material_purchase import backfill_material_purchase_profiles
 from app.seed_analytics import backfill_recent_operational_data, seed_analytics_data
 from app.permissions import seed_rbac
+from app.quality_mes_bridge import sync_quality_bridge
+from app.config import settings
+from app.copq_store import ensure_copq_schema, seed_copq_data
+from app.spc_store import ensure_spc_schema, seed_spc_data
 
 
 def seed_default_user():
@@ -998,9 +1005,11 @@ def seed_message_data():
 
 
 def ensure_equipment_downtime_sample_logs():
-    """停机报表演示：若无 status=停机 的运行日志则写入少量样例（复用已有 equipment_runtime_logs 表）。"""
+    """停机报表演示：仅非生产环境、且停机记录不足时写入少量样例。"""
     from app.models import Equipment, EquipmentRuntimeLog
 
+    if settings.app_env.strip().lower() in ("production", "prod"):
+        return
     inspector = inspect(engine)
     if not inspector.has_table("equipment_runtime_logs"):
         return
@@ -1211,6 +1220,20 @@ async def lifespan(app: FastAPI):
     ensure_work_order_labor_records()
     ensure_inventory_stock_backfill()
     ensure_material_inbound_backfill()
+    # 客诉/COPQ、SPC：建表 + 仅开发环境灌演示数据（避免生产污染）
+    ensure_copq_schema(engine)
+    ensure_spc_schema(engine)
+    if settings.app_env.strip().lower() not in ("production", "prod"):
+        db = SessionLocal()
+        try:
+            seed_copq_data(db)
+            seed_spc_data(db)
+        finally:
+            db.close()
+    try:
+        sync_quality_bridge()
+    except Exception as e:
+        print(f"[quality_mes_bridge] sync skipped: {e}")
     yield
 
 
@@ -1281,7 +1304,10 @@ app.include_router(equipment_maintenance_records.router)
 app.include_router(equipment_repair.router)
 app.include_router(quality.router)
 app.include_router(ipqc.router)
+app.include_router(copq.router)
+app.include_router(spc.router)
 app.include_router(reports.router)
+app.include_router(equipment_downtime_report.router)
 app.include_router(inventory_low_stock.router)
 app.include_router(warehouse.router)
 app.include_router(material_purchases.router)
