@@ -12,17 +12,62 @@ ERP/MES 表结构，并从现有业务表同步/补齐数据，实现品质分�
 
 from __future__ import annotations
 
-import hashlib
 import logging
+import os
 import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Iterable, Optional
+from typing import Any, Optional
 
 logger = logging.getLogger("quality_mes_bridge")
 
 # 默认库路径（相对 backend 工作目录）
 DEFAULT_DB = Path(__file__).resolve().parent.parent / "erp.db"
+
+
+def _table_cols(conn: sqlite3.Connection, table: str) -> set[str]:
+    try:
+        return {str(r[1]) for r in conn.execute(f"PRAGMA table_info([{table}])")}
+    except sqlite3.Error:
+        return set()
+
+
+def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1",
+        (table,),
+    ).fetchone()
+    return row is not None
+
+
+def _row_get(row: sqlite3.Row, key: str, default: Any = None) -> Any:
+    try:
+        if key in row.keys():
+            v = row[key]
+            return default if v is None else v
+    except Exception:
+        pass
+    return default
+
+
+def _qi_process_sql(cols: set[str], alias: str = "") -> str:
+    """生成工序名表达式，兼容仅有 process_name / process / 两者皆有。"""
+    p = f"{alias}." if alias else ""
+    has_name = "process_name" in cols
+    has_proc = "process" in cols
+    if has_name and has_proc:
+        return f"COALESCE(NULLIF({p}process_name,''), NULLIF({p}process,''))"
+    if has_name:
+        return f"NULLIF({p}process_name,'')"
+    if has_proc:
+        return f"NULLIF({p}process,'')"
+    return "NULL"
+
+
+def _qi_process_value(row: sqlite3.Row, default: str = "阻焊") -> str:
+    name = str(_row_get(row, "process_name", "") or "").strip()
+    proc = str(_row_get(row, "process", "") or "").strip()
+    return name or proc or default
 
 PCB_PROCESSES = [
     ("P-ZS", "阻焊"),
@@ -171,6 +216,17 @@ def _ensure_tables(conn: sqlite3.Connection) -> None:
             YieldRate REAL DEFAULT 0,
             SnapshotDate TEXT
         );
+
+        CREATE TABLE IF NOT EXISTS quality_inspection_record_items (
+            id INTEGER PRIMARY KEY,
+            record_id INTEGER,
+            item_name TEXT,
+            standard_value TEXT,
+            actual_value TEXT,
+            result TEXT,
+            remark TEXT
+        );
+        CREATE INDEX IF NOT EXISTS ix_qiri_record ON quality_inspection_record_items(record_id);
         """
     )
 
@@ -210,28 +266,31 @@ def _process_id_map(conn: sqlite3.Connection) -> dict[str, str]:
             (cid, name),
         )
 
+    qi_cols = _table_cols(conn, "quality_inspection_records")
+    proc_expr = _qi_process_sql(qi_cols)
+
     # 用检验记录里的 process_id + 工序名直接登记（IPQC 原始 CID）
-    for r in conn.execute(
-        """
-        SELECT DISTINCT process_id,
-               COALESCE(NULLIF(process_name,''), NULLIF(process,'')) AS pname
-        FROM quality_inspection_records
-        WHERE process_id IS NOT NULL AND process_id != ''
-        """
-    ):
-        cid = str(r["process_id"]).strip()
-        name = (r["pname"] or "").strip() or f"工序-{cid[-4:]}"
-        conn.execute(
-            "INSERT OR REPLACE INTO TBL_BD_PROCESS(CID, CPROCESS_NAME) VALUES (?, ?)",
-            (cid, name),
-        )
-        mapping[name] = cid
+    if "process_id" in qi_cols:
+        for r in conn.execute(
+            f"""
+            SELECT DISTINCT process_id, {proc_expr} AS pname
+            FROM quality_inspection_records
+            WHERE process_id IS NOT NULL AND process_id != ''
+            """
+        ):
+            cid = str(r["process_id"]).strip()
+            name = (r["pname"] or "").strip() or f"工序-{cid[-4:]}"
+            conn.execute(
+                "INSERT OR REPLACE INTO TBL_BD_PROCESS(CID, CPROCESS_NAME) VALUES (?, ?)",
+                (cid, name),
+            )
+            mapping[name] = cid
 
     rows = conn.execute(
-        """
-        SELECT DISTINCT COALESCE(NULLIF(process_name,''), NULLIF(process,'')) AS pname
+        f"""
+        SELECT DISTINCT {proc_expr} AS pname
         FROM quality_inspection_records
-        WHERE COALESCE(NULLIF(process_name,''), NULLIF(process,'')) IS NOT NULL
+        WHERE {proc_expr} IS NOT NULL
         """
     ).fetchall()
     for r in rows:
@@ -333,9 +392,6 @@ def _sync_work_orders(conn: sqlite3.Connection, parts: dict[str, int]) -> None:
         produced = int(r["actual_quantity"] or 0)
         reject = reject_map.get(int(r["id"]), 0)
         reject = max(reject, insp_reject.get(r["order_no"], 0))
-        # 无不良时按约 1.5%~4% 生成可分析的 reject，保证品质分析有数
-        if produced > 0 and reject <= 0:
-            reject = max(1, int(produced * (0.015 + (_stable_id(r["order_no"]) % 25) / 1000)))
         create_date = r["actual_start_time"] or r["start_date"] or r["created_at"]
         end_date = r["actual_end_time"] or r["end_date"]
         conn.execute(
@@ -362,48 +418,75 @@ def _sync_work_orders(conn: sqlite3.Connection, parts: dict[str, int]) -> None:
 
 
 def _backfill_business_links(conn: sqlite3.Connection) -> None:
-    """补齐 MES 业务字段：mo_lot、工序名、检验明细。"""
+    """补齐 MES 业务字段：mo_lot、工序名、检验明细。兼容生产库缺列/缺表明细。"""
+    cols = _table_cols(conn, "quality_inspection_records")
+    if not cols:
+        return
+
     # mo_lot 空时用工单号回填
-    conn.execute(
-        """
-        UPDATE quality_inspection_records
-        SET mo_lot = work_order_no
-        WHERE (mo_lot IS NULL OR mo_lot = '')
-          AND work_order_no IS NOT NULL AND work_order_no != ''
-        """
-    )
-    # process_name 空时用 process
-    conn.execute(
-        """
-        UPDATE quality_inspection_records
-        SET process_name = process
-        WHERE (process_name IS NULL OR process_name = '')
-          AND process IS NOT NULL AND process != ''
-        """
-    )
+    if "mo_lot" in cols and "work_order_no" in cols:
+        conn.execute(
+            """
+            UPDATE quality_inspection_records
+            SET mo_lot = work_order_no
+            WHERE (mo_lot IS NULL OR mo_lot = '')
+              AND work_order_no IS NOT NULL AND work_order_no != ''
+            """
+        )
+
+    # process_name 空时用 process（仅当两列都存在）
+    if "process_name" in cols and "process" in cols:
+        conn.execute(
+            """
+            UPDATE quality_inspection_records
+            SET process_name = process
+            WHERE (process_name IS NULL OR process_name = '')
+              AND process IS NOT NULL AND process != ''
+            """
+        )
+
     # source_result 空时按 inspection_result 映射
-    conn.execute(
-        """
-        UPDATE quality_inspection_records
-        SET source_result = CASE
-            WHEN LOWER(inspection_result) IN ('pass','ok') THEN 1
-            WHEN LOWER(inspection_result) IN ('fail','ng') THEN 2
-            ELSE COALESCE(source_result, 1)
-        END
-        WHERE source_result IS NULL
-        """
-    )
+    if "source_result" in cols and "inspection_result" in cols:
+        conn.execute(
+            """
+            UPDATE quality_inspection_records
+            SET source_result = CASE
+                WHEN LOWER(inspection_result) IN ('pass','ok') THEN 1
+                WHEN LOWER(inspection_result) IN ('fail','ng') THEN 2
+                ELSE COALESCE(source_result, 1)
+            END
+            WHERE source_result IS NULL
+            """
+        )
 
     # 为不合格记录补检验项目明细（业务表只有少量 item）
+    if not _table_exists(conn, "quality_inspection_record_items"):
+        return
+
     existing = {
         int(r["record_id"])
         for r in conn.execute("SELECT DISTINCT record_id FROM quality_inspection_record_items")
+        if r["record_id"] is not None
     }
+    sel_cols = ["id", "non_conforming_qty", "product_code"]
+    if "process_name" in cols:
+        sel_cols.append("process_name")
+    if "process" in cols:
+        sel_cols.append("process")
+    if "defect_reason" in cols:
+        sel_cols.append("defect_reason")
+    where = []
+    if "inspection_result" in cols:
+        where.append("LOWER(inspection_result)='fail'")
+    if "source_result" in cols:
+        where.append("source_result=2")
+    if not where:
+        return
     fail_rows = conn.execute(
-        """
-        SELECT id, process_name, process, defect_reason, non_conforming_qty, product_code
+        f"""
+        SELECT {", ".join(sel_cols)}
         FROM quality_inspection_records
-        WHERE LOWER(inspection_result)='fail' OR source_result=2
+        WHERE {" OR ".join(where)}
         ORDER BY id
         LIMIT 800
         """
@@ -414,10 +497,9 @@ def _backfill_business_links(conn: sqlite3.Connection) -> None:
         rid = int(r["id"])
         if rid in existing:
             continue
-        proc = (r["process_name"] or r["process"] or "阻焊").strip()
-        # 选与工序匹配的缺陷名
+        proc = _qi_process_value(r)
         candidates = [d for p, d in DEFECT_CATALOG if p == proc] or [d for _, d in DEFECT_CATALOG]
-        defect = (r["defect_reason"] or "").strip() or candidates[_stable_id(str(rid)) % len(candidates)]
+        defect = str(_row_get(r, "defect_reason", "") or "").strip() or candidates[_stable_id(str(rid)) % len(candidates)]
         conn.execute(
             """
             INSERT INTO quality_inspection_record_items(id, record_id, item_name, standard_value, actual_value, result, remark)
@@ -502,17 +584,29 @@ def _sync_scrap_inspections(conn: sqlite3.Connection, parts: dict[str, int]) -> 
         )
 
     # 3) 不合格检验记录 → 报废（关联工单/料号）
+    qi_cols = _table_cols(conn, "quality_inspection_records")
+    sel = ["product_code", "non_conforming_qty"]
+    for c in ("work_order_no", "mo_lot", "process_name", "process", "inspected_at", "defect_reason",
+              "inspection_result", "source_result"):
+        if c in qi_cols:
+            sel.append(c)
+    where_parts = ["COALESCE(non_conforming_qty,0) > 0"]
+    fail_parts = []
+    if "inspection_result" in qi_cols:
+        fail_parts.append("LOWER(inspection_result)='fail'")
+    if "source_result" in qi_cols:
+        fail_parts.append("source_result=2")
+    if fail_parts:
+        where_parts.append("(" + " OR ".join(fail_parts) + ")")
     for r in conn.execute(
-        """
-        SELECT product_code, work_order_no, mo_lot, process_name, process,
-               non_conforming_qty, inspected_at, defect_reason
+        f"""
+        SELECT {", ".join(sel)}
         FROM quality_inspection_records
-        WHERE (LOWER(inspection_result)='fail' OR source_result=2)
-          AND COALESCE(non_conforming_qty,0) > 0
+        WHERE {" AND ".join(where_parts)}
         """
     ):
         code = (r["product_code"] or "").strip()
-        won = r["work_order_no"] or r["mo_lot"]
+        won = _row_get(r, "work_order_no") or _row_get(r, "mo_lot")
         if won:
             wo = conn.execute(
                 "SELECT product_code FROM work_orders WHERE order_no=?", (won,)
@@ -523,12 +617,12 @@ def _sync_scrap_inspections(conn: sqlite3.Connection, parts: dict[str, int]) -> 
         if code and code not in product_codes and product_codes:
             code = product_codes[_stable_id(code) % len(product_codes)]
         code = code or (product_codes[0] if product_codes else "PCB-A100")
-        proc = (r["process_name"] or r["process"] or "阻焊").strip()
-        item = (r["defect_reason"] or "").strip()
+        proc = _qi_process_value(r)
+        item = str(_row_get(r, "defect_reason", "") or "").strip()
         if not item:
             candidates = [d for p, d in DEFECT_CATALOG if p == proc] or [d for _, d in DEFECT_CATALOG]
             item = candidates[_stable_id(str(won or code)) % len(candidates)]
-        when = r["inspected_at"] or datetime.now().isoformat(sep=" ", timespec="seconds")
+        when = _row_get(r, "inspected_at") or datetime.now().isoformat(sep=" ", timespec="seconds")
         if not won:
             wrow = conn.execute(
                 "SELECT order_no FROM work_orders WHERE product_code=? ORDER BY id DESC LIMIT 1",
@@ -627,11 +721,12 @@ def _sync_mes_inspect(conn: sqlite3.Connection, proc_map: dict[str, str]) -> Non
 
     records = conn.execute("SELECT * FROM quality_inspection_records").fetchall()
     for r in records:
-        cid = (r["source_cid"] or f"IR-{r['id']}").strip()
-        proc_name = (r["process_name"] or r["process"] or "阻焊").strip()
+        cid = str(_row_get(r, "source_cid") or f"IR-{r['id']}").strip()
+        proc_name = _qi_process_value(r)
         # 统一用工序名映射 CID，并登记原始 process_id → 名称，避免良率 ProcessName 为空
         mapped = proc_map.get(proc_name) or f"P-X-{_stable_id(proc_name, 1)}"
-        src_pid = (str(r["process_id"]).strip() if r["process_id"] else "")
+        src_pid_raw = _row_get(r, "process_id")
+        src_pid = str(src_pid_raw).strip() if src_pid_raw else ""
         if src_pid:
             conn.execute(
                 "INSERT OR REPLACE INTO TBL_BD_PROCESS(CID, CPROCESS_NAME) VALUES (?, ?)",
@@ -641,18 +736,18 @@ def _sync_mes_inspect(conn: sqlite3.Connection, proc_map: dict[str, str]) -> Non
         else:
             proc_id = mapped
 
-        code = (r["product_code"] or "").strip()
-        lot = (r["work_order_no"] or "").strip()
+        code = str(_row_get(r, "product_code", "") or "").strip()
+        lot = str(_row_get(r, "work_order_no", "") or "").strip()
         if lot not in valid_wos:
-            lot = (r["mo_lot"] or "").strip()
+            lot = str(_row_get(r, "mo_lot", "") or "").strip()
         if lot not in valid_wos:
             candidates = wo_by_product.get(code) or all_wos
             lot = candidates[_stable_id(cid) % len(candidates)]
 
         cresult = _map_result(r)
-        ctype = r["source_inspect_type"]
+        ctype = _row_get(r, "source_inspect_type")
         if ctype is None:
-            it = (r["inspection_type"] or "process").lower()
+            it = str(_row_get(r, "inspection_type", "process") or "process").lower()
             ctype = 1 if it in ("incoming", "iqc", "来料") else 2
         conn.execute(
             """
@@ -665,39 +760,40 @@ def _sync_mes_inspect(conn: sqlite3.Connection, proc_map: dict[str, str]) -> Non
                 cid,
                 str(proc_id),
                 lot or None,
-                r["scan_barcode"] or lot or None,
+                _row_get(r, "scan_barcode") or lot or None,
                 cresult,
                 int(ctype),
-                str(r["inspected_at"] or r["created_at"] or ""),
-                r["inspect_code"] or r["inspection_no"],
-                float(r["submit_qty"] or r["inspected_qty"] or 1),
-                r["ng_disposal"],
+                str(_row_get(r, "inspected_at") or _row_get(r, "created_at") or ""),
+                _row_get(r, "inspect_code") or _row_get(r, "inspection_no"),
+                float(_row_get(r, "submit_qty") or _row_get(r, "inspected_qty") or 1),
+                _row_get(r, "ng_disposal"),
             ),
         )
 
     # 明细：业务 item + 自动补齐的 item
-    for r in conn.execute(
-        """
-        SELECT i.id, i.record_id, i.item_name, i.actual_value, i.result,
-               q.source_cid
-        FROM quality_inspection_record_items i
-        JOIN quality_inspection_records q ON q.id = i.record_id
-        """
-    ):
-        parent = (r["source_cid"] or f"IR-{r['record_id']}").strip()
-        conn.execute(
+    if _table_exists(conn, "quality_inspection_record_items"):
+        for r in conn.execute(
             """
-            INSERT OR REPLACE INTO TBL_QM_INSPECTION_RECORD_ITEM(
-                CID, CINSPECTION_RECORD_ID, CTEMPLATE_ITEM_NAME, CINPUT_VALUE
-            ) VALUES (?,?,?,?)
-            """,
-            (
-                f"IRI-{r['id']}",
-                parent,
-                r["item_name"],
-                r["actual_value"] or r["result"] or "NG",
-            ),
-        )
+            SELECT i.id, i.record_id, i.item_name, i.actual_value, i.result,
+                   q.source_cid
+            FROM quality_inspection_record_items i
+            JOIN quality_inspection_records q ON q.id = i.record_id
+            """
+        ):
+            parent = (r["source_cid"] or f"IR-{r['record_id']}").strip()
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO TBL_QM_INSPECTION_RECORD_ITEM(
+                    CID, CINSPECTION_RECORD_ID, CTEMPLATE_ITEM_NAME, CINPUT_VALUE
+                ) VALUES (?,?,?,?)
+                """,
+                (
+                    f"IRI-{r['id']}",
+                    parent,
+                    r["item_name"],
+                    r["actual_value"] or r["result"] or "NG",
+                ),
+            )
 
 
 def _sync_kanban(conn: sqlite3.Connection) -> None:
@@ -753,11 +849,26 @@ def _ensure_demo_pcb_depth(conn: sqlite3.Connection, parts: dict[str, int]) -> N
                 )
 
 
-def sync_quality_bridge(db_path: Optional[Path | str] = None) -> dict[str, Any]:
-    """同步/补齐桥接表，返回统计信息。"""
+def sync_quality_bridge(
+    db_path: Optional[Path | str] = None,
+    include_demo: Optional[bool] = None,
+) -> dict[str, Any]:
+    """同步/补齐桥接表，返回统计信息。
+
+    include_demo: 是否写入演示深度数据。默认关闭；仅当显式 True
+    或环境变量 QA_BRIDGE_INCLUDE_DEMO=1 时开启（生产请保持关闭）。
+    """
     path = Path(db_path) if db_path else DEFAULT_DB
     if not path.exists():
         raise FileNotFoundError(f"数据库不存在: {path}")
+
+    if include_demo is None:
+        include_demo = os.environ.get("QA_BRIDGE_INCLUDE_DEMO", "").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
 
     conn = _connect(path)
     try:
@@ -767,7 +878,8 @@ def sync_quality_bridge(db_path: Optional[Path | str] = None) -> dict[str, Any]:
         proc_map = _process_id_map(conn)
         _sync_work_orders(conn, parts)
         _sync_scrap_inspections(conn, parts)
-        _ensure_demo_pcb_depth(conn, parts)
+        if include_demo:
+            _ensure_demo_pcb_depth(conn, parts)
         _sync_stock(conn)
         _sync_mes_inspect(conn, proc_map)
         _sync_kanban(conn)
@@ -775,6 +887,7 @@ def sync_quality_bridge(db_path: Optional[Path | str] = None) -> dict[str, Any]:
 
         stats = {
             "db": str(path),
+            "include_demo": bool(include_demo),
             "parts": conn.execute("SELECT COUNT(*) FROM E_JobMfgParts").fetchone()[0],
             "work_orders": conn.execute("SELECT COUNT(*) FROM P_WO").fetchone()[0],
             "scrap_rows": conn.execute(
