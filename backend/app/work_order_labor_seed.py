@@ -1,4 +1,4 @@
-"""工单报工明细（work_order_labor_records）种子数据。"""
+"""工单报工明细（work_order_labor_records）种子与近日补齐。"""
 
 from __future__ import annotations
 
@@ -6,17 +6,19 @@ from datetime import date, datetime, timedelta
 
 from app.database import SessionLocal
 from app.models import Employee, WorkOrder, WorkOrderLaborRecord
+from app.process_catalog import STANDARD_PROCESSES
 
-_DEFAULT_PROCESSES = ("贴片", "焊接", "组装", "检验", "包装")
+_DEFAULT_PROCESSES = tuple(STANDARD_PROCESSES)
 
 
-def ensure_work_order_labor_records() -> None:
-    """若报工明细为空，则按在职员工与现有工单生成近 7 日演示数据。"""
+def ensure_work_order_labor_records(days: int = 7) -> None:
+    """保证近 N 日有报工明细。
+
+    - 表空：按在职员工 × 工单生成近 N 日演示数据
+    - 已有：只补「缺日」的演示行（不覆盖已有 work_date）
+    """
     db = SessionLocal()
     try:
-        if db.query(WorkOrderLaborRecord.id).first():
-            return
-
         employees = (
             db.query(Employee)
             .filter(Employee.status == "在职")
@@ -28,9 +30,20 @@ def ensure_work_order_labor_records() -> None:
             return
 
         today = date.today()
+        span = max(int(days), 1)
+        existing_dates = {
+            row[0]
+            for row in db.query(WorkOrderLaborRecord.work_date)
+            .filter(WorkOrderLaborRecord.work_date >= today - timedelta(days=span - 1))
+            .distinct()
+            .all()
+        }
+
         rows: list[WorkOrderLaborRecord] = []
-        for day_offset in range(7):
+        for day_offset in range(span):
             work_date = today - timedelta(days=day_offset)
+            if work_date in existing_dates:
+                continue
             for emp_idx, emp in enumerate(employees):
                 wo = work_orders[(emp_idx + day_offset) % len(work_orders)]
                 process = (
@@ -51,7 +64,8 @@ def ensure_work_order_labor_records() -> None:
                     )
                 )
 
-        db.add_all(rows)
-        db.commit()
+        if rows:
+            db.add_all(rows)
+            db.commit()
     finally:
         db.close()

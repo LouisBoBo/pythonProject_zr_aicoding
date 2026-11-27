@@ -136,7 +136,7 @@ def test_wip_processes_list(client, test_user):
     resp = client.get("/api/reports/wip/processes", headers=headers)
     assert resp.status_code == 200
     processes = resp.json()["processes"]
-    assert "贴片" in processes
+    assert "钻孔" in processes
     assert "包装" in processes
 
 

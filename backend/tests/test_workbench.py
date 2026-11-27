@@ -112,13 +112,13 @@ def sample_data(db_session):
             ),
             QualityAnomaly(
                 production_line="A",
-                process="贴片",
+                process="阻焊",
                 defect_type="虚焊",
                 status="open",
             ),
             QualityAnomaly(
                 production_line="A",
-                process="贴片",
+                process="阻焊",
                 defect_type="短路",
                 status="closed",
             ),

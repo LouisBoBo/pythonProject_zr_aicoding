@@ -10,6 +10,7 @@ from app.database import SessionLocal, engine, get_db
 from app.ipqc_import import IMPORT_READ_CHUNK, MAX_IMPORT_BYTES, import_ipqc_workbook
 from app.models import QualityAnomaly, QualityDefectDetail, QualityMetrics, User, WorkOrder
 from app.permissions import QUALITY_WRITE, require_permissions
+from app.process_catalog import QUALITY_DEFECT_TYPES, QUALITY_PROCESSES
 from app.quality_inspection_record_store import (
     TASK_STATUS_FAILED,
     TASK_STATUS_PASSED,
@@ -71,8 +72,8 @@ TASK_STATUS_TRANSITIONS: dict[str, set[str]] = {
 }
 
 LINES = ["SMT-1线", "SMT-2线", "DIP线", "组装线", "测试线"]
-PROCESSES = ["贴片", "焊接", "AOI检测", "功能测试", "包装"]
-DEFECT_TYPES = ["虚焊", "短路", "元件偏移", "漏件", "外观不良", "功能异常", "尺寸偏差"]
+PROCESSES = list(QUALITY_PROCESSES)
+DEFECT_TYPES = list(QUALITY_DEFECT_TYPES)
 
 
 def _to_anomaly_item(row: QualityAnomaly) -> QualityAnomalyItem:

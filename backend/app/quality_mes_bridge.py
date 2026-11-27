@@ -69,15 +69,13 @@ def _qi_process_value(row: sqlite3.Row, default: str = "阻焊") -> str:
     proc = str(_row_get(row, "process", "") or "").strip()
     return name or proc or default
 
+# 与 process_catalog / IPQC 对齐；仅保留 PCB 工序
 PCB_PROCESSES = [
-    ("P-ZS", "阻焊"),
     ("P-ZK", "钻孔"),
+    ("P-YS", "蚀刻"),
+    ("P-ZS", "阻焊"),
     ("P-CX", "成型"),
-    ("P-TP", "贴片"),
-    ("P-HJ", "焊接"),
-    ("P-AOI", "AOI检测"),
-    ("P-GN", "功能测试"),
-    ("P-BZ", "包装"),
+    ("P-QR", "待确认工序"),
     ("P-WW", "外层线路"),
     ("P-DD", "电镀"),
     ("P-ZF", "字符"),
@@ -717,7 +715,7 @@ def _sync_mes_inspect(conn: sqlite3.Connection, proc_map: dict[str, str]) -> Non
     ):
         wo_by_product.setdefault(r["mfgPartCode"], []).append(r["woNumber"])
     # 所有可用工单兜底池
-    all_wos = list(valid_wos) or ["WO-AN-UNKNOWN"]
+    all_wos = list(valid_wos) or ["WO-UNKNOWN"]
 
     records = conn.execute("SELECT * FROM quality_inspection_records").fetchall()
     for r in records:

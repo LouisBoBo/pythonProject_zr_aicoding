@@ -294,7 +294,9 @@ class WipReportItem(BaseModel):
     id: int
     order_no: str = Field(description="工单号")
     product_name: str = Field(description="品名")
-    current_process: str | None = Field(default=None, description="当前工序（贴片/焊接/AOI检测/功能测试/包装）")
+    current_process: str | None = Field(
+        default=None, description="当前工序（钻孔/蚀刻/阻焊/成型/待确认工序）"
+    )
     wip_quantity: int = Field(description="在制数量（wip 口径：计划数量 - 实际数量）")
     status: str = Field(description="工单状态")
     start_date: date | None = Field(default=None, description="计划开始日期")

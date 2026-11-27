@@ -77,13 +77,8 @@ IPQC_SOURCE_HEADERS = (
 
 REQUIRED_HEADERS = {"CID", "CINSPECT_TIME", "CRESULT", "CSTATUS"}
 
-# 源 MES 工序主数据对照（CPROCESS_ID → CPROCESS_NAME）
-IPQC_PROCESS_NAME_MAP: dict[str, str] = {
-    "3273661841000010": "成型",
-    "3273661841000049": "钻孔",
-    "3273661841000061": "阻焊",
-    "3273661841000048": "待确认工序",
-}
+# 源 MES 工序主数据对照（与 process_catalog 统一）
+from app.process_catalog import IPQC_PROCESS_NAME_MAP  # noqa: E402
 
 MAX_IMPORT_BYTES = 15 * 1024 * 1024
 MAX_IMPORT_ROWS = 20000

@@ -137,7 +137,7 @@ def seed_copq_data(db: Session) -> None:
                 cost_category=cat,
                 unit_cost=unit,
                 copq_amount=amount,
-                problem_description=f"演示客诉：{ctype}/{cat}，影响 {qty} 件",
+                problem_description=f"{ctype}/{cat}，影响 {qty} 件",
                 status="closed" if days_ago > 20 else ("processing" if days_ago > 7 else "open"),
                 assigned_to="品质部",
                 closed_date=(today - timedelta(days=days_ago - 5)) if days_ago > 20 else None,

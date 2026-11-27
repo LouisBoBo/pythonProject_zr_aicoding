@@ -810,80 +810,85 @@ def seed_quality_data():
         if db.query(QualityMetrics).first():
             return
 
+        from app.process_catalog import (
+            IPQC_METRICS_LINE,
+            QUALITY_DEFECT_TYPES,
+            QUALITY_PROCESSES,
+        )
+
         lines = ["SMT-1线", "SMT-2线", "DIP线", "组装线", "测试线"]
-        processes = ["贴片", "焊接", "AOI检测", "功能测试", "包装"]
-        defect_types = ["虚焊", "短路", "元件偏移", "漏件", "外观不良", "功能异常", "尺寸偏差"]
+        processes = list(QUALITY_PROCESSES)
+        defect_types = list(QUALITY_DEFECT_TYPES)
         product_codes = ["PCB-A100", "PCB-A200", "PCB-B300", "PCB-C400", "PCB-D500"]
         today = date.today()
 
         metrics = []
         for day_offset in range(30):
             record_date = today - timedelta(days=29 - day_offset)
-            for line in lines:
-                for process in processes:
-                    total = 800 + (day_offset * 3) + hash(f"{line}{process}") % 120
-                    defect = int(total * (0.015 + (hash(record_date.isoformat() + line) % 8) / 1000))
-                    scrap = int(total * (0.003 + (hash(process) % 5) / 2000))
-                    good = total - defect - scrap
-                    metrics.append(
-                        QualityMetrics(
-                            record_date=record_date,
-                            production_line=line,
-                            process=process,
-                            good_count=max(good, 0),
-                            defect_count=defect,
-                            scrap_count=scrap,
-                            total_inspected=total,
-                        )
+            for process in processes:
+                total = 400 + (day_offset * 3) + hash(f"{process}") % 80
+                defect = int(total * (0.02 + (hash(record_date.isoformat() + process) % 8) / 1000))
+                scrap = int(total * (0.003 + (hash(process) % 5) / 2000))
+                good = total - defect - scrap
+                metrics.append(
+                    QualityMetrics(
+                        record_date=record_date,
+                        production_line=IPQC_METRICS_LINE,
+                        process=process,
+                        good_count=max(good, 0),
+                        defect_count=defect,
+                        scrap_count=scrap,
+                        total_inspected=total,
                     )
+                )
         db.add_all(metrics)
 
         anomalies = [
             QualityAnomaly(
-                production_line="SMT-1线",
-                process="焊接",
-                defect_type="虚焊",
+                production_line=IPQC_METRICS_LINE,
+                process="阻焊",
+                defect_type="阻焊露铜",
                 severity="critical",
                 status="open",
                 discovered_at=datetime.utcnow() - timedelta(hours=2),
             ),
             QualityAnomaly(
-                production_line="SMT-2线",
-                process="AOI检测",
-                defect_type="短路",
+                production_line=IPQC_METRICS_LINE,
+                process="钻孔",
+                defect_type="孔偏",
                 severity="major",
                 status="open",
                 discovered_at=datetime.utcnow() - timedelta(hours=5),
             ),
             QualityAnomaly(
-                production_line="DIP线",
-                process="功能测试",
-                defect_type="功能异常",
+                production_line=IPQC_METRICS_LINE,
+                process="成型",
+                defect_type="外形超差",
                 severity="major",
                 status="open",
                 discovered_at=datetime.utcnow() - timedelta(hours=8),
             ),
             QualityAnomaly(
-                production_line="组装线",
-                process="包装",
-                defect_type="外观不良",
+                production_line=IPQC_METRICS_LINE,
+                process="蚀刻",
+                defect_type="侧蚀超标",
                 severity="minor",
                 status="open",
                 discovered_at=datetime.utcnow() - timedelta(hours=12),
             ),
             QualityAnomaly(
-                production_line="测试线",
-                process="功能测试",
-                defect_type="尺寸偏差",
+                production_line=IPQC_METRICS_LINE,
+                process="成型",
+                defect_type="崩边",
                 severity="minor",
                 status="processing",
                 discovered_at=datetime.utcnow() - timedelta(days=1),
                 handler="张工",
             ),
             QualityAnomaly(
-                production_line="SMT-1线",
-                process="贴片",
-                defect_type="元件偏移",
+                production_line=IPQC_METRICS_LINE,
+                process="阻焊",
+                defect_type="阻焊擦花",
                 severity="major",
                 status="closed",
                 discovered_at=datetime.utcnow() - timedelta(days=2),
