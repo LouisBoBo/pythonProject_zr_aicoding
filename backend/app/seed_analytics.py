@@ -27,10 +27,13 @@ from app.models import (
     InspectionRecord,
     InspectionRecordItem,
     InventoryBalance,
+    InventoryStock,
     InventoryTransaction,
     KanbanBoard,
     LineCapacitySnapshot,
     Material,
+    MaterialInbound,
+    Message,
     Product,
     ProductionLine,
     ProductionOutputRecord,
@@ -43,7 +46,11 @@ from app.models import (
     WarehouseLocation,
     WipSnapshot,
     WorkOrder,
+    WorkOrderLaborRecord,
 )
+from app.copq_store import CustomerComplaint
+from app.quality_inspection_record_store import QualityInspectionRecord
+from app.spc_store import SpcChart, SpcMeasurement
 
 PRODUCTION_LINE_NAMES = ["SMT-1线", "SMT-2线", "DIP线", "组装线", "测试线"]
 WIP_STATUSES = ["待投料", "在制", "待检验", "待入库"]
@@ -605,21 +612,21 @@ def seed_analytics_data() -> None:
                 )
             )
 
-        # ---------- 工单（若为空） ----------
+        # ---------- 工单（若为空；不再写入 WO-AN-* 分析演示单） ----------
         if not db.query(WorkOrder).first():
             work_order_defs = [
-                ("WO-AN-001", "pending", "high", 0, 0, 5),
-                ("WO-AN-002", "pending", "normal", 0, 1, 6),
-                ("WO-AN-003", "in_progress", "high", 420, 0, 3),
-                ("WO-AN-004", "in_progress", "normal", 680, 1, 4),
-                ("WO-AN-005", "in_progress", "urgent", 310, 2, 2),
-                ("WO-AN-006", "completed", "normal", 1000, 5, 0),
-                ("WO-AN-007", "completed", "normal", 850, 6, -1),
-                ("WO-AN-008", "closed", "low", 1200, 10, -5),
-                ("WO-AN-009", "closed", "normal", 900, 12, -7),
-                ("WO-AN-010", "pending", "normal", 0, 2, 8),
-                ("WO-AN-011", "in_progress", "normal", 540, 3, 5),
-                ("WO-AN-012", "completed", "high", 760, 8, -2),
+                ("WO-SEED-001", "pending", "high", 0, 0, 5),
+                ("WO-SEED-002", "pending", "normal", 0, 1, 6),
+                ("WO-SEED-003", "in_progress", "high", 420, 0, 3),
+                ("WO-SEED-004", "in_progress", "normal", 680, 1, 4),
+                ("WO-SEED-005", "in_progress", "urgent", 310, 2, 2),
+                ("WO-SEED-006", "completed", "normal", 1000, 5, 0),
+                ("WO-SEED-007", "completed", "normal", 850, 6, -1),
+                ("WO-SEED-008", "closed", "low", 1200, 10, -5),
+                ("WO-SEED-009", "closed", "normal", 900, 12, -7),
+                ("WO-SEED-010", "pending", "normal", 0, 2, 8),
+                ("WO-SEED-011", "in_progress", "normal", 540, 3, 5),
+                ("WO-SEED-012", "completed", "high", 760, 8, -2),
             ]
             assignees = ["张三", "李四", "王五", "赵六", "钱七"]
             for idx, (order_no, status, priority, actual, start_off, end_off) in enumerate(
@@ -997,38 +1004,46 @@ def backfill_recent_operational_data(days: int | None = None) -> None:
                     )
                 )
 
-        # ---------- 品质日汇总 ----------
-        processes = ["贴片", "焊接", "AOI检测", "功能测试", "包装"]
+        # ---------- 品质日汇总（IPQC 工序口径；先按检验记录重建，再补缺口日） ----------
+        from app.process_catalog import IPQC_METRICS_LINE, QUALITY_PROCESSES
+        from app.quality_metrics_sync import (
+            align_quality_process_names,
+            rebuild_quality_metrics_from_ipqc,
+        )
+
+        rebuild_quality_metrics_from_ipqc(db, days=max(days, 30))
+        align_quality_process_names(db)
+        processes = list(QUALITY_PROCESSES)
         for day_offset in range(days - 1, -1, -1):
             the_day = today - timedelta(days=day_offset)
-            for line in lines:
-                for process in processes:
-                    exists = (
-                        db.query(QualityMetrics)
-                        .filter(
-                            QualityMetrics.record_date == the_day,
-                            QualityMetrics.production_line == line.name,
-                            QualityMetrics.process == process,
-                        )
-                        .first()
+            for process in processes:
+                exists = (
+                    db.query(QualityMetrics)
+                    .filter(
+                        QualityMetrics.record_date == the_day,
+                        QualityMetrics.production_line == IPQC_METRICS_LINE,
+                        QualityMetrics.process == process,
                     )
-                    if exists:
-                        continue
-                    total = 800 + day_offset * 3 + _stable_int(f"{line.name}{process}{the_day}", 40, 120)
-                    defect = int(total * 0.018) + (day_offset % 4)
-                    scrap = max(int(total * 0.004), 1)
-                    good = max(total - defect - scrap, 0)
-                    db.add(
-                        QualityMetrics(
-                            record_date=the_day,
-                            production_line=line.name,
-                            process=process,
-                            good_count=good,
-                            defect_count=defect,
-                            scrap_count=scrap,
-                            total_inspected=total,
-                        )
+                    .first()
+                )
+                if exists:
+                    continue
+                # 无检验实据的缺口日：用稳定伪数据续上，工序名与 IPQC 一致
+                total = 200 + day_offset * 2 + _stable_int(f"{process}{the_day}", 20, 80)
+                defect = int(total * 0.02) + (day_offset % 3)
+                scrap = max(int(total * 0.004), 0)
+                good = max(total - defect - scrap, 0)
+                db.add(
+                    QualityMetrics(
+                        record_date=the_day,
+                        production_line=IPQC_METRICS_LINE,
+                        process=process,
+                        good_count=good,
+                        defect_count=defect,
+                        scrap_count=scrap,
+                        total_inspected=total,
                     )
+                )
 
         # ---------- 设备 OEE / 产量 / 当日运行 / 近期告警 ----------
         alarm_types = ["温度过高", "振动异常", "急停触发", "润滑不足", "通信中断"]
@@ -1245,15 +1260,50 @@ def backfill_recent_operational_data(days: int | None = None) -> None:
                         )
                     )
 
-        # 本月工单约千条级，供数据分析；天数按当月 1 号至今
-        month_days = (today - date(today.year, today.month, 1)).days + 1
-        ensure_rich_work_orders(
-            db,
-            today=today,
-            now=now,
-            target_count=min(1000, max(month_days * 32, 200)),
-        )
+        # 先清演示单并 expire，再平移日期、按检验实据回填（避免 bulk delete 与脏对象 StaleDataError）
+        purge_demo_analysis_work_orders(db)
+        db.expire_all()
         _rebase_live_records_to_today(db, today, now)
+        from app.work_order_ipqc_sync import ensure_work_orders_from_ipqc
+        from app.process_catalog import IPQC_METRICS_LINE, QUALITY_PROCESSES
+        from app.quality_metrics_sync import (
+            align_quality_process_names,
+            rebuild_quality_metrics_from_ipqc,
+        )
+
+        ensure_work_orders_from_ipqc(db)
+        # 日期平移后按 IPQC 重刷 metrics，并剔除 SMT 等冲突产线
+        rebuild_quality_metrics_from_ipqc(db, days=max(days, 30))
+        align_quality_process_names(db)
+        for day_offset in range(min(days, 30) - 1, -1, -1):
+            the_day = today - timedelta(days=day_offset)
+            for process in QUALITY_PROCESSES:
+                exists = (
+                    db.query(QualityMetrics)
+                    .filter(
+                        QualityMetrics.record_date == the_day,
+                        QualityMetrics.production_line == IPQC_METRICS_LINE,
+                        QualityMetrics.process == process,
+                    )
+                    .first()
+                )
+                if exists:
+                    continue
+                total = 200 + day_offset * 2 + _stable_int(f"{process}{the_day}", 20, 80)
+                defect = int(total * 0.02) + (day_offset % 3)
+                scrap = max(int(total * 0.004), 0)
+                good = max(total - defect - scrap, 0)
+                db.add(
+                    QualityMetrics(
+                        record_date=the_day,
+                        production_line=IPQC_METRICS_LINE,
+                        process=process,
+                        good_count=good,
+                        defect_count=defect,
+                        scrap_count=scrap,
+                        total_inspected=total,
+                    )
+                )
         _normalize_production_output_facts(db, today, now, lines, products_by_line)
         _reconcile_sales_shipped_qty(db)
         _fix_work_order_plan_date_order(db)
@@ -1278,11 +1328,49 @@ def _days_behind(value, today: date) -> int:
     return max((today - current).days, 0)
 
 
+def _purge_dirty_inspection_seeds(db, _today: date | None = None) -> int:
+    """清理 8D 演示检验脏数据（IPQC-8D-ETCH* / 8d_mes_seed）。"""
+    from sqlalchemy import or_, text
+
+    from app.ipqc_store import QualityInspectionItemResult
+
+    dirty = (
+        db.query(QualityInspectionRecord)
+        .filter(
+            or_(
+                QualityInspectionRecord.ipqc_entry_type == "8d_mes_seed",
+                QualityInspectionRecord.inspection_no.like("IPQC-8D%"),
+                QualityInspectionRecord.inspection_no.like("FA-%"),
+                QualityInspectionRecord.inspection_no.like("IQC-B-%"),
+                QualityInspectionRecord.inspection_no.like("QC-%"),
+                QualityInspectionRecord.inspection_no.like("QT-%"),
+            )
+        )
+        .all()
+    )
+    if not dirty:
+        return 0
+    ids = [int(row.id) for row in dirty]
+    db.query(QualityInspectionItemResult).filter(
+        QualityInspectionItemResult.record_id.in_(ids)
+    ).delete(synchronize_session=False)
+    # 桥接侧明细表无 ORM，直接按 record_id 清
+    id_list = ",".join(str(i) for i in ids)
+    db.execute(text(f"DELETE FROM quality_inspection_record_items WHERE record_id IN ({id_list})"))
+    for row in dirty:
+        db.delete(row)
+    return len(ids)
+
+
 def _rebase_live_records_to_today(db, today: date, now: datetime) -> None:
-    """把工单/保养/维修/异常/待办/订单/工时等业务日期按表平移到今天，已对齐的表跳过。"""
+    """把工单/保养/维修/异常/待办/订单/检验记录/工时/客诉/SPC/入库/库存/消息等
+    业务日期按表平移到今天，已对齐的表跳过。
+    """
 
     def delta_of(column) -> timedelta:
         return timedelta(days=_days_behind(db.query(func.max(column)).scalar(), today))
+
+    _purge_dirty_inspection_seeds(db, today)
 
     wo_delta = delta_of(WorkOrder.updated_at)
     if wo_delta.days:
@@ -1322,6 +1410,86 @@ def _rebase_live_records_to_today(db, today: date, now: datetime) -> None:
     if anomaly_delta.days:
         for anomaly in db.query(QualityAnomaly).all():
             anomaly.discovered_at = _shift_dt(anomaly.discovered_at, anomaly_delta) or now
+
+    # 检验记录：以 IPQC 导入批次的最大检验日为锚；不平移 8d_mes_seed 等演示脏数据
+    qi_anchor = (
+        db.query(func.max(QualityInspectionRecord.inspected_at))
+        .filter(QualityInspectionRecord.ipqc_entry_type == "import")
+        .scalar()
+    )
+    if qi_anchor is None:
+        qi_anchor = (
+            db.query(func.max(QualityInspectionRecord.inspected_at))
+            .filter(
+                (QualityInspectionRecord.ipqc_entry_type.is_(None))
+                | (QualityInspectionRecord.ipqc_entry_type != "8d_mes_seed")
+            )
+            .scalar()
+        )
+    qi_delta = timedelta(days=_days_behind(qi_anchor, today))
+    if qi_delta.days:
+        qi_rows = (
+            db.query(QualityInspectionRecord)
+            .filter(
+                (QualityInspectionRecord.ipqc_entry_type.is_(None))
+                | (QualityInspectionRecord.ipqc_entry_type != "8d_mes_seed")
+            )
+            .all()
+        )
+        for row in qi_rows:
+            row.inspected_at = _shift_dt(row.inspected_at, qi_delta) or now
+            row.check_time = _shift_dt(row.check_time, qi_delta)
+            row.come_in_time = _shift_dt(row.come_in_time, qi_delta)
+            row.lab_receive_time = _shift_dt(row.lab_receive_time, qi_delta)
+            row.lab_inspect_time = _shift_dt(row.lab_inspect_time, qi_delta)
+            row.source_created_at = _shift_dt(row.source_created_at, qi_delta)
+            row.source_modified_at = _shift_dt(row.source_modified_at, qi_delta)
+            row.created_at = _shift_dt(row.created_at, qi_delta) or now
+
+    # 工单报工工时
+    labor_delta = delta_of(WorkOrderLaborRecord.work_date)
+    if labor_delta.days:
+        for row in db.query(WorkOrderLaborRecord).all():
+            row.work_date = _shift_date(row.work_date, labor_delta) or today
+            row.created_at = _shift_dt(row.created_at, labor_delta) or now
+
+    # 客诉 / COPQ
+    complaint_delta = delta_of(CustomerComplaint.complaint_date)
+    if complaint_delta.days:
+        for row in db.query(CustomerComplaint).all():
+            row.complaint_date = _shift_date(row.complaint_date, complaint_delta) or today
+            row.closed_date = _shift_date(row.closed_date, complaint_delta)
+            row.created_at = _shift_dt(row.created_at, complaint_delta) or now
+            row.updated_at = _shift_dt(row.updated_at, complaint_delta) or now
+
+    # SPC 测量点 + 控制图时间戳
+    spc_delta = delta_of(SpcMeasurement.measured_at)
+    if spc_delta.days:
+        for row in db.query(SpcMeasurement).all():
+            row.measured_at = _shift_dt(row.measured_at, spc_delta) or now
+            row.created_at = _shift_dt(row.created_at, spc_delta) or now
+        for chart in db.query(SpcChart).all():
+            chart.created_at = _shift_dt(chart.created_at, spc_delta) or now
+            chart.updated_at = _shift_dt(chart.updated_at, spc_delta) or now
+
+    # 物料入库
+    inbound_delta = delta_of(MaterialInbound.inbound_date)
+    if inbound_delta.days:
+        for row in db.query(MaterialInbound).all():
+            row.inbound_date = _shift_date(row.inbound_date, inbound_delta) or today
+            row.created_at = _shift_dt(row.created_at, inbound_delta) or now
+
+    # 库存台账（汇总表时间戳）
+    stock_delta = delta_of(InventoryStock.updated_at)
+    if stock_delta.days:
+        for row in db.query(InventoryStock).all():
+            row.updated_at = _shift_dt(row.updated_at, stock_delta) or now
+
+    # 站内消息
+    msg_delta = delta_of(Message.created_at)
+    if msg_delta.days:
+        for row in db.query(Message).all():
+            row.created_at = _shift_dt(row.created_at, msg_delta) or now
 
     todo_delta = delta_of(DashboardTodo.created_at)
     if todo_delta.days:
@@ -1556,6 +1724,31 @@ def _statuses_for_day(the_day: date, today: date, day_count: int) -> list[str]:
     return statuses
 
 
+def purge_demo_analysis_work_orders(db) -> int:
+    """删除分析演示工单 WO-AN-* 及其报工；产量事实外键置空。不再重建。"""
+    an_ids = [
+        row[0]
+        for row in db.query(WorkOrder.id).filter(WorkOrder.order_no.like("WO-AN-%")).all()
+    ]
+    if not an_ids:
+        return 0
+    (
+        db.query(ProductionOutputRecord)
+        .filter(ProductionOutputRecord.work_order_id.in_(an_ids))
+        .update({ProductionOutputRecord.work_order_id: None}, synchronize_session=False)
+    )
+    db.query(WorkOrderLaborRecord).filter(
+        WorkOrderLaborRecord.work_order_id.in_(an_ids)
+    ).delete(synchronize_session=False)
+    deleted = (
+        db.query(WorkOrder)
+        .filter(WorkOrder.id.in_(an_ids))
+        .delete(synchronize_session="fetch")
+    )
+    db.expire_all()
+    return int(deleted or 0)
+
+
 def ensure_rich_work_orders(
     db,
     *,
@@ -1563,97 +1756,13 @@ def ensure_rich_work_orders(
     now: datetime | None = None,
     target_count: int | None = None,
 ) -> None:
-    """按当月重建分析用工单（≤1000）：每日有产量配套完工单，日期对齐今天。可重复调用。"""
-    today = today or date.today()
-    now = now or datetime.now()
-    month_start = date(today.year, today.month, 1)
-    days = (today - month_start).days + 1
-    target = min(target_count or MONTHLY_WORK_ORDER_CAP, MONTHLY_WORK_ORDER_CAP)
-    target = max(target, days * (MIN_COMPLETED_PER_DAY + 4))
-
-    lines = db.query(ProductionLine).order_by(ProductionLine.id).all()
-    products = db.query(Product).order_by(Product.id).all()
-    if not lines or not products:
-        return
-
-    products_by_line: dict[int, list[Product]] = {ln.id: [] for ln in lines}
-    for product in products:
-        if product.default_line_id in products_by_line:
-            products_by_line[product.default_line_id].append(product)
-
-    # 解除产量事实对旧演示工单的引用后重建
-    an_ids = [
-        row[0]
-        for row in db.query(WorkOrder.id).filter(WorkOrder.order_no.like("WO-AN-%")).all()
-    ]
-    if an_ids:
-        (
-            db.query(ProductionOutputRecord)
-            .filter(ProductionOutputRecord.work_order_id.in_(an_ids))
-            .update({ProductionOutputRecord.work_order_id: None}, synchronize_session=False)
-        )
-        db.query(WorkOrder).filter(WorkOrder.id.in_(an_ids)).delete(synchronize_session=False)
-        db.flush()
-
-    # 按日分配条数（周末约 55% 产能），总量压在 target 内
-    day_counts: list[int] = []
-    base = target // days
-    rem = target % days
-    for day_i in range(days):
-        the_day = month_start + timedelta(days=day_i)
-        n = base + (1 if day_i < rem else 0)
-        if the_day.weekday() >= 5:
-            n = max(MIN_COMPLETED_PER_DAY + 3, int(n * 0.55))
-        day_counts.append(n)
-    # 若周末缩减后不足，把差额补到工作日
-    short = target - sum(day_counts)
-    wi = 0
-    while short > 0 and days > 0:
-        the_day = month_start + timedelta(days=wi % days)
-        if the_day.weekday() < 5:
-            day_counts[wi % days] += 1
-            short -= 1
-        wi += 1
-        if wi > days * 20:
-            break
-
-    ym = today.strftime("%Y%m")
-    seq = 1
-    global_idx = 0
-
-    for day_i, day_count in enumerate(day_counts):
-        the_day = month_start + timedelta(days=day_i)
-        statuses = _statuses_for_day(the_day, today, day_count)
-        for local_i, status in enumerate(statuses):
-            line = lines[global_idx % len(lines)]
-            line_products = products_by_line.get(line.id) or products
-            product = line_products[global_idx % len(line_products)]
-            profile = _build_day_work_order_profile(
-                idx=global_idx,
-                the_day=the_day,
-                today=today,
-                now=now,
-                status=status,
-            )
-            order_no = f"WO-AN-{ym}-{seq:04d}"
-            seq += 1
-            wo = WorkOrder(
-                order_no=order_no,
-                product_name=product.product_name,
-                product_code=product.product_code,
-                production_line=line.name,
-                **profile,
-            )
-            db.add(wo)
-            global_idx += 1
-
-    db.flush()
-
-    # 产量事实由 backfill 产线日/小时汇总维护；工单保留 actual_quantity，避免与计划产量 double count。
+    """兼容旧入口：仅清理 WO-AN-*，不再按月重建分析演示工单。"""
+    _ = (today, now, target_count)
+    purge_demo_analysis_work_orders(db)
 
 
 def seed_rich_work_orders(target_count: int | None = None) -> None:
-    """独立入口：按当月规模重建分析用工单（默认 ≤1000）。"""
+    """独立入口：清理 WO-AN-* 演示工单（不再重建）。"""
     db = SessionLocal()
     try:
         ensure_rich_work_orders(db, target_count=target_count)

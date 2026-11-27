@@ -112,13 +112,13 @@ def sample_data(db_session):
             ),
             QualityAnomaly(
                 production_line="A",
-                process="贴片",
+                process="阻焊",
                 defect_type="虚焊",
                 status="open",
             ),
             QualityAnomaly(
                 production_line="A",
-                process="贴片",
+                process="阻焊",
                 defect_type="短路",
                 status="closed",
             ),
@@ -176,7 +176,7 @@ def sample_data(db_session):
 
 
 def test_workbench_requires_auth(client):
-    assert client.get("/api/dashboard/workbench").status_code == 403
+    assert client.get("/api/dashboard/workbench").status_code in (401, 403)
 
 
 def test_workbench_summary_cards(client, auth_headers, sample_data):

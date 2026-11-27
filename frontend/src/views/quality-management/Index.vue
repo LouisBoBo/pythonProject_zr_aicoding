@@ -16,8 +16,20 @@
         <span>任务列表与状态流转</span>
       </router-link>
       <router-link class="link-card" to="/quality-management/inspection-records">
-        <strong>检验记录</strong>
-        <span>历史检验结果查询</span>
+        <strong>检验记录查询</strong>
+        <span>历史检验结果查询（含 IPQC 导入）</span>
+      </router-link>
+      <router-link class="link-card" to="/quality-management/ipqc/templates">
+        <strong>IPQC 模板</strong>
+        <span>模板、关联项目与升版</span>
+      </router-link>
+      <router-link class="link-card" to="/quality-management/ipqc/first-article">
+        <strong>IPQC 录入</strong>
+        <span>首件 / 巡检 / 复检 / 送检</span>
+      </router-link>
+      <router-link class="link-card" to="/quality/ipqc-analysis">
+        <strong>IPQC 报表</strong>
+        <span>工序合格率与不合格分析</span>
       </router-link>
       <router-link class="link-card" to="/quality/dashboard">
         <strong>品质看板</strong>

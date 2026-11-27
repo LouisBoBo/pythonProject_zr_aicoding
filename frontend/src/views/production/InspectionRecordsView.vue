@@ -3,7 +3,12 @@
     <header class="page-header">
       <div class="header-main">
         <h1 class="page-title">检验记录</h1>
-        <p class="page-sub">品质检验单查询 · 来料/过程/出货检验追溯</p>
+        <p class="page-sub">品质检验单查询 · 来料/过程/出货检验追溯 · 支持 IPQC Excel 导入</p>
+      </div>
+      <div class="header-actions">
+        <el-upload :show-file-list="false" accept=".xlsx,.xls" :before-upload="handleImport">
+          <el-button type="primary" :icon="Upload" :loading="importing">导入 IPQC</el-button>
+        </el-upload>
       </div>
     </header>
 
@@ -35,6 +40,26 @@
         <el-option label="不合格" value="fail" />
         <el-option label="让步接收" value="conditional" />
       </el-select>
+      <el-select v-model="filters.processName" placeholder="工序" clearable style="width: 120px">
+        <el-option label="成型" value="成型" />
+        <el-option label="钻孔" value="钻孔" />
+        <el-option label="阻焊" value="阻焊" />
+        <el-option label="待确认工序" value="待确认工序" />
+      </el-select>
+      <el-select v-model="filters.ipqcEntryType" placeholder="IPQC类型" clearable style="width: 120px">
+        <el-option label="导入" value="import" />
+        <el-option label="首件" value="first_article" />
+        <el-option label="巡检" value="patrol" />
+        <el-option label="复检" value="reinspect" />
+        <el-option label="送检" value="submit" />
+      </el-select>
+      <el-input
+        v-model="filters.customerCode"
+        placeholder="客户代码"
+        clearable
+        style="width: 110px"
+        @keyup.enter="handleSearch"
+      />
       <el-input
         v-model="filters.workOrderNo"
         placeholder="关联工单"
@@ -85,7 +110,13 @@
 
     <section class="table-section">
       <el-table v-loading="loading" :data="items" border style="width: 100%">
-        <el-table-column prop="inspection_no" label="检验单号" min-width="150" fixed="left" />
+        <el-table-column prop="inspection_no" label="检验单号" min-width="150" fixed="left">
+          <template #default="{ row }">
+            <el-button link type="primary" @click="$router.push(`/quality-management/ipqc/detail/${row.id}`)">
+              {{ row.inspection_no }}
+            </el-button>
+          </template>
+        </el-table-column>
         <el-table-column label="检验类型" width="100" align="center">
           <template #default="{ row }">
             {{ typeLabel(row.inspection_type) }}
@@ -101,14 +132,41 @@
         <el-table-column label="关联工单" min-width="140">
           <template #default="{ row }">{{ row.work_order_no || '—' }}</template>
         </el-table-column>
-        <el-table-column label="批次" min-width="130">
-          <template #default="{ row }">{{ row.batch_no || '—' }}</template>
+        <el-table-column label="工序" min-width="120" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ row.process_name || row.process_id || '—' }}
+          </template>
         </el-table-column>
-        <el-table-column prop="material_code" label="物料编码" min-width="120" />
-        <el-table-column prop="material_name" label="物料名称" min-width="130" />
+        <el-table-column label="模板" min-width="140" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.template_id || '—' }}</template>
+        </el-table-column>
+        <el-table-column label="批次" min-width="130">
+          <template #default="{ row }">{{ row.batch_no || row.mo_lot || '—' }}</template>
+        </el-table-column>
+        <el-table-column label="物料/料号" min-width="120">
+          <template #default="{ row }">{{ row.item_id || row.material_code || '—' }}</template>
+        </el-table-column>
+        <el-table-column prop="material_name" label="物料名称" min-width="120" />
+        <el-table-column label="单位" width="70" align="center">
+          <template #default="{ row }">{{ row.unit || '—' }}</template>
+        </el-table-column>
         <el-table-column prop="inspector" label="检验人" width="90" />
+        <el-table-column label="审核人" width="90">
+          <template #default="{ row }">{{ row.check_user_name || '—' }}</template>
+        </el-table-column>
+        <el-table-column label="班次" width="80" align="center">
+          <template #default="{ row }">{{ row.shift || '—' }}</template>
+        </el-table-column>
+        <el-table-column label="客户" width="90" align="center">
+          <template #default="{ row }">{{ row.customer_code || '—' }}</template>
+        </el-table-column>
         <el-table-column label="检验时间" width="160">
           <template #default="{ row }">{{ formatDateTime(row.inspected_at) }}</template>
+        </el-table-column>
+        <el-table-column label="抽检数" width="90" align="right">
+          <template #default="{ row }">
+            {{ row.inspected_qty != null ? Number(row.inspected_qty).toLocaleString() : '—' }}
+          </template>
         </el-table-column>
         <el-table-column label="不合格数量" width="110" align="right">
           <template #default="{ row }">
@@ -116,6 +174,9 @@
               {{ row.non_conforming_qty.toLocaleString() }}
             </span>
           </template>
+        </el-table-column>
+        <el-table-column label="复检" width="70" align="center">
+          <template #default="{ row }">{{ row.is_reinspection ? '是' : '—' }}</template>
         </el-table-column>
         <el-table-column label="备注" min-width="160" show-overflow-tooltip>
           <template #default="{ row }">{{ row.remark || '—' }}</template>
@@ -141,7 +202,11 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { fetchQualityInspectionRecords } from '../../api/qualityInspectionRecords'
+import { Upload } from '@element-plus/icons-vue'
+import {
+  fetchQualityInspectionRecords,
+  importQualityInspectionRecords,
+} from '../../api/qualityInspectionRecords'
 
 const TYPE_MAP = {
   incoming: '来料检验',
@@ -159,6 +224,9 @@ const filters = reactive({
   inspectionNo: '',
   inspectionType: '',
   inspectionResult: '',
+  processName: '',
+  ipqcEntryType: '',
+  customerCode: '',
   workOrderNo: '',
   batchNo: '',
   materialCode: '',
@@ -169,6 +237,7 @@ const filters = reactive({
 
 const items = ref([])
 const loading = ref(false)
+const importing = ref(false)
 const page = ref(1)
 const pageSize = ref(10)
 const total = ref(0)
@@ -199,6 +268,9 @@ async function loadList() {
       inspectionNo: filters.inspectionNo || undefined,
       inspectionType: filters.inspectionType || undefined,
       inspectionResult: filters.inspectionResult || undefined,
+      processName: filters.processName || undefined,
+      ipqcEntryType: filters.ipqcEntryType || undefined,
+      customerCode: filters.customerCode || undefined,
       workOrderNo: filters.workOrderNo || undefined,
       batchNo: filters.batchNo || undefined,
       materialCode: filters.materialCode || undefined,
@@ -225,6 +297,9 @@ function handleReset() {
   filters.inspectionNo = ''
   filters.inspectionType = ''
   filters.inspectionResult = ''
+  filters.processName = ''
+  filters.ipqcEntryType = ''
+  filters.customerCode = ''
   filters.workOrderNo = ''
   filters.batchNo = ''
   filters.materialCode = ''
@@ -233,6 +308,26 @@ function handleReset() {
   filters.dateRange = null
   page.value = 1
   loadList()
+}
+
+async function handleImport(file) {
+  importing.value = true
+  try {
+    const result = await importQualityInspectionRecords(file)
+    const errHint =
+      result.errors && result.errors.length ? `；错误 ${result.errors.length} 条` : ''
+    ElMessage.success(
+      `导入完成：新增 ${result.created}，更新 ${result.updated || 0}，跳过 ${result.skipped}，` +
+        `待审 ${result.pending_count || 0}，不合格 ${result.failed_count || 0}${errHint}`,
+    )
+    page.value = 1
+    await loadList()
+  } catch (err) {
+    ElMessage.error(err.message || '导入失败')
+  } finally {
+    importing.value = false
+  }
+  return false
 }
 
 onMounted(loadList)
@@ -247,7 +342,12 @@ onMounted(loadList)
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
+  gap: 16px;
   margin-bottom: 20px;
+}
+
+.header-actions {
+  flex-shrink: 0;
 }
 
 .page-title {

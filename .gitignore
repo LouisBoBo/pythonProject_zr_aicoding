@@ -5,11 +5,22 @@ backend/_mes_test_done.json
 __pycache__/
 *.py[cod]
 *.db
+*.db-wal
+*.db-shm
+# 业务库本地备份（拉取/推送正式库前的副本；勿进 Git，正式数据只走服务器文件同步）
+*.db.bak*
+*.db.bak*-wal
+*.db.bak*-shm
 *.sqlite3
 *.sqlite3-wal
 *.sqlite3-shm
 .pytest_cache/
 .env
+.env.*
+!.env.example
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
 .venv/
 venv/
 

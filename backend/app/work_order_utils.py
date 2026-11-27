@@ -4,8 +4,18 @@ from __future__ import annotations
 
 from datetime import datetime
 
-# 标准工序序列（与 quality_metrics / 种子数据一致）
-STANDARD_PROCESSES: list[str] = ["贴片", "焊接", "AOI检测", "功能测试", "包装"]
+from app.process_catalog import STANDARD_PROCESSES
+
+# 标准工序序列（与 IPQC / quality_metrics 一致）
+__all__ = [
+    "STANDARD_PROCESSES",
+    "WIP_EXCLUDED_STATUSES",
+    "FINISHED_STATUSES",
+    "derive_current_process",
+    "calc_wip_quantity",
+    "is_wip_status",
+    "ensure_work_order_timestamps",
+]
 
 # wip 口径：未完工且非取消
 WIP_EXCLUDED_STATUSES: frozenset[str] = frozenset({"completed", "cancelled", "closed"})
@@ -21,6 +31,10 @@ def derive_current_process(
     if status == "pending":
         return STANDARD_PROCESSES[0]
     if status in FINISHED_STATUSES:
+        # 完工/关闭落在末道制造工序；「待确认工序」仅作未知占位，不作完工态
+        for name in reversed(STANDARD_PROCESSES):
+            if name != "待确认工序":
+                return name
         return STANDARD_PROCESSES[-1]
     if status == "cancelled":
         if plan_quantity > 0 and actual_quantity > 0:

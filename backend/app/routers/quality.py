@@ -1,13 +1,16 @@
 from datetime import date, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.audit import record_audit
 from app.auth import get_current_user
 from app.database import SessionLocal, engine, get_db
+from app.ipqc_import import IMPORT_READ_CHUNK, MAX_IMPORT_BYTES, import_ipqc_workbook
 from app.models import QualityAnomaly, QualityDefectDetail, QualityMetrics, User, WorkOrder
+from app.permissions import QUALITY_WRITE, require_permissions
+from app.process_catalog import QUALITY_DEFECT_TYPES, QUALITY_PROCESSES
 from app.quality_inspection_record_store import (
     TASK_STATUS_FAILED,
     TASK_STATUS_PASSED,
@@ -32,6 +35,14 @@ from app.schemas import (
     QualityTrendResponse,
 )
 from app.schemas_quality_inspection import (
+    IpqcAnalyticsResponse,
+    IpqcAnalyticsSummary,
+    IpqcCheckLagBucket,
+    IpqcCheckLagStats,
+    IpqcCustomerFailItem,
+    IpqcDailyTrendItem,
+    IpqcProcessYieldItem,
+    QualityInspectionImportResult,
     QualityInspectionRecordListResponse,
     QualityInspectionRecordResponse,
     QualityInspectionTaskListResponse,
@@ -39,7 +50,7 @@ from app.schemas_quality_inspection import (
     QualityInspectionTaskStatusUpdate,
 )
 
-router = APIRouter(prefix="/api/quality", tags=["quality"])
+router = APIRouter(prefix="/api/quality", tags=["品质管理"])
 
 ensure_quality_inspection_records_schema(engine)
 
@@ -61,8 +72,8 @@ TASK_STATUS_TRANSITIONS: dict[str, set[str]] = {
 }
 
 LINES = ["SMT-1线", "SMT-2线", "DIP线", "组装线", "测试线"]
-PROCESSES = ["贴片", "焊接", "AOI检测", "功能测试", "包装"]
-DEFECT_TYPES = ["虚焊", "短路", "元件偏移", "漏件", "外观不良", "功能异常", "尺寸偏差"]
+PROCESSES = list(QUALITY_PROCESSES)
+DEFECT_TYPES = list(QUALITY_DEFECT_TYPES)
 
 
 def _to_anomaly_item(row: QualityAnomaly) -> QualityAnomalyItem:
@@ -387,7 +398,7 @@ def get_anomalies(
 def close_anomaly(
     anomaly_id: int,
     payload: QualityAnomalyCloseRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permissions(QUALITY_WRITE)),
     db: Session = Depends(get_db),
 ):
     row = db.query(QualityAnomaly).filter(QualityAnomaly.id == anomaly_id).first()
@@ -443,18 +454,351 @@ def get_top_defects(
     return QualityTopDefectResponse(items=items)
 
 
-@router.get("/inspection-records", response_model=QualityInspectionRecordListResponse)
+async def _read_upload_limited(file: UploadFile, max_bytes: int = MAX_IMPORT_BYTES) -> bytes:
+    """分块读取上传文件，超过上限则拒绝。"""
+    declared = getattr(file, "size", None)
+    if declared is not None and declared > max_bytes:
+        raise HTTPException(
+            status_code=400,
+            detail=f"文件过大，请上传不超过 {max_bytes // (1024 * 1024)}MB 的 Excel",
+        )
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await file.read(IMPORT_READ_CHUNK)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_bytes:
+            raise HTTPException(
+                status_code=400,
+                detail=f"文件过大，请上传不超过 {max_bytes // (1024 * 1024)}MB 的 Excel",
+            )
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+@router.post(
+    "/inspection-records/import",
+    response_model=QualityInspectionImportResult,
+    summary="导入 IPQC 检验记录",
+    description=(
+        "上传外部 IPQC 主表 Excel（42 列全量落库，含 CPROCESS_ID 工序、CTEMPLATE_ID 模板等），"
+        "写入品质管理-检验记录；统一映射为过程检验(process)。"
+        "已存在 source_cid 时全量更新回填；CSTATE=D 跳过；"
+        "CSTATUS=1 写入待审核检验任务。"
+    ),
+)
+async def import_quality_inspection_records(
+    file: UploadFile = File(..., description="IPQC 主表 Excel（.xlsx）"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permissions(QUALITY_WRITE)),
+):
+    # 仅接受 openpyxl 可解析的 .xlsx，避免 .xls 提示与实现不一致
+    if not file.filename or not file.filename.lower().endswith(".xlsx"):
+        raise HTTPException(status_code=400, detail="请上传 Excel 文件（.xlsx）")
+
+    content = await _read_upload_limited(file)
+    if not content:
+        raise HTTPException(status_code=400, detail="上传文件为空")
+
+    try:
+        result = import_ipqc_workbook(db, content)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="无法解析或导入 Excel 文件") from exc
+
+    record_audit(
+        db,
+        username=current_user.username,
+        action="import",
+        resource="quality_inspection_records",
+        detail={
+            "created": result["created"],
+            "updated": result.get("updated", 0),
+            "skipped": result["skipped"],
+            "pending_count": result["pending_count"],
+            "failed_count": result["failed_count"],
+            "filename": file.filename,
+        },
+        commit=True,
+    )
+    return QualityInspectionImportResult(**result)
+
+
+def _ipqc_base_query(db: Session, date_from: date | None, date_to: date | None):
+    """IPQC 导入记录（source_cid 非空）；可选按检验日期筛选。"""
+    query = db.query(QualityInspectionRecord).filter(
+        QualityInspectionRecord.source_cid.isnot(None)
+    )
+    if date_from:
+        query = query.filter(
+            QualityInspectionRecord.inspected_at >= datetime.combine(date_from, datetime.min.time())
+        )
+    if date_to:
+        query = query.filter(
+            QualityInspectionRecord.inspected_at <= datetime.combine(date_to, datetime.max.time())
+        )
+    return query
+
+
+def _rate_pct(part: int, whole: int) -> float:
+    if whole <= 0:
+        return 0.0
+    return round(part * 100.0 / whole, 2)
+
+
+@router.get(
+    "/ipqc-analytics",
+    response_model=IpqcAnalyticsResponse,
+    summary="IPQC 四维分析",
+    description=(
+        "基于已导入 IPQC 检验记录，一次返回：工序合格率、日不合格率趋势、"
+        "客户不合格 TopN、待审积压与审核时效。品质分析-IPQC检验分析页数据来源。"
+    ),
+)
+def get_ipqc_analytics(
+    date_from: date | None = Query(None, description="检验日期起"),
+    date_to: date | None = Query(None, description="检验日期止"),
+    customer_top: int = Query(10, ge=5, le=30, description="客户不合格排行条数"),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    base = _ipqc_base_query(db, date_from, date_to)
+
+    # --- 摘要 ---
+    total = base.count()
+    pass_count = base.filter(QualityInspectionRecord.inspection_result == "pass").count()
+    fail_count = base.filter(QualityInspectionRecord.inspection_result == "fail").count()
+    pending_count = base.filter(QualityInspectionRecord.status == TASK_STATUS_PENDING).count()
+    judged = pass_count + fail_count
+    summary = IpqcAnalyticsSummary(
+        total=total,
+        pass_count=pass_count,
+        fail_count=fail_count,
+        pending_count=pending_count,
+        pass_rate=_rate_pct(pass_count, judged),
+        fail_rate=_rate_pct(fail_count, judged),
+    )
+
+    # --- 1. 工序合格率 ---
+    process_rows = (
+        base.with_entities(
+            QualityInspectionRecord.process_id,
+            QualityInspectionRecord.process_name,
+            QualityInspectionRecord.inspection_result,
+            QualityInspectionRecord.status,
+            func.count(),
+        )
+        .group_by(
+            QualityInspectionRecord.process_id,
+            QualityInspectionRecord.process_name,
+            QualityInspectionRecord.inspection_result,
+            QualityInspectionRecord.status,
+        )
+        .all()
+    )
+    process_map: dict[tuple[str | None, str | None], dict[str, int]] = {}
+    for pid, pname, result, status, n in process_rows:
+        key = (pid, pname)
+        bucket = process_map.setdefault(
+            key, {"pass": 0, "fail": 0, "pending": 0, "total": 0}
+        )
+        bucket["total"] += int(n)
+        if status == TASK_STATUS_PENDING or result == "pending":
+            bucket["pending"] += int(n)
+        elif result == "fail":
+            bucket["fail"] += int(n)
+        else:
+            bucket["pass"] += int(n)
+
+    process_yield: list[IpqcProcessYieldItem] = []
+    for (pid, pname), b in process_map.items():
+        judged_p = b["pass"] + b["fail"]
+        process_yield.append(
+            IpqcProcessYieldItem(
+                process_id=pid,
+                process_name=(pname.strip() if isinstance(pname, str) and pname.strip() else None)
+                or "未知工序",
+                total=b["total"],
+                pass_count=b["pass"],
+                fail_count=b["fail"],
+                pending_count=b["pending"],
+                pass_rate=_rate_pct(b["pass"], judged_p),
+                fail_rate=_rate_pct(b["fail"], judged_p),
+            )
+        )
+    process_yield.sort(key=lambda x: x.fail_count, reverse=True)
+
+    # --- 2. 日不合格率趋势 ---
+    day_expr = func.date(QualityInspectionRecord.inspected_at)
+    daily_rows = (
+        base.with_entities(
+            day_expr,
+            QualityInspectionRecord.inspection_result,
+            QualityInspectionRecord.status,
+            func.count(),
+        )
+        .group_by(day_expr, QualityInspectionRecord.inspection_result, QualityInspectionRecord.status)
+        .order_by(day_expr)
+        .all()
+    )
+    daily_map: dict[str, dict[str, int]] = {}
+    for d, result, status, n in daily_rows:
+        if d is None:
+            continue
+        label = str(d)
+        bucket = daily_map.setdefault(label, {"pass": 0, "fail": 0, "pending": 0, "total": 0})
+        bucket["total"] += int(n)
+        if status == TASK_STATUS_PENDING or result == "pending":
+            bucket["pending"] += int(n)
+        elif result == "fail":
+            bucket["fail"] += int(n)
+        else:
+            bucket["pass"] += int(n)
+
+    daily_trend = [
+        IpqcDailyTrendItem(
+            date=label,
+            total=b["total"],
+            pass_count=b["pass"],
+            fail_count=b["fail"],
+            pending_count=b["pending"],
+            fail_rate=_rate_pct(b["fail"], b["pass"] + b["fail"]),
+        )
+        for label, b in sorted(daily_map.items())
+    ]
+
+    # --- 3. 客户不合格 TopN ---
+    customer_rows = (
+        base.with_entities(
+            QualityInspectionRecord.customer_code,
+            QualityInspectionRecord.inspection_result,
+            func.count(),
+        )
+        .filter(QualityInspectionRecord.customer_code.isnot(None))
+        .group_by(QualityInspectionRecord.customer_code, QualityInspectionRecord.inspection_result)
+        .all()
+    )
+    cust_map: dict[str, dict[str, int]] = {}
+    for code, result, n in customer_rows:
+        if not code:
+            continue
+        bucket = cust_map.setdefault(code, {"total": 0, "fail": 0})
+        bucket["total"] += int(n)
+        if result == "fail":
+            bucket["fail"] += int(n)
+
+    customer_fail_top = [
+        IpqcCustomerFailItem(
+            customer_code=code,
+            total=b["total"],
+            fail_count=b["fail"],
+            fail_rate=_rate_pct(b["fail"], b["total"]),
+        )
+        for code, b in cust_map.items()
+        if b["fail"] > 0
+    ]
+    customer_fail_top.sort(key=lambda x: (x.fail_count, x.fail_rate), reverse=True)
+    customer_fail_top = customer_fail_top[:customer_top]
+
+    # --- 4. 待审积压 + 审核时效（仅取已审核且时间齐全的行，限制样本上限防 DoS） ---
+    LAG_SAMPLE_CAP = 20000
+    lag_rows = (
+        base.with_entities(
+            QualityInspectionRecord.inspected_at,
+            QualityInspectionRecord.check_time,
+        )
+        .filter(
+            QualityInspectionRecord.inspected_at.isnot(None),
+            QualityInspectionRecord.check_time.isnot(None),
+            QualityInspectionRecord.status != TASK_STATUS_PENDING,
+        )
+        .limit(LAG_SAMPLE_CAP)
+        .all()
+    )
+    lag_hours: list[float] = []
+    for inspected_at, check_time in lag_rows:
+        delta_h = (check_time - inspected_at).total_seconds() / 3600.0
+        if delta_h < 0:
+            continue
+        lag_hours.append(delta_h)
+
+    lag_hours.sort()
+    checked_count = len(lag_hours)
+
+    def _percentile(sorted_vals: list[float], p: float) -> float | None:
+        if not sorted_vals:
+            return None
+        if len(sorted_vals) == 1:
+            return round(sorted_vals[0], 2)
+        idx = (len(sorted_vals) - 1) * p
+        lo = int(idx)
+        hi = min(lo + 1, len(sorted_vals) - 1)
+        frac = idx - lo
+        return round(sorted_vals[lo] * (1 - frac) + sorted_vals[hi] * frac, 2)
+
+    over_24h = sum(1 for h in lag_hours if h > 24)
+    buckets_def = [
+        ("≤8h", 0, 8),
+        ("8–24h", 8, 24),
+        ("1–3天", 24, 72),
+        ("3–7天", 72, 168),
+        (">7天", 168, None),
+    ]
+    buckets: list[IpqcCheckLagBucket] = []
+    for label, lo, hi in buckets_def:
+        if hi is None:
+            cnt = sum(1 for h in lag_hours if h > lo)
+        else:
+            cnt = sum(1 for h in lag_hours if lo < h <= hi) if lo > 0 else sum(
+                1 for h in lag_hours if h <= hi
+            )
+        buckets.append(IpqcCheckLagBucket(label=label, count=cnt))
+
+    check_lag = IpqcCheckLagStats(
+        pending_count=pending_count,
+        checked_count=checked_count,
+        avg_hours=round(sum(lag_hours) / checked_count, 2) if checked_count else None,
+        median_hours=_percentile(lag_hours, 0.5),
+        p75_hours=_percentile(lag_hours, 0.75),
+        over_24h_count=over_24h,
+        over_24h_ratio=_rate_pct(over_24h, checked_count),
+        buckets=buckets,
+    )
+
+    return IpqcAnalyticsResponse(
+        summary=summary,
+        process_yield=process_yield,
+        daily_trend=daily_trend,
+        customer_fail_top=customer_fail_top,
+        check_lag=check_lag,
+    )
+
+
+@router.get(
+    "/inspection-records",
+    response_model=QualityInspectionRecordListResponse,
+    summary="检验记录列表",
+    description="分页查询已完成的品质检验记录（status=passed/failed）；品质管理-检验记录页数据来源。",
+)
 def list_quality_inspection_records(
-    page: int = Query(1, ge=1, description="页码"),
+    page: int = Query(1, ge=1, description="页码，从 1 开始"),
     page_size: int = Query(10, ge=1, le=100, description="每页条数"),
-    inspection_no: str | None = Query(None, description="检验单号"),
+    inspection_no: str | None = Query(None, description="检验单号（模糊匹配）"),
     inspection_type: str | None = Query(None, description="检验类型：incoming/process/final"),
     inspection_result: str | None = Query(None, description="检验结果：pass/fail/conditional"),
-    work_order_no: str | None = Query(None, description="关联工单号"),
-    batch_no: str | None = Query(None, description="批次号"),
-    material_code: str | None = Query(None, description="物料编码"),
-    material_name: str | None = Query(None, description="物料名称"),
-    inspector: str | None = Query(None, description="检验人"),
+    work_order_no: str | None = Query(None, description="关联工单号（模糊匹配）"),
+    batch_no: str | None = Query(None, description="批次号（模糊匹配）"),
+    material_code: str | None = Query(None, description="物料编码（模糊匹配）"),
+    material_name: str | None = Query(None, description="物料名称（模糊匹配）"),
+    inspector: str | None = Query(None, description="检验人（模糊匹配）"),
+    process_name: str | None = Query(None, description="工序名称"),
+    customer_code: str | None = Query(None, description="客户代码"),
+    ipqc_entry_type: str | None = Query(
+        None, description="IPQC录入类型：first_article/patrol/reinspect/submit/import"
+    ),
     date_from: date | None = Query(None, description="检验时间起"),
     date_to: date | None = Query(None, description="检验时间止"),
     db: Session = Depends(get_db),
@@ -480,6 +824,12 @@ def list_quality_inspection_records(
         query = query.filter(QualityInspectionRecord.material_name.ilike(f"%{material_name}%"))
     if inspector:
         query = query.filter(QualityInspectionRecord.inspector.ilike(f"%{inspector}%"))
+    if process_name:
+        query = query.filter(QualityInspectionRecord.process_name == process_name)
+    if customer_code:
+        query = query.filter(QualityInspectionRecord.customer_code.ilike(f"%{customer_code}%"))
+    if ipqc_entry_type:
+        query = query.filter(QualityInspectionRecord.ipqc_entry_type == ipqc_entry_type)
     if date_from:
         query = query.filter(
             QualityInspectionRecord.inspected_at >= datetime.combine(date_from, datetime.min.time())
@@ -579,7 +929,7 @@ def list_quality_inspection_tasks(
 def update_quality_inspection_task_status(
     task_id: int,
     payload: QualityInspectionTaskStatusUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permissions(QUALITY_WRITE)),
     db: Session = Depends(get_db),
 ):
     """检验任务状态流转：待检 → 合格 / 不合格。"""

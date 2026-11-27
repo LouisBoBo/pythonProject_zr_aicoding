@@ -7,8 +7,19 @@ import FavoritesIndex from '../views/favorites/Index.vue'
 import WorkbenchIndex from '../views/workbench/Index.vue'
 import QualityIndex from '../views/quality/Index.vue'
 import QualityDashboardView from '../views/quality/DashboardView.vue'
+import IpqcAnalysisView from '../views/quality/IpqcAnalysisView.vue'
+import CopqAnalysisView from '../views/quality/CopqAnalysisView.vue'
+import SpcControlView from '../views/quality/SpcControlView.vue'
 import QualityManagementIndex from '../views/quality-management/Index.vue'
 import QualityAnomaliesView from '../views/quality-management/AnomaliesView.vue'
+import IpqcTemplatesView from '../views/quality-management/ipqc/TemplatesView.vue'
+import IpqcTestItemsView from '../views/quality-management/ipqc/TestItemsView.vue'
+import IpqcTemplateVersionsView from '../views/quality-management/ipqc/TemplateVersionsView.vue'
+import IpqcTemplateLinksView from '../views/quality-management/ipqc/TemplateLinksView.vue'
+import IpqcEntryView from '../views/quality-management/ipqc/EntryView.vue'
+import IpqcDetailView from '../views/quality-management/ipqc/DetailView.vue'
+import IpqcEditView from '../views/quality-management/ipqc/EditView.vue'
+import IpqcRecordModifyListView from '../views/quality-management/ipqc/RecordModifyListView.vue'
 import ProductionIndex from '../views/production/Index.vue'
 import InspectionRecordsView from '../views/production/InspectionRecordsView.vue'
 import InspectionTasksView from '../views/production/InspectionTasksView.vue'
@@ -63,7 +74,25 @@ const router = createRouter({
         { path: 'home', name: 'home', component: HomeIndex, meta: { title: '首页', ...authRequired } },
         { path: 'favorites', name: 'favorites', component: FavoritesIndex, meta: { title: '收藏夹', ...authRequired } },
         { path: 'workbench', name: 'workbench', component: WorkbenchIndex, meta: { title: '工作台', ...authRequired } },
-        { path: 'quality', name: 'quality', component: QualityIndex, meta: { title: '品质分析', ...authRequired } },
+        { path: 'quality', name: 'quality', redirect: '/quality/ipqc-analysis', meta: { title: '品质分析', ...authRequired } },
+        {
+          path: 'quality/ipqc-analysis',
+          name: 'quality-ipqc-analysis',
+          component: IpqcAnalysisView,
+          meta: { title: 'IPQC检验分析', ...authRequired },
+        },
+        {
+          path: 'quality/copq',
+          name: 'quality-copq',
+          component: CopqAnalysisView,
+          meta: { title: '客诉 / COPQ 金额', ...authRequired },
+        },
+        {
+          path: 'quality/spc',
+          name: 'quality-spc',
+          component: SpcControlView,
+          meta: { title: 'SPC控制图', ...authRequired },
+        },
         { path: 'quality/dashboard', name: 'quality-dashboard', component: QualityDashboardView, meta: { title: '品质看板', ...authRequired } },
         { path: 'quality/:id', name: 'quality-detail', component: QualityIndex, meta: { title: '品质分析', ...authRequired } },
         {
@@ -89,6 +118,86 @@ const router = createRouter({
           name: 'quality-inspection-tasks',
           component: InspectionTasksView,
           meta: { title: '检验任务', ...authRequired },
+        },
+        {
+          path: 'quality-management/ipqc/templates',
+          name: 'ipqc-templates',
+          component: IpqcTemplatesView,
+          meta: { title: 'IPQC模板', ...authRequired },
+        },
+        {
+          path: 'quality-management/ipqc/template-links',
+          name: 'ipqc-template-links',
+          component: IpqcTemplateLinksView,
+          meta: { title: '模板关联', ...authRequired },
+        },
+        {
+          path: 'quality-management/ipqc/record-modify',
+          name: 'ipqc-record-modify',
+          component: IpqcRecordModifyListView,
+          meta: { title: 'IPQC记录修改', ...authRequired },
+        },
+        {
+          path: 'quality-management/ipqc/template-versions',
+          name: 'ipqc-template-versions',
+          component: IpqcTemplateVersionsView,
+          meta: { title: '模板升级记录', ...authRequired },
+        },
+        {
+          path: 'quality-management/ipqc/test-items',
+          name: 'ipqc-test-items',
+          component: IpqcTestItemsView,
+          meta: { title: '测试项目', ...authRequired },
+        },
+        {
+          path: 'quality-management/ipqc/item-query',
+          name: 'ipqc-item-query',
+          component: IpqcTestItemsView,
+          meta: { title: '检验项目查询', ...authRequired },
+        },
+        {
+          path: 'quality-management/ipqc/submit',
+          name: 'ipqc-submit',
+          component: IpqcEntryView,
+          meta: { title: '送检提交', ...authRequired },
+          props: { entryType: 'submit' },
+        },
+        {
+          path: 'quality-management/ipqc/first-article',
+          name: 'ipqc-first-article',
+          component: IpqcEntryView,
+          meta: { title: 'IPQC首件录入', ...authRequired },
+          props: { entryType: 'first_article' },
+        },
+        {
+          path: 'quality-management/ipqc/patrol',
+          name: 'ipqc-patrol',
+          component: IpqcEntryView,
+          meta: { title: 'IPQC巡检录入', ...authRequired },
+          props: { entryType: 'patrol' },
+        },
+        {
+          path: 'quality-management/ipqc/reinspect',
+          name: 'ipqc-reinspect',
+          component: IpqcEntryView,
+          meta: { title: '复检结果录入', ...authRequired },
+          props: { entryType: 'reinspect' },
+        },
+        {
+          path: 'quality-management/ipqc/detail/:id',
+          name: 'ipqc-detail',
+          component: IpqcDetailView,
+          meta: { title: 'IPQC详情', ...authRequired },
+        },
+        {
+          path: 'quality-management/ipqc/edit/:id',
+          name: 'ipqc-edit',
+          component: IpqcEditView,
+          meta: { title: 'IPQC记录修改', ...authRequired },
+        },
+        {
+          path: 'quality-management/ipqc/reports',
+          redirect: '/quality/ipqc-analysis',
         },
         { path: 'production', name: 'production', component: ProductionIndex, meta: { title: '生产概览', ...authRequired } },
         { path: 'production-plan/:id?', name: 'production-plan', component: ProductionIndex, meta: { title: '生产概览', ...authRequired } },

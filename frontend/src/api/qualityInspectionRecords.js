@@ -11,6 +11,9 @@ export function fetchQualityInspectionRecords({
   materialCode,
   materialName,
   inspector,
+  processName,
+  customerCode,
+  ipqcEntryType,
   dateFrom,
   dateTo,
 } = {}) {
@@ -25,7 +28,24 @@ export function fetchQualityInspectionRecords({
   if (materialCode) params.set('material_code', materialCode)
   if (materialName) params.set('material_name', materialName)
   if (inspector) params.set('inspector', inspector)
+  if (processName) params.set('process_name', processName)
+  if (customerCode) params.set('customer_code', customerCode)
+  if (ipqcEntryType) params.set('ipqc_entry_type', ipqcEntryType)
   if (dateFrom) params.set('date_from', dateFrom)
   if (dateTo) params.set('date_to', dateTo)
   return authFetch(`/api/quality/inspection-records?${params.toString()}`)
+}
+
+/** 导入 IPQC 主表 Excel → 品质检验记录 */
+export async function importQualityInspectionRecords(file) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return authFetch(
+    '/api/quality/inspection-records/import',
+    {
+      method: 'POST',
+      body: formData,
+    },
+    '导入失败',
+  )
 }

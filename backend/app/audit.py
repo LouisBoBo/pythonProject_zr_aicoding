@@ -50,7 +50,11 @@ def record_audit(
     db.add(row)
     if commit:
         db.commit()
-        db.refresh(row)
+        # SQLite / 并发下 refresh 偶发失败；审计已落库，不影响登录等主流程
+        try:
+            db.refresh(row)
+        except Exception:
+            db.expire(row)
     else:
         db.flush()
     return row

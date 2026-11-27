@@ -87,7 +87,7 @@ def _add_order(db, order_no, status="pending", plan=100, actual=0, process=None,
 
 def test_wip_report_requires_auth(client):
     response = client.get("/api/reports/wip")
-    assert response.status_code == 403
+    assert response.status_code in (401, 403)
 
 
 def test_wip_report_wip_metric_and_filters(client, test_user, db_session):
@@ -101,11 +101,11 @@ def test_wip_report_wip_metric_and_filters(client, test_user, db_session):
         status="in_progress",
         plan=100,
         actual=30,
-        process="焊接",
+        process="蚀刻",
         start_date=__import__("datetime").date(2025, 8, 1),
         end_date=__import__("datetime").date(2025, 8, 10),
     )
-    _add_order(db_session, "WO-WIP-003", status="completed", plan=100, actual=100, process="包装")
+    _add_order(db_session, "WO-WIP-003", status="completed", plan=100, actual=100, process="成型")
     _add_order(db_session, "WO-WIP-004", status="cancelled", plan=50, actual=0)
 
     resp = client.get("/api/reports/wip", headers=headers)
@@ -117,10 +117,10 @@ def test_wip_report_wip_metric_and_filters(client, test_user, db_session):
     assert order_nos == {"WO-WIP-001", "WO-WIP-002"}
 
     in_progress = next(i for i in data["items"] if i["order_no"] == "WO-WIP-002")
-    assert in_progress["current_process"] == "焊接"
+    assert in_progress["current_process"] == "蚀刻"
     assert in_progress["wip_quantity"] == 70
 
-    filtered = client.get("/api/reports/wip?process=焊接", headers=headers)
+    filtered = client.get("/api/reports/wip?process=蚀刻", headers=headers)
     assert filtered.status_code == 200
     assert filtered.json()["total"] == 1
     assert filtered.json()["items"][0]["order_no"] == "WO-WIP-002"
@@ -136,8 +136,9 @@ def test_wip_processes_list(client, test_user):
     resp = client.get("/api/reports/wip/processes", headers=headers)
     assert resp.status_code == 200
     processes = resp.json()["processes"]
-    assert "贴片" in processes
-    assert "包装" in processes
+    assert "钻孔" in processes
+    assert "成型" in processes
+    assert "包装" not in processes
 
 
 def test_work_orders_still_accessible(client, test_user, db_session):

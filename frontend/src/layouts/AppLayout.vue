@@ -285,6 +285,7 @@ import {
   Star,
   Monitor,
   DataAnalysis,
+  TrendCharts,
   SetUp,
   Cpu,
   Box,
@@ -424,7 +425,16 @@ const menuGroups = computed(() => {
       key: 'business',
       title: '业务管理',
       items: [
-        { path: '/quality', title: '品质分析', icon: DataAnalysis },
+        {
+          key: 'quality-analysis',
+          title: '品质分析',
+          icon: DataAnalysis,
+          children: [
+            { path: '/quality/ipqc-analysis', title: 'IPQC检验分析', icon: DataAnalysis },
+            { path: '/quality/copq', title: '客诉 / COPQ 金额', icon: DataAnalysis },
+            { path: '/quality/spc', title: 'SPC控制图', icon: TrendCharts },
+          ],
+        },
         {
           key: 'quality-management',
           title: '品质管理',
@@ -433,7 +443,26 @@ const menuGroups = computed(() => {
             { path: '/quality-management', title: '品质概览', icon: Warning },
             { path: '/quality-management/anomalies', title: '品质异常', icon: Warning },
             { path: '/quality-management/inspection-tasks', title: '检验任务', icon: Document },
-            { path: '/quality-management/inspection-records', title: '检验记录', icon: List },
+            { path: '/quality-management/inspection-records', title: '检验记录查询', icon: List },
+            {
+              key: 'ipqc',
+              title: 'IPQC',
+              icon: Document,
+              children: [
+                { path: '/quality-management/ipqc/templates', title: 'IPQC模板', icon: Document },
+                { path: '/quality-management/ipqc/reports', title: 'IPQC报表', icon: DataAnalysis },
+                { path: '/quality-management/inspection-records', title: '检验记录查询', icon: List },
+                { path: '/quality-management/ipqc/template-versions', title: '模板升级记录', icon: Document },
+                { path: '/quality-management/ipqc/template-links', title: '模板关联', icon: Document },
+                { path: '/quality-management/ipqc/submit', title: '送检提交', icon: Document },
+                { path: '/quality-management/ipqc/test-items', title: '测试项目', icon: List },
+                { path: '/quality-management/ipqc/first-article', title: 'IPQC首件录入', icon: EditPen },
+                { path: '/quality-management/ipqc/patrol', title: 'IPQC巡检录入', icon: EditPen },
+                { path: '/quality-management/ipqc/reinspect', title: '复检结果录入', icon: EditPen },
+                { path: '/quality-management/ipqc/record-modify', title: 'IPQC记录修改', icon: EditPen },
+                { path: '/quality-management/ipqc/item-query', title: '检验项目查询', icon: List },
+              ],
+            },
           ],
         },
         {
@@ -554,7 +583,9 @@ const topTabs = [
   { label: '首页', path: '/home' },
   { label: '收藏夹', path: '/favorites' },
   { label: '工作台', path: '/workbench' },
-  { label: '品质分析', path: '/quality' },
+  { label: 'IPQC检验分析', path: '/quality/ipqc-analysis' },
+  { label: '客诉 / COPQ 金额', path: '/quality/copq' },
+  { label: 'SPC控制图', path: '/quality/spc' },
 ]
 
 const activeTab = computed(() => {

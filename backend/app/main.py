@@ -63,18 +63,27 @@ from app.routers import (
     messages,
     production,
     quality,
+    ipqc,
+    copq,
+    spc,
     reports,
+    equipment_downtime_report,
     warehouse,
     work_order_alerts,
     work_orders,
 )
 from app.work_order_labor_seed import ensure_work_order_labor_records
+from app.equipment_repair_pcb_seed import ensure_pcb_equipment_repair_orders
 from app.routers import employees as employees_router
 from app.routers import material_purchases
 from app.routers import materials as materials_router
 from app.material_purchase import backfill_material_purchase_profiles
 from app.seed_analytics import backfill_recent_operational_data, seed_analytics_data
 from app.permissions import seed_rbac
+from app.quality_mes_bridge import sync_quality_bridge
+from app.config import settings
+from app.copq_store import ensure_copq_schema, seed_copq_data
+from app.spc_store import ensure_spc_schema, seed_spc_data
 
 
 def seed_default_user():
@@ -267,12 +276,14 @@ def ensure_work_orders_current_process():
         orders = db.query(WorkOrder).all()
         changed = 0
         for wo in orders:
-            expected = derive_current_process(wo.status, wo.plan_quantity, wo.actual_quantity)
             before_end = wo.actual_end_time
             before_start = wo.actual_start_time
             before_process = wo.current_process
-            if not wo.current_process or wo.current_process != expected:
-                wo.current_process = expected
+            # 仅补空：已有 IPQC/业务回填的工序不覆盖，避免与检验实据打架
+            if not (wo.current_process or "").strip():
+                wo.current_process = derive_current_process(
+                    wo.status, wo.plan_quantity, wo.actual_quantity
+                )
             ensure_work_order_timestamps(wo)
             if (
                 wo.current_process != before_process
@@ -801,80 +812,85 @@ def seed_quality_data():
         if db.query(QualityMetrics).first():
             return
 
+        from app.process_catalog import (
+            IPQC_METRICS_LINE,
+            QUALITY_DEFECT_TYPES,
+            QUALITY_PROCESSES,
+        )
+
         lines = ["SMT-1线", "SMT-2线", "DIP线", "组装线", "测试线"]
-        processes = ["贴片", "焊接", "AOI检测", "功能测试", "包装"]
-        defect_types = ["虚焊", "短路", "元件偏移", "漏件", "外观不良", "功能异常", "尺寸偏差"]
+        processes = list(QUALITY_PROCESSES)
+        defect_types = list(QUALITY_DEFECT_TYPES)
         product_codes = ["PCB-A100", "PCB-A200", "PCB-B300", "PCB-C400", "PCB-D500"]
         today = date.today()
 
         metrics = []
         for day_offset in range(30):
             record_date = today - timedelta(days=29 - day_offset)
-            for line in lines:
-                for process in processes:
-                    total = 800 + (day_offset * 3) + hash(f"{line}{process}") % 120
-                    defect = int(total * (0.015 + (hash(record_date.isoformat() + line) % 8) / 1000))
-                    scrap = int(total * (0.003 + (hash(process) % 5) / 2000))
-                    good = total - defect - scrap
-                    metrics.append(
-                        QualityMetrics(
-                            record_date=record_date,
-                            production_line=line,
-                            process=process,
-                            good_count=max(good, 0),
-                            defect_count=defect,
-                            scrap_count=scrap,
-                            total_inspected=total,
-                        )
+            for process in processes:
+                total = 400 + (day_offset * 3) + hash(f"{process}") % 80
+                defect = int(total * (0.02 + (hash(record_date.isoformat() + process) % 8) / 1000))
+                scrap = int(total * (0.003 + (hash(process) % 5) / 2000))
+                good = total - defect - scrap
+                metrics.append(
+                    QualityMetrics(
+                        record_date=record_date,
+                        production_line=IPQC_METRICS_LINE,
+                        process=process,
+                        good_count=max(good, 0),
+                        defect_count=defect,
+                        scrap_count=scrap,
+                        total_inspected=total,
                     )
+                )
         db.add_all(metrics)
 
         anomalies = [
             QualityAnomaly(
-                production_line="SMT-1线",
-                process="焊接",
-                defect_type="虚焊",
+                production_line=IPQC_METRICS_LINE,
+                process="阻焊",
+                defect_type="阻焊露铜",
                 severity="critical",
                 status="open",
                 discovered_at=datetime.utcnow() - timedelta(hours=2),
             ),
             QualityAnomaly(
-                production_line="SMT-2线",
-                process="AOI检测",
-                defect_type="短路",
+                production_line=IPQC_METRICS_LINE,
+                process="钻孔",
+                defect_type="孔偏",
                 severity="major",
                 status="open",
                 discovered_at=datetime.utcnow() - timedelta(hours=5),
             ),
             QualityAnomaly(
-                production_line="DIP线",
-                process="功能测试",
-                defect_type="功能异常",
+                production_line=IPQC_METRICS_LINE,
+                process="成型",
+                defect_type="外形超差",
                 severity="major",
                 status="open",
                 discovered_at=datetime.utcnow() - timedelta(hours=8),
             ),
             QualityAnomaly(
-                production_line="组装线",
-                process="包装",
-                defect_type="外观不良",
+                production_line=IPQC_METRICS_LINE,
+                process="蚀刻",
+                defect_type="侧蚀超标",
                 severity="minor",
                 status="open",
                 discovered_at=datetime.utcnow() - timedelta(hours=12),
             ),
             QualityAnomaly(
-                production_line="测试线",
-                process="功能测试",
-                defect_type="尺寸偏差",
+                production_line=IPQC_METRICS_LINE,
+                process="成型",
+                defect_type="崩边",
                 severity="minor",
                 status="processing",
                 discovered_at=datetime.utcnow() - timedelta(days=1),
                 handler="张工",
             ),
             QualityAnomaly(
-                production_line="SMT-1线",
-                process="贴片",
-                defect_type="元件偏移",
+                production_line=IPQC_METRICS_LINE,
+                process="阻焊",
+                defect_type="阻焊擦花",
                 severity="major",
                 status="closed",
                 discovered_at=datetime.utcnow() - timedelta(days=2),
@@ -996,9 +1012,11 @@ def seed_message_data():
 
 
 def ensure_equipment_downtime_sample_logs():
-    """停机报表演示：若无 status=停机 的运行日志则写入少量样例（复用已有 equipment_runtime_logs 表）。"""
+    """停机报表演示：仅非生产环境、且停机记录不足时写入少量样例。"""
     from app.models import Equipment, EquipmentRuntimeLog
 
+    if settings.app_env.strip().lower() in ("production", "prod"):
+        return
     inspector = inspect(engine)
     if not inspector.has_table("equipment_runtime_logs"):
         return
@@ -1200,14 +1218,42 @@ async def lifespan(app: FastAPI):
     seed_equipment_data()
     seed_equipment_maintenance_data()
     seed_equipment_repair_data()
+    ensure_pcb_equipment_repair_orders()
     seed_quality_data()
     seed_message_data()
     seed_employees()
     seed_analytics_data()
-    backfill_recent_operational_data()
-    ensure_work_order_labor_records()
-    ensure_inventory_stock_backfill()
-    ensure_material_inbound_backfill()
+    # 启动期回填失败不得拖垮 API（对齐脚本可单独补跑）
+    try:
+        backfill_recent_operational_data()
+    except Exception as e:
+        print(f"[seed] backfill_recent_operational_data skipped: {e}")
+    try:
+        ensure_work_order_labor_records()
+    except Exception as e:
+        print(f"[seed] ensure_work_order_labor_records skipped: {e}")
+    try:
+        ensure_inventory_stock_backfill()
+    except Exception as e:
+        print(f"[seed] ensure_inventory_stock_backfill skipped: {e}")
+    try:
+        ensure_material_inbound_backfill()
+    except Exception as e:
+        print(f"[seed] ensure_material_inbound_backfill skipped: {e}")
+    # 客诉/COPQ、SPC：建表 + 仅开发环境灌演示数据（避免生产污染）
+    ensure_copq_schema(engine)
+    ensure_spc_schema(engine)
+    if settings.app_env.strip().lower() not in ("production", "prod"):
+        db = SessionLocal()
+        try:
+            seed_copq_data(db)
+            seed_spc_data(db)
+        finally:
+            db.close()
+    try:
+        sync_quality_bridge()
+    except Exception as e:
+        print(f"[quality_mes_bridge] sync skipped: {e}")
     yield
 
 
@@ -1277,7 +1323,11 @@ app.include_router(equipment_maintenance.router)
 app.include_router(equipment_maintenance_records.router)
 app.include_router(equipment_repair.router)
 app.include_router(quality.router)
+app.include_router(ipqc.router)
+app.include_router(copq.router)
+app.include_router(spc.router)
 app.include_router(reports.router)
+app.include_router(equipment_downtime_report.router)
 app.include_router(inventory_low_stock.router)
 app.include_router(warehouse.router)
 app.include_router(material_purchases.router)

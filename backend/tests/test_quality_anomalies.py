@@ -70,7 +70,7 @@ def anomalies(db_session):
     rows = [
         QualityAnomaly(
             production_line="SMT-1",
-            process="贴片",
+            process="阻焊",
             defect_type="虚焊",
             severity="major",
             status="open",
