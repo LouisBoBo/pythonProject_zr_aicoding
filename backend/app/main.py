@@ -276,12 +276,14 @@ def ensure_work_orders_current_process():
         orders = db.query(WorkOrder).all()
         changed = 0
         for wo in orders:
-            expected = derive_current_process(wo.status, wo.plan_quantity, wo.actual_quantity)
             before_end = wo.actual_end_time
             before_start = wo.actual_start_time
             before_process = wo.current_process
-            if not wo.current_process or wo.current_process != expected:
-                wo.current_process = expected
+            # 仅补空：已有 IPQC/业务回填的工序不覆盖，避免与检验实据打架
+            if not (wo.current_process or "").strip():
+                wo.current_process = derive_current_process(
+                    wo.status, wo.plan_quantity, wo.actual_quantity
+                )
             ensure_work_order_timestamps(wo)
             if (
                 wo.current_process != before_process

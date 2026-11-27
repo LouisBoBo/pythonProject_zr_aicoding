@@ -58,13 +58,18 @@ def rebuild_quality_metrics_from_ipqc(db: Session, *, days: int | None = None) -
     start = today - timedelta(days=days - 1)
 
     legacy_names = list(LEGACY_PROCESS_ALIASES.keys())
-    # 清掉旧 SMT 工序；刷新窗口内的 PCB 产线汇总（保留窗口外历史）
+    # 清掉旧 SMT 工序名；清掉非 PCB 产线汇总（SMT/组装/测试/DIP 挂 PCB 工序是口径冲突）
     if legacy_names:
         (
             db.query(QualityMetrics)
             .filter(QualityMetrics.process.in_(legacy_names))
             .delete(synchronize_session=False)
         )
+    (
+        db.query(QualityMetrics)
+        .filter(QualityMetrics.production_line != IPQC_METRICS_LINE)
+        .delete(synchronize_session=False)
+    )
     (
         db.query(QualityMetrics)
         .filter(

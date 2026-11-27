@@ -31,6 +31,10 @@ def derive_current_process(
     if status == "pending":
         return STANDARD_PROCESSES[0]
     if status in FINISHED_STATUSES:
+        # 完工/关闭落在末道制造工序；「待确认工序」仅作未知占位，不作完工态
+        for name in reversed(STANDARD_PROCESSES):
+            if name != "待确认工序":
+                return name
         return STANDARD_PROCESSES[-1]
     if status == "cancelled":
         if plan_quantity > 0 and actual_quantity > 0:

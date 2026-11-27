@@ -1260,12 +1260,49 @@ def backfill_recent_operational_data(days: int | None = None) -> None:
                         )
                     )
 
-        # 清掉分析演示工单 WO-AN-*，再按 IPQC 真实工单号回填
+        # 先平移检验等业务日期，再按最新检验实据回填工单/重建品质汇总，避免状态与日期错位
+        _rebase_live_records_to_today(db, today, now)
         purge_demo_analysis_work_orders(db)
         from app.work_order_ipqc_sync import ensure_work_orders_from_ipqc
+        from app.process_catalog import IPQC_METRICS_LINE, QUALITY_PROCESSES
+        from app.quality_metrics_sync import (
+            align_quality_process_names,
+            rebuild_quality_metrics_from_ipqc,
+        )
 
         ensure_work_orders_from_ipqc(db)
-        _rebase_live_records_to_today(db, today, now)
+        # 日期平移后按 IPQC 重刷 metrics，并剔除 SMT 等冲突产线
+        rebuild_quality_metrics_from_ipqc(db, days=max(days, 30))
+        align_quality_process_names(db)
+        for day_offset in range(min(days, 30) - 1, -1, -1):
+            the_day = today - timedelta(days=day_offset)
+            for process in QUALITY_PROCESSES:
+                exists = (
+                    db.query(QualityMetrics)
+                    .filter(
+                        QualityMetrics.record_date == the_day,
+                        QualityMetrics.production_line == IPQC_METRICS_LINE,
+                        QualityMetrics.process == process,
+                    )
+                    .first()
+                )
+                if exists:
+                    continue
+                total = 200 + day_offset * 2 + _stable_int(f"{process}{the_day}", 20, 80)
+                defect = int(total * 0.02) + (day_offset % 3)
+                scrap = max(int(total * 0.004), 0)
+                good = max(total - defect - scrap, 0)
+                db.add(
+                    QualityMetrics(
+                        record_date=the_day,
+                        production_line=IPQC_METRICS_LINE,
+                        process=process,
+                        good_count=good,
+                        defect_count=defect,
+                        scrap_count=scrap,
+                        total_inspected=total,
+                    )
+                )
         _normalize_production_output_facts(db, today, now, lines, products_by_line)
         _reconcile_sales_shipped_qty(db)
         _fix_work_order_plan_date_order(db)

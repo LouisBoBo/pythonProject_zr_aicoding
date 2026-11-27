@@ -25,12 +25,44 @@ def ensure_work_order_labor_records(days: int = 7) -> None:
             .order_by(Employee.employee_no)
             .all()
         )
-        work_orders = db.query(WorkOrder).order_by(WorkOrder.id).limit(20).all()
+        # 优先在制工单，其次近期完工，避免报工落到已删演示单或全是关闭单
+        in_progress = (
+            db.query(WorkOrder)
+            .filter(WorkOrder.status == "in_progress")
+            .order_by(WorkOrder.updated_at.desc())
+            .limit(40)
+            .all()
+        )
+        completed = (
+            db.query(WorkOrder)
+            .filter(WorkOrder.status.in_(("completed", "pending")))
+            .order_by(WorkOrder.updated_at.desc())
+            .limit(20)
+            .all()
+        )
+        work_orders = list(in_progress) + [wo for wo in completed if wo not in in_progress]
+        if not work_orders:
+            work_orders = db.query(WorkOrder).order_by(WorkOrder.updated_at.desc()).limit(40).all()
         if not employees or not work_orders:
             return
 
         today = date.today()
         span = max(int(days), 1)
+
+        # 清理挂空工单的孤儿报工
+        valid_ids = [row[0] for row in db.query(WorkOrder.id).all()]
+        if valid_ids:
+            (
+                db.query(WorkOrderLaborRecord)
+                .filter(
+                    (WorkOrderLaborRecord.work_order_id.is_(None))
+                    | (~WorkOrderLaborRecord.work_order_id.in_(valid_ids))
+                )
+                .delete(synchronize_session=False)
+            )
+        else:
+            db.query(WorkOrderLaborRecord).delete(synchronize_session=False)
+
         existing_dates = {
             row[0]
             for row in db.query(WorkOrderLaborRecord.work_date)
@@ -50,6 +82,8 @@ def ensure_work_order_labor_records(days: int = 7) -> None:
                     (wo.current_process or "").strip()
                     or _DEFAULT_PROCESSES[(emp_idx + day_offset) % len(_DEFAULT_PROCESSES)]
                 )
+                if process == "待确认工序":
+                    process = _DEFAULT_PROCESSES[(emp_idx + day_offset) % max(len(_DEFAULT_PROCESSES) - 1, 1)]
                 hours = 6.0 + ((emp_idx + day_offset) % 5) * 0.5
                 rows.append(
                     WorkOrderLaborRecord(
@@ -66,6 +100,6 @@ def ensure_work_order_labor_records(days: int = 7) -> None:
 
         if rows:
             db.add_all(rows)
-            db.commit()
+        db.commit()
     finally:
         db.close()
