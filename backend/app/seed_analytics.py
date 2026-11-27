@@ -1260,9 +1260,10 @@ def backfill_recent_operational_data(days: int | None = None) -> None:
                         )
                     )
 
-        # 先平移检验等业务日期，再按最新检验实据回填工单/重建品质汇总，避免状态与日期错位
-        _rebase_live_records_to_today(db, today, now)
+        # 先清演示单并 expire，再平移日期、按检验实据回填（避免 bulk delete 与脏对象 StaleDataError）
         purge_demo_analysis_work_orders(db)
+        db.expire_all()
+        _rebase_live_records_to_today(db, today, now)
         from app.work_order_ipqc_sync import ensure_work_orders_from_ipqc
         from app.process_catalog import IPQC_METRICS_LINE, QUALITY_PROCESSES
         from app.quality_metrics_sync import (
@@ -1742,9 +1743,9 @@ def purge_demo_analysis_work_orders(db) -> int:
     deleted = (
         db.query(WorkOrder)
         .filter(WorkOrder.id.in_(an_ids))
-        .delete(synchronize_session=False)
+        .delete(synchronize_session="fetch")
     )
-    db.flush()
+    db.expire_all()
     return int(deleted or 0)
 
 

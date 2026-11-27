@@ -1223,10 +1223,23 @@ async def lifespan(app: FastAPI):
     seed_message_data()
     seed_employees()
     seed_analytics_data()
-    backfill_recent_operational_data()
-    ensure_work_order_labor_records()
-    ensure_inventory_stock_backfill()
-    ensure_material_inbound_backfill()
+    # 启动期回填失败不得拖垮 API（对齐脚本可单独补跑）
+    try:
+        backfill_recent_operational_data()
+    except Exception as e:
+        print(f"[seed] backfill_recent_operational_data skipped: {e}")
+    try:
+        ensure_work_order_labor_records()
+    except Exception as e:
+        print(f"[seed] ensure_work_order_labor_records skipped: {e}")
+    try:
+        ensure_inventory_stock_backfill()
+    except Exception as e:
+        print(f"[seed] ensure_inventory_stock_backfill skipped: {e}")
+    try:
+        ensure_material_inbound_backfill()
+    except Exception as e:
+        print(f"[seed] ensure_material_inbound_backfill skipped: {e}")
     # 客诉/COPQ、SPC：建表 + 仅开发环境灌演示数据（避免生产污染）
     ensure_copq_schema(engine)
     ensure_spc_schema(engine)
